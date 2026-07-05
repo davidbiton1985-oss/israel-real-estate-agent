@@ -71,6 +71,9 @@ export default async function MatchesPage({ searchParams }: { searchParams: { sc
                     {l.brokerEvidence && (
                       <span className="text-slate-500"> · Evidence: <span dir="rtl">&quot;{l.brokerEvidence}&quot;</span></span>
                     )}
+                    {l.brokerStatus !== "UNKNOWN" && (
+                      <span className="text-xs text-slate-400"> ({l.brokerConfidence} confidence)</span>
+                    )}
                   </div>
                 </div>
                 {l.url && (

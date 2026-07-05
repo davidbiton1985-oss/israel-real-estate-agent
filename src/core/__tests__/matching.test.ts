@@ -1,0 +1,212 @@
+import { describe, it, expect } from "vitest";
+import type { Listing, Profile } from "@prisma/client";
+import { scoreListing } from "../matching";
+import { parseListing } from "../parser";
+import { fingerprint } from "../dedup";
+
+// ---- factories -------------------------------------------------------------
+function makeProfile(overrides: Partial<Profile> = {}): Profile {
+  return {
+    id: "p1",
+    name: "test profile",
+    dealType: "RENT",
+    cities: "Ganei Tikva, Kiryat Ono, Petah Tikva",
+    neighborhoods: null,
+    streets: null,
+    priceMin: null,
+    priceMax: 7500,
+    roomsMin: 4,
+    roomsMax: 5,
+    sizeMinSqm: null,
+    propertyType: null,
+    entryBy: null,
+    balcony: "REQUIRED",
+    parking: "PREFERRED",
+    elevator: "INDIFFERENT",
+    mamad: "INDIFFERENT",
+    brokerStatusPref: "private_preferred_broker_allowed_if_strong_match",
+    brokerFeePref: "unknown_allowed",
+    maxFeeIfKnown: null,
+    whatsappThreshold: 80,
+    dashboardThreshold: 60,
+    active: true,
+    createdAt: new Date(),
+    ...overrides,
+  } as Profile;
+}
+
+function makeListing(rawText: string, overrides: Partial<Listing> = {}): Listing {
+  const p = parseListing(rawText, (overrides.url as string) ?? null);
+  return {
+    id: "l1",
+    source: "MANUAL",
+    url: null,
+    yad2ListingId: p.yad2ListingId,
+    rawText,
+    dealType: p.dealType,
+    city: p.city,
+    neighborhood: p.neighborhood,
+    street: p.street,
+    price: p.price,
+    rooms: p.rooms,
+    sizeSqm: p.sizeSqm,
+    floor: p.floor,
+    totalFloors: p.totalFloors,
+    balcony: p.balcony,
+    parking: p.parking,
+    elevator: p.elevator,
+    mamad: p.mamad,
+    storage: p.storage,
+    garden: p.garden,
+    condition: p.condition,
+    furnished: p.furnished,
+    propertyType: p.propertyType,
+    entryImmediate: p.entryImmediate,
+    entryFlexible: p.entryFlexible,
+    entryDate: p.entryDate,
+    arnonaMonthly: p.arnonaMonthly,
+    vaadMonthly: p.vaadMonthly,
+    brokerStatus: p.brokerStatus,
+    brokerConfidence: p.brokerConfidence,
+    brokerEvidence: p.brokerEvidence,
+    brokerFeeStatus: p.brokerFeeStatus,
+    brokerFeeText: p.brokerFeeText,
+    fingerprint: "fp",
+    isDuplicateOf: null,
+    scanned: false,
+    createdAt: new Date(),
+    ...overrides,
+  } as Listing;
+}
+
+const STRONG_TEXT =
+  'להשכרה בגני תקווה! דירת 4 חדרים משופצת, 100 מ"ר, מרפסת שמש, חניה, קומה 2 מתוך 4 עם מעלית. ללא תיווך. 7,200 ש"ח. כניסה מיידית';
+
+// ---- broker rules ----------------------------------------------------------
+describe("brokerage matching rules", () => {
+  it("private_only + clear broker → rejected", () => {
+    const r = scoreListing(
+      makeProfile({ brokerStatusPref: "private_only" }),
+      makeListing('להשכרה בגני תקווה דירת 4 חדרים, מרפסת, משרד תיווך. 7,000 ש"ח')
+    );
+    expect(r.status).toBe("rejected");
+    expect(r.score).toBe(0);
+  });
+
+  it("broker_only + clear private → rejected", () => {
+    const r = scoreListing(makeProfile({ brokerStatusPref: "broker_only" }), makeListing(STRONG_TEXT));
+    expect(r.status).toBe("rejected");
+  });
+
+  it("private_only + unknown broker → possible_match with missing field", () => {
+    const r = scoreListing(
+      makeProfile({ brokerStatusPref: "private_only" }),
+      makeListing('להשכרה בגני תקווה דירת 4 חדרים, מרפסת, חניה, מעלית. 7,000 ש"ח')
+    );
+    expect(r.status).toBe("possible_match");
+    expect(r.missingFields).toContain("broker status unknown");
+  });
+
+  it("private_preferred + broker listing → penalty, not reject", () => {
+    const r = scoreListing(
+      makeProfile(),
+      makeListing('להשכרה בגני תקווה דירת 4 חדרים, מרפסת שמש, חניה, מעלית. משרד תיווך, דמי תיווך חודש. 7,000 ש"ח')
+    );
+    expect(r.status).not.toBe("rejected");
+    expect(r.score).toBeGreaterThanOrEqual(60);
+  });
+
+  it("no_fee_only + fee exists → rejected", () => {
+    const r = scoreListing(
+      makeProfile({ brokerFeePref: "no_fee_only" }),
+      makeListing('להשכרה בגני תקווה 4 חדרים, מרפסת. דמי תיווך: חודש שכירות. 7,000 ש"ח')
+    );
+    expect(r.status).toBe("rejected");
+  });
+});
+
+// ---- price rules -----------------------------------------------------------
+describe("price rules", () => {
+  it("price >5% over max → rejected", () => {
+    const r = scoreListing(makeProfile(), makeListing('להשכרה בגני תקווה 4 חדרים, מרפסת. 9,500 ש"ח'));
+    expect(r.status).toBe("rejected");
+  });
+
+  it("price ≤5% over max → possible_match with reason, never strong", () => {
+    // 7,700 ≤ 7,500 * 1.05 = 7,875
+    const r = scoreListing(makeProfile(), makeListing(STRONG_TEXT.replace("7,200", "7,700")));
+    expect(r.status).toBe("possible_match");
+    expect(r.reasonsNegative.join(" ")).toContain("slightly over budget");
+  });
+});
+
+// ---- location rules ----------------------------------------------------------
+describe("location rules", () => {
+  it("wrong city → rejected", () => {
+    const r = scoreListing(makeProfile(), makeListing('להשכרה בהרצליה דירת 4 חדרים, מרפסת. 7,000 ש"ח'));
+    expect(r.status).toBe("rejected");
+  });
+
+  it("missing city → possible at best, with missing field", () => {
+    const r = scoreListing(makeProfile(), makeListing('להשכרה! דירת 4 חדרים, מרפסת שמש, חניה, מעלית, ללא תיווך. 7,000 ש"ח'));
+    expect(r.status).toBe("possible_match");
+    expect(r.missingFields).toContain("city/location");
+  });
+});
+
+// ---- feature rules -----------------------------------------------------------
+describe("required feature rules", () => {
+  it("required balcony explicitly absent → rejected", () => {
+    const r = scoreListing(makeProfile(), makeListing('להשכרה בגני תקווה 4 חדרים, אין מרפסת. ללא תיווך. 7,000 ש"ח'));
+    expect(r.status).toBe("rejected");
+  });
+
+  it("required balcony unknown → possible_match with missing field", () => {
+    const r = scoreListing(makeProfile(), makeListing('להשכרה בגני תקווה 4 חדרים, חניה, מעלית. ללא תיווך. 7,000 ש"ח'));
+    expect(r.status).toBe("possible_match");
+    expect(r.missingFields).toContain("balcony");
+  });
+});
+
+// ---- full realistic listing ---------------------------------------------------
+describe("full realistic Hebrew listing", () => {
+  it("parses and scores as a strong match with alert-worthy score", () => {
+    const listing = makeListing(STRONG_TEXT);
+    expect(listing.city).toBe("Ganei Tikva");
+    expect(listing.price).toBe(7200);
+    expect(listing.rooms).toBe(4);
+    expect(listing.sizeSqm).toBe(100);
+    expect(listing.floor).toBe(2);
+    expect(listing.totalFloors).toBe(4);
+    expect(listing.balcony).toBe(true);
+    expect(listing.brokerStatus).toBe("PRIVATE");
+
+    const r = scoreListing(makeProfile(), listing);
+    expect(r.status).toBe("strong_match");
+    expect(r.score).toBeGreaterThanOrEqual(80);
+    expect(r.recommendedAction).toContain("Call");
+  });
+
+  it("duplicate listing is capped at possible and flagged", () => {
+    const r = scoreListing(makeProfile(), makeListing(STRONG_TEXT, { isDuplicateOf: "other-id" }));
+    expect(r.status).toBe("possible_match");
+    expect(r.redFlags.join(" ")).toContain("duplicate");
+  });
+});
+
+// ---- dedup -------------------------------------------------------------------
+describe("dedup fingerprints", () => {
+  it("same Yad2 ID → same fingerprint regardless of text", () => {
+    const url = "https://www.yad2.co.il/realestate/item/demo1abc";
+    const a = fingerprint(parseListing("טקסט אחד", url), "טקסט אחד", url);
+    const b = fingerprint(parseListing("טקסט אחר לגמרי", url), "טקסט אחר לגמרי", url);
+    expect(a).toBe(b);
+    expect(a).toBe("yad2:demo1abc");
+  });
+
+  it("different content, no url → different fingerprints", () => {
+    const t1 = 'דירת 4 חדרים בגני תקווה 7,200 ש"ח';
+    const t2 = 'דירת 3 חדרים ברמת גן 5,500 ש"ח';
+    expect(fingerprint(parseListing(t1), t1, null)).not.toBe(fingerprint(parseListing(t2), t2, null));
+  });
+});

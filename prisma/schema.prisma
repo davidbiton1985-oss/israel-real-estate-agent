@@ -51,13 +51,23 @@ model Listing {
   rooms           Float?
   sizeSqm         Int?
   floor           Int?
+  totalFloors     Int?
   balcony         Boolean?
   parking         Boolean?
   elevator        Boolean?
   mamad           Boolean?
+  storage         Boolean?
+  garden          Boolean?
+  condition       String? // RENOVATED | NEW
+  furnished       String? // FURNISHED | PARTIAL | UNFURNISHED
   propertyType    String?
   entryImmediate  Boolean?
+  entryFlexible   Boolean?
+  entryDate       String?
+  arnonaMonthly   Int?
+  vaadMonthly     Int?
   brokerStatus    String   @default("UNKNOWN") // PRIVATE | BROKER | UNKNOWN
+  brokerConfidence String  @default("low") // high | medium | low
   brokerEvidence  String?
   brokerFeeStatus String   @default("UNKNOWN") // NONE | EXISTS | UNKNOWN
   brokerFeeText   String?

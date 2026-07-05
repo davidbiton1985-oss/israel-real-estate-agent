@@ -79,14 +79,17 @@ export function scoreListing(profile: Profile, listing: Listing): MatchResult {
     score += 25;
     pos.push(`price ₪${listing.price.toLocaleString()} within budget (max ₪${profile.priceMax.toLocaleString()})`);
   } else {
-    score += 10; // within the 5% tolerance band
+    // within the 5% tolerance band: possible at best, never strong
+    score += 10;
     neg.push(`price ₪${listing.price.toLocaleString()} slightly over budget (within 5% tolerance)`);
+    capAtPossible = true;
   }
 
   // Location (20)
   if (listing.city == null) {
     score += 8;
     missing.push("city/location");
+    capAtPossible = true; // unverified location can't be a strong match
   } else {
     score += 20;
     pos.push(`target city: ${listing.city}`);
@@ -137,6 +140,7 @@ export function scoreListing(profile: Profile, listing: Listing): MatchResult {
     } else if (v === null) {
       score += f.pref === "REQUIRED" ? 2 : 3;
       missing.push(f.label);
+      if (f.pref === "REQUIRED") capAtPossible = true; // required feature unverified → possible at best
     } else {
       // known absent, PREFERRED (REQUIRED-absent already rejected)
       score += 1;
@@ -194,6 +198,7 @@ export function scoreListing(profile: Profile, listing: Listing): MatchResult {
   if (listing.price != null && listing.price < profile.priceMax * 0.45) {
     flags.push("price suspiciously low for this search — verify it's not bait/scam");
     score -= 8;
+    capAtPossible = true; // a likely scam must never fire a "call immediately" strong alert
   }
   if (listing.price == null) flags.push("no price stated");
   if (listing.city == null) flags.push("no clear location");
