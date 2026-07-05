@@ -1,6 +1,43 @@
 import { prisma } from "@/lib/db";
+import { saveListingNotes } from "@/app/actions";
+import type { Listing } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
+
+function fmtDebug(v: unknown): string {
+  if (v === null || v === undefined) return "—";
+  if (v === true) return "true";
+  if (v === false) return "false";
+  return String(v);
+}
+
+/** Plain-text dump of every parsed field, for real-world QA. Not styled — debug only. */
+function debugFieldsText(l: Listing): string {
+  const dedupType = l.fingerprint.split(":")[0]; // "yad2" | "url" | "content"
+  const lines = [
+    `source=${l.source}  url=${l.url ?? "—"}`,
+    `yad2ListingId=${fmtDebug(l.yad2ListingId)}`,
+    `fingerprint=${l.fingerprint}  (dedup key type: ${dedupType})`,
+    `isDuplicateOf=${fmtDebug(l.isDuplicateOf)}${l.isDuplicateOf ? " (fuzzy text match — see docs/browser-helper.md / README)" : ""}`,
+    ``,
+    `dealType=${fmtDebug(l.dealType)}  propertyType=${fmtDebug(l.propertyType)}`,
+    `city=${fmtDebug(l.city)}  neighborhood=${fmtDebug(l.neighborhood)}  street=${fmtDebug(l.street)}`,
+    `price=${fmtDebug(l.price)}  rooms=${fmtDebug(l.rooms)}  sqm=${fmtDebug(l.sizeSqm)}`,
+    `floor=${fmtDebug(l.floor)}  totalFloors=${fmtDebug(l.totalFloors)}`,
+    `condition=${fmtDebug(l.condition)}  furnished=${fmtDebug(l.furnished)}`,
+    ``,
+    `balcony=${fmtDebug(l.balcony)}  parking=${fmtDebug(l.parking)}  elevator=${fmtDebug(l.elevator)}  mamad=${fmtDebug(l.mamad)}`,
+    `storage=${fmtDebug(l.storage)}  garden=${fmtDebug(l.garden)}`,
+    ``,
+    `entryImmediate=${fmtDebug(l.entryImmediate)}  entryFlexible=${fmtDebug(l.entryFlexible)}  entryDate=${fmtDebug(l.entryDate)}`,
+    `arnonaMonthly=${fmtDebug(l.arnonaMonthly)}  vaadMonthly=${fmtDebug(l.vaadMonthly)}`,
+    ``,
+    `brokerStatus=${fmtDebug(l.brokerStatus)}  brokerConfidence=${fmtDebug(l.brokerConfidence)}`,
+    `brokerEvidence=${fmtDebug(l.brokerEvidence)}`,
+    `brokerFeeStatus=${fmtDebug(l.brokerFeeStatus)}  brokerFeeText=${fmtDebug(l.brokerFeeText)}`,
+  ];
+  return lines.join("\n");
+}
 
 const STATUS_STYLES: Record<string, string> = {
   strong_match: "bg-green-100 text-green-800 border-green-300",
@@ -184,6 +221,7 @@ export default async function MatchesPage({ searchParams }: { searchParams: Matc
                     <span className={`text-xs px-2 py-1 rounded border ${STATUS_STYLES[m.status] ?? ""}`}>{m.status}</span>
                     <span className="text-xs px-2 py-1 rounded bg-slate-100">{l.source}</span>
                     {l.isDuplicateOf && <span className="text-xs px-2 py-1 rounded bg-orange-100 text-orange-800">duplicate</span>}
+                    {l.qaNotes && <span className="text-xs px-2 py-1 rounded bg-pink-100 text-pink-800">📝 has QA notes</span>}
                     {latestAlert && (
                       <span className={`text-xs px-2 py-1 rounded ${ALERT_STATUS_STYLES[latestAlert.status] ?? "bg-slate-100"}`}>
                         {latestAlert.status} via {latestAlert.channel}
@@ -271,6 +309,27 @@ export default async function MatchesPage({ searchParams }: { searchParams: Matc
               <details className="mt-2 text-xs text-slate-500">
                 <summary className="cursor-pointer">Raw listing text</summary>
                 <pre dir="auto" className="whitespace-pre-wrap mt-1 bg-slate-50 p-2 rounded">{l.rawText}</pre>
+              </details>
+
+              <details className="mt-2 text-xs text-slate-500">
+                <summary className="cursor-pointer">🔍 Debug: parsed fields (for real-world QA)</summary>
+                <pre className="whitespace-pre-wrap mt-1 bg-slate-50 p-2 rounded font-mono">{debugFieldsText(l)}</pre>
+              </details>
+
+              <details className="mt-2 text-xs text-slate-500" open={Boolean(l.qaNotes)}>
+                <summary className="cursor-pointer">📝 QA notes {l.qaNotes ? "" : "(none)"}</summary>
+                <form action={saveListingNotes} className="mt-1 flex gap-2 items-start">
+                  <input type="hidden" name="listingId" value={l.id} />
+                  <textarea
+                    name="qaNotes"
+                    dir="auto"
+                    rows={2}
+                    defaultValue={l.qaNotes ?? ""}
+                    placeholder='e.g. "price parsed wrong", "broker status wrong", "city missed", "should not be duplicate"'
+                    className="flex-1 border border-slate-300 rounded px-2 py-1 text-xs"
+                  />
+                  <button type="submit" className="bg-slate-700 text-white px-2 py-1 rounded text-xs shrink-0">Save</button>
+                </form>
               </details>
             </div>
           );

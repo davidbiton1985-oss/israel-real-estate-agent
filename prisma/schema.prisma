@@ -81,6 +81,9 @@ model Listing {
   // fingerprint (Yad2 ID / URL / content) arrives with a different price.
   priceHistory    String   @default("[]")
   scanned         Boolean  @default(false) // processed by matching pipeline
+  // Free-text notes from manual real-world QA, e.g. "price parsed wrong",
+  // "should not be duplicate" — not used by any scoring/matching logic.
+  qaNotes         String?
   createdAt       DateTime @default(now())
   matches         Match[]
 }

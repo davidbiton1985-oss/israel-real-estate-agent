@@ -14,6 +14,26 @@ Paste a listing (Yad2 / Facebook / WhatsApp / broker message / any text, Hebrew 
 4. Review the score, reasons, missing info, red flags, and the prominent **recommended action** on the Matches page.
 5. If it's a strong match, you already got a WhatsApp alert (or a console message if Twilio isn't configured) — usually before you finish reading the card.
 
+## Real-world QA checklist
+
+Use this when validating the app against **actual** Yad2/Facebook/WhatsApp listings (as opposed to the seeded demo data).
+
+**What to paste:** 5–10 real listings, ideally a mix — some rentals, some sales, some clearly private, some clearly broker, at least one you know is a repost/duplicate of another, and at least one in English if you have one. Use **Add Listing — Quick Capture** for each (see "Daily workflow" above).
+
+**After each listing, open the two `<details>` sections at the bottom of its Matches card** — "🔍 Debug: parsed fields" and "Raw listing text" — and compare parsed values against what the original post actually says:
+
+| Check | How to judge it |
+|---|---|
+| **Parser accuracy** | For each field in the debug panel (price, rooms, sqm, city, neighborhood, street, floor, balcony/parking/elevator/mamad, entry date, condition, furnished), does it match what the raw text actually says? A field being `—` (unknown) is fine — it's a parser miss only if it extracted something **present but wrong**, or missed something clearly stated. |
+| **Match score** | Does the 0–100 score feel right for how good a fit this listing is against your profile? Check the "Why it matched" / "Concerns" / "Missing info" lists — do the *reasons* make sense, not just the number? |
+| **Broker classification** | Does `brokerStatus` + `brokerEvidence` in the debug panel match reality? If the post says "ללא תיווך" and it comes out `BROKER`, or vice versa, that's a real bug — note the **exact phrase** that should have been recognized. |
+| **Duplicate suppression** | If you paste a listing you know is a repost of one already in the system: does it get flagged (`isDuplicateOf` set, or the exact-match "existing listing updated" outcome banner) instead of alerting again? If you paste two **genuinely different** listings that happen to share city/price/rooms, do they stay separate? |
+| **WhatsApp / fallback alert** | If the score clears your profile's WhatsApp threshold, did an alert actually arrive (WhatsApp if Twilio is configured, otherwise check the terminal running `npm run dev` for the console fallback block)? Does the alert text match the card (broker/fee/evidence/reasons/action)? |
+
+**Recording what you find:** open the "📝 QA notes" section on the specific listing's card and write a short note — e.g. *"price parsed wrong — should be 6,500 not 6,000"*, *"broker status wrong — text says ללא תיווך"*, *"city missed — mentions הרצליה"*, *"should not be duplicate — this is a different apartment"*. Notes are saved per-listing and never affect scoring — they're purely for you (and for handing back to Claude) to track what needs fixing. A pink "📝 has QA notes" badge appears on any card with a note, so flagged listings are easy to find again later.
+
+**What to send back if something's wrong:** the raw listing text (paste it, don't paraphrase), what field(s) were wrong and what they should have been, and — for broker/duplicate issues — the exact phrase you'd expect the parser to key off. The QA notes field is the easiest way to keep this organized as you go.
+
 ## Legal / safety stance
 
 - **No scraping** of Yad2, Facebook, or any site behind logins, CAPTCHAs, rate limits, or robots.txt. The app never fetches a page on your behalf — you always paste the text/URL yourself.
@@ -39,7 +59,7 @@ If the seed didn't run: `npm run db:seed`.
 1. **Dashboard** (`/`) — profiles overview, **Run scan now** (processes pending/demo listings), **Send test alert**.
 2. **New Profile** — rent/sale, cities, price/rooms/size, features (balcony/parking/elevator/mamad as Required/Preferred/Indifferent), **broker filter** (הכל / רק ללא תיווך / רק בתיווך / עדיף ללא תיווך… / לא משנה), broker-fee preference, WhatsApp threshold (default 80) and dashboard threshold (default 60).
 3. **Add Listing — Quick Capture** — choose source (Yad2/Facebook/WhatsApp/Manual/URL), paste text and/or URL → parsed, scored, and alerted immediately if strong. Pasting a URL alone just saves it (with a nudge to add text). Re-pasting a listing that already exists (same Yad2 URL/ID, source URL, or matching content) **updates it in place** instead of creating a duplicate row — see "Duplicate suppression & price-drop re-alerts" below.
-4. **Matches** — filterable by profile / status / source / broker status / alert type / min score / has-red-flags; each card shows score, status, a **prominent recommended action**, reasons ±, missing fields, red flags, broker status + evidence, the **latest alert's status/channel/reason/timestamp**, and price history when available.
+4. **Matches** — filterable by profile / status / source / broker status / alert type / min score / has-red-flags; each card shows score, status, a **prominent recommended action**, reasons ±, missing fields, red flags, broker status + evidence, the **latest alert's status/channel/reason/timestamp**, price history when available, and two collapsed debug sections: **🔍 Debug: parsed fields** (every field the parser extracted, for QA) and **📝 QA notes** (a free-text note you can attach per listing — see "Real-world QA checklist" below).
 
 ## WhatsApp (Twilio)
 

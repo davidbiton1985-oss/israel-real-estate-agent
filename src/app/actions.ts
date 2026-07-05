@@ -90,6 +90,14 @@ export async function runScanAction() {
   redirect(`/matches?scanned=${result.processed}&alertsSent=${result.alertsSent}`);
 }
 
+export async function saveListingNotes(formData: FormData) {
+  const listingId = str(formData, "listingId");
+  if (!listingId) return;
+  const notes = str(formData, "qaNotes"); // null clears the note (empty textarea)
+  await prisma.listing.update({ where: { id: listingId }, data: { qaNotes: notes } });
+  revalidatePath("/matches"); // no redirect: stay on the current filtered view
+}
+
 export async function sendTestAlertAction() {
   const result = await sendAlert(TEST_ALERT_MESSAGE);
   await prisma.alert.create({
