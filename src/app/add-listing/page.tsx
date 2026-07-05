@@ -5,18 +5,19 @@ const inputCls = "w-full border border-slate-300 rounded px-3 py-2 text-sm";
 export default function AddListingPage({ searchParams }: { searchParams: { urlSaved?: string; yad2Id?: string } }) {
   return (
     <div className="space-y-4 max-w-3xl">
-      <h1 className="text-2xl font-bold">Add Listing — Quick Capture</h1>
+      <h1 className="text-2xl font-bold">Manual Add — fallback / debug</h1>
+      <div className="bg-blue-50 border border-blue-200 rounded p-3 text-sm text-blue-900">
+        <b>The main workflow is automatic:</b> the 5-minute watcher ingests saved-search alert emails (Yad2 etc.) and
+        WhatsApps you strong matches on its own — see the dashboard&apos;s &quot;Automatic ingestion&quot; panel and the README setup.
+        Use this page only for listings that don&apos;t arrive by email (e.g. a Facebook post or a broker WhatsApp message),
+        or to debug the parser against a specific text.
+      </div>
       <p className="text-slate-600 text-sm">
-        Paste a listing from Yad2, Facebook, a WhatsApp/broker message, or any source. Hebrew and English both work.
-        The listing is parsed, scored against all active profiles, and strong matches trigger an alert. If you re-paste a
-        listing that already exists (same Yad2 URL/ID, source URL, or matching content), it updates the existing listing
-        in place instead of creating a duplicate — a price drop or a change to rooms/balcony/parking/broker status can
+        Paste any listing text (Hebrew or English) — it goes through the exact same pipeline as automatic ingestion:
+        parsed, deduped, scored against all active profiles, and alerted if strong. Re-pasting an existing listing
+        (same Yad2 URL/ID, source URL, or matching content) updates it in place — a price drop or a material change can
         trigger a fresh re-alert; an unchanged repeat is suppressed.
       </p>
-      <div className="bg-blue-50 border border-blue-200 rounded p-3 text-sm text-blue-900">
-        For Yad2/Facebook: copy the listing text or share/paste the link here. The app does not scrape or bypass
-        platform restrictions.
-      </div>
 
       {searchParams.urlSaved && (
         <div className="bg-amber-50 border border-amber-300 rounded p-3 text-sm text-amber-900">

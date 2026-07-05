@@ -10,18 +10,22 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
     "scheduler": "tsx scripts/scheduler.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "ingest:email": "tsx scripts/ingest-email-once.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
+    "imapflow": "^1.4.3",
+    "mailparser": "^3.9.12",
     "next": "14.2.35",
     "react": "^18",
     "react-dom": "^18"
   },
   "devDependencies": {
+    "@types/mailparser": "^3.4.6",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",

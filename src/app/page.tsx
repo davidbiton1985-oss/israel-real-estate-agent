@@ -2,6 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { runScanAction, sendTestAlertAction, deleteProfile } from "./actions";
 import { twilioConfigVars } from "@/core/alert";
+import { emailConfigVars } from "@/core/connectors/email";
 
 export const dynamic = "force-dynamic";
 
@@ -14,14 +15,16 @@ const BROKER_LABELS: Record<string, string> = {
 };
 
 export default async function Home({ searchParams }: { searchParams: { testAlert?: string } }) {
-  const [profiles, listingCount, matchCount, pendingCount, latestTestAlert] = await Promise.all([
+  const [profiles, listingCount, matchCount, pendingCount, latestTestAlert, emailHealth] = await Promise.all([
     prisma.profile.findMany({ orderBy: { createdAt: "desc" } }),
     prisma.listing.count(),
     prisma.match.count({ where: { status: { in: ["strong_match", "possible_match"] } } }),
     prisma.listing.count({ where: { scanned: false } }),
     prisma.alert.findFirst({ where: { kind: "TEST_ALERT" }, orderBy: { createdAt: "desc" } }),
+    prisma.sourceHealth.findUnique({ where: { source: "EMAIL" } }),
   ]);
   const twilio = twilioConfigVars();
+  const email = emailConfigVars();
 
   return (
     <div className="space-y-6">
@@ -39,6 +42,32 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
             </button>
           </form>
         </div>
+      </div>
+
+      <div className="bg-white rounded shadow p-4 text-sm space-y-2">
+        <div className="font-semibold">🤖 Automatic ingestion (email alerts)</div>
+        {email.configured ? (
+          <div className="text-green-700">
+            ✓ IMAP configured — the watcher ingests saved-search alert emails every scan.
+            Run <code>npm run scheduler</code> to keep the 5-minute watcher alive.
+          </div>
+        ) : (
+          <div className="text-amber-700">
+            ⚠ Not configured — no automatic discovery yet. Missing: <b>{email.missing.join(", ")}</b>.
+            Set up Yad2 saved-search email alerts + IMAP in <code>.env</code> (see README, ~5 minutes).
+          </div>
+        )}
+        {emailHealth && (
+          <div className="border-t pt-2 mt-2 grid grid-cols-2 gap-x-6 gap-y-0.5 text-xs text-slate-600">
+            <div>Last check: {emailHealth.lastCheckAt ? new Date(emailHealth.lastCheckAt).toLocaleString() : "never"}</div>
+            <div>Last success: {emailHealth.lastSuccessAt ? new Date(emailHealth.lastSuccessAt).toLocaleString() : "never"}</div>
+            <div>Last poll: {emailHealth.lastItemsFound} email(s), {emailHealth.lastNewListings} new listing(s)</div>
+            <div>Total ingested: {emailHealth.totalIngested} · consecutive errors: {emailHealth.consecutiveErrors}</div>
+            {emailHealth.lastError && (
+              <div className="col-span-2 text-amber-700">Last error: {emailHealth.lastError}</div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="bg-white rounded shadow p-4 text-sm space-y-2">

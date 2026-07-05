@@ -1,24 +1,39 @@
 # Israel Real Estate Agent 🏠
 
-Personal, local-first real-estate search & alert agent for Israel (rent + sale).
+Personal, local-first **automatic** real-estate alert agent for Israel (rent + sale).
 
-Paste a listing (Yad2 / Facebook / WhatsApp / broker message / any text, Hebrew or English), and the agent parses it, checks for duplicates, scores it 0–100 against your search profiles, detects broker vs. private (with the exact evidence phrase), flags risks, and sends a WhatsApp alert for strong matches (console fallback when Twilio isn't configured).
+Define your search criteria once. The watcher checks your sources **every 5 minutes**, ingests new listings automatically, parses them (Hebrew/English), dedupes reposts, scores them 0–100 against your profiles — broker vs. private with the exact evidence phrase, red flags, recommended action — and **WhatsApps you immediately** when a strong match appears (console fallback when Twilio isn't configured).
 
 **Personal-use tool. Not a SaaS. Localhost only.**
 
-## Daily workflow (Quick Capture)
+## How it works (the automatic loop)
 
-1. Open Yad2 or Facebook and find a listing.
-2. Copy the listing's URL, and/or select and copy its text (an optional [bookmarklet](docs/browser-helper.md) can do this in one click).
-3. Paste into **Add Listing — Quick Capture** in the app (URL field and/or text field).
-4. Review the score, reasons, missing info, red flags, and the prominent **recommended action** on the Matches page.
-5. If it's a strong match, you already got a WhatsApp alert (or a console message if Twilio isn't configured) — usually before you finish reading the card.
+```
+Yad2 saved-search alerts ──► your email inbox ──► IMAP poll (every 5 min)
+other portals / broker lists ─┘                        │
+                                                parse → dedup → score
+                                                       │
+                              strong match ──► WhatsApp immediately
+                              possible match ─► dashboard
+                              repost/duplicate ► suppressed
+                              price drop ─────► re-alert 📉
+```
+
+1. **You tell the portals what you want** — save your searches on Yad2 (and any other portal) and turn on their **email alerts (immediate mode)**, pointed at an inbox you control.
+2. **The watcher polls that inbox every 5 minutes** (`npm run scheduler`) — every alert email is ingested through the full pipeline automatically.
+3. **Strong matches hit your WhatsApp within one poll cycle.** Possible matches wait on the dashboard. Duplicates/reposts are suppressed. Price drops re-alert.
+
+Setup for the automatic loop is ~5 minutes — see **Automatic ingestion setup** below.
+
+## Daily workflow
+
+There isn't one — that's the point. Keep `npm run scheduler` running; read your WhatsApp. Open the dashboard when you want to review possible matches, tune profiles, or check source health. **Manual paste still exists** ("Manual Add" in the nav) as a fallback for listings that don't arrive by email — a Facebook post you stumbled on, a broker's WhatsApp message — and as a parser-debug tool. It is not the main workflow.
 
 ## Real-world QA checklist
 
 Use this when validating the app against **actual** Yad2/Facebook/WhatsApp listings (as opposed to the seeded demo data).
 
-**What to paste:** 5–10 real listings, ideally a mix — some rentals, some sales, some clearly private, some clearly broker, at least one you know is a repost/duplicate of another, and at least one in English if you have one. Use **Add Listing — Quick Capture** for each (see "Daily workflow" above).
+**What to paste:** 5–10 real listings, ideally a mix — some rentals, some sales, some clearly private, some clearly broker, at least one you know is a repost/duplicate of another, and at least one in English if you have one. Use **Manual Add** for each (this checklist is exactly what Manual Add exists for — validating the same pipeline the automatic watcher uses).
 
 **After each listing, open the two `<details>` sections at the bottom of its Matches card** — "🔍 Debug: parsed fields" and "Raw listing text" — and compare parsed values against what the original post actually says:
 
@@ -36,29 +51,50 @@ Use this when validating the app against **actual** Yad2/Facebook/WhatsApp listi
 
 ## Legal / safety stance
 
-- **No scraping** of Yad2, Facebook, or any site behind logins, CAPTCHAs, rate limits, or robots.txt. The app never fetches a page on your behalf — you always paste the text/URL yourself.
-- Yad2 is a first-class *source type*: you paste the listing URL and/or text; the Yad2 listing ID is extracted from the URL for exact duplicate detection. Future safe paths (user-assisted Yad2 email alerts, browser-assisted capture) plug into the same pipeline.
-- URLs are stored as references only — the app does not fetch Yad2/Facebook pages.
-- Pasting **only a URL** (no text) just saves the reference and extracts a Yad2 ID if present — it is intentionally **not** scored or alerted on until you paste the listing text too. See `docs/browser-helper.md`.
+- **The app does not perform unsafe scraping or bypass platform restrictions.** No CAPTCHA solving, no login-wall bypass, no rate-limit evasion, no stealth/fingerprint tricks, and nothing that risks your accounts.
+- **Automatic ingestion is supported through safe, user-authorized sources**: email alerts from the portals' own saved-search feature (the primary path today), plus — as they become practical — approved APIs, public feeds, and other compliant connectors. The portals push listings to *you* through their official channels; the app reads what you already legitimately receive.
+- Yad2 is a first-class source: its alert emails are recognized automatically (sender → `YAD2` source), and the Yad2 listing ID is extracted from the link for exact duplicate detection.
+- Listing URLs are stored as references; listing pages themselves are not crawled.
 
 ## Setup
 
 Requirements: Node 20+.
 
 ```bash
-cp .env.example .env          # optional: fill Twilio vars for real WhatsApp
+cp .env.example .env          # fill in IMAP (automatic ingestion) + Twilio (WhatsApp)
 npm install
-npx prisma migrate dev        # creates SQLite db + runs seed (demo profile + 7 demo listings)
-npm run dev                   # open http://localhost:3000
+npx prisma migrate dev        # creates SQLite db + runs seed (demo profiles + listings)
+npm run dev                   # open http://localhost:3000 (dashboard)
+npm run scheduler             # separate terminal: the 5-minute automatic watcher
 ```
 
 If the seed didn't run: `npm run db:seed`.
+
+## Automatic ingestion setup (email alerts via IMAP) — ~5 minutes
+
+This is the main workflow. The portals' own saved-search alert emails become your automatic listing feed.
+
+1. **Pick an inbox.** A dedicated Gmail address is easiest (keeps listing alerts separate), but any IMAP-capable mailbox works.
+2. **Gmail users: create an App Password.** Google Account → Security → 2-Step Verification → **App passwords** → create one for "Mail". Use it as `IMAP_PASS` — never your real password.
+3. **Fill `.env`:**
+   ```
+   IMAP_HOST="imap.gmail.com"
+   IMAP_PORT="993"
+   IMAP_USER="your.alerts.inbox@gmail.com"
+   IMAP_PASS="<the app password>"
+   IMAP_FOLDER="INBOX"
+   EMAIL_ALLOWED_SENDERS="yad2"     # comma-separated From-header filters; empty = ingest all unseen mail
+   ```
+4. **On Yad2:** save your searches (matching your app profiles) and enable **email alerts in immediate mode** (one email per new listing — not the daily digest) to that inbox. Do the same on any other portal or broker mailing list; senders not matching `EMAIL_ALLOWED_SENDERS` are left unread for you.
+5. **Validate:** `npm run ingest:email` runs one poll and prints what it found. Then leave `npm run scheduler` running — the dashboard's **🤖 Automatic ingestion** panel shows last check, last success, items found, and errors.
+
+**How the mailbox is used:** the app reads **unseen** messages in the configured folder, ingests the ones from allowed senders, and marks them read. It never sends mail, never deletes anything, and the fingerprint dedup means a re-read email can't double-alert.
 
 ## Using it
 
 1. **Dashboard** (`/`) — profiles overview, **Run scan now** (processes pending/demo listings), **Send test alert**.
 2. **New Profile** — rent/sale, cities, price/rooms/size, features (balcony/parking/elevator/mamad as Required/Preferred/Indifferent), **broker filter** (הכל / רק ללא תיווך / רק בתיווך / עדיף ללא תיווך… / לא משנה), broker-fee preference, WhatsApp threshold (default 80) and dashboard threshold (default 60).
-3. **Add Listing — Quick Capture** — choose source (Yad2/Facebook/WhatsApp/Manual/URL), paste text and/or URL → parsed, scored, and alerted immediately if strong. Pasting a URL alone just saves it (with a nudge to add text). Re-pasting a listing that already exists (same Yad2 URL/ID, source URL, or matching content) **updates it in place** instead of creating a duplicate row — see "Duplicate suppression & price-drop re-alerts" below.
+3. **Manual Add (fallback/debug)** — for listings that don't arrive by email (a Facebook post, a broker WhatsApp message) or for testing the parser: choose source, paste text and/or URL → same pipeline as automatic ingestion (parsed, scored, alerted if strong). Pasting a URL alone just saves it (with a nudge to add text). Re-pasting an existing listing (same Yad2 URL/ID, source URL, or matching content) **updates it in place** instead of creating a duplicate row — see "Duplicate suppression & price-drop re-alerts" below.
 4. **Matches** — filterable by profile / status / source / broker status / alert type / min score / has-red-flags; each card shows score, status, a **prominent recommended action**, reasons ±, missing fields, red flags, broker status + evidence, the **latest alert's status/channel/reason/timestamp**, price history when available, and two collapsed debug sections: **🔍 Debug: parsed fields** (every field the parser extracted, for QA) and **📝 QA notes** (a free-text note you can attach per listing — see "Real-world QA checklist" below).
 
 ## WhatsApp (Twilio)
@@ -96,13 +132,13 @@ If any Twilio var is missing, or if a real Twilio request fails for any reason (
   - A **price increase** never triggers a re-alert.
 - This is one setting per profile (`priceDropReAlert`, shown as "Re-alert if this listing later drops in price or changes materially") covering both price-drop and material-change re-alerts, to keep the UI simple.
 
-## 5-minute scheduler (foundation)
+## The 5-minute watcher
 
 ```bash
 npm run scheduler
 ```
 
-Processes queued/unscanned listings every `SCAN_INTERVAL_MIN` minutes (default 5). MVP performs **no live external polling** — this is the hook where future safe connectors (user-assisted Yad2 alert emails, browser-assisted capture) will feed listings.
+Every `SCAN_INTERVAL_MIN` minutes (default 5), each tick: polls the IMAP inbox for new alert emails → ingests them through parse/dedup/score → **sends WhatsApp immediately for strong matches** → processes any leftover unscanned listings (manual paste, seed) → records source health for the dashboard panel. `npm run ingest:email` runs a single tick for setup validation, and the dashboard's **Run scan now** button triggers the same pass on demand. Keep the watcher running in a terminal (or wrap it in `launchd`/`pm2` if you want it to survive reboots).
 
 ## Scoring (summary)
 

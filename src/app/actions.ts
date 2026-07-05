@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { ingestAndMatch, ingestListing, runScan, type Source } from "@/core/pipeline";
+import { ingestAndMatch, ingestListing, type Source } from "@/core/pipeline";
+import { pollSources } from "@/core/poll";
 import { sendAlert } from "@/core/alert";
 
 const TEST_ALERT_MESSAGE = ["🏠 Real Estate Agent test alert", "If you received this, WhatsApp alerts are working."].join("\n");
@@ -84,10 +85,14 @@ export async function addListing(formData: FormData) {
 }
 
 export async function runScanAction() {
-  const result = await runScan();
+  // Same pass the 5-minute watcher runs: poll automatic sources (email inbox)
+  // + process leftovers — so "Run scan now" exercises the real pipeline.
+  const result = await pollSources();
   revalidatePath("/");
   revalidatePath("/matches");
-  redirect(`/matches?scanned=${result.processed}&alertsSent=${result.alertsSent}`);
+  redirect(
+    `/matches?scanned=${result.scannedLeftovers + result.listingsIngested}&alertsSent=${result.alertsSent}&emails=${result.emailsSeen}`
+  );
 }
 
 export async function saveListingNotes(formData: FormData) {

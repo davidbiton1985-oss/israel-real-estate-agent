@@ -1,8 +1,9 @@
 # Browser helper for Quick Capture
 
-The safest, always-works way to get a listing into the app: **manually copy the
-Yad2/Facebook post text (or the page URL) and paste it into Add Listing /
-Quick Capture.** No setup required — this is the primary supported workflow.
+The app's main workflow is **automatic** (saved-search email alerts polled every
+5 minutes — see the README). This helper is for the fallback path: getting a
+listing that *didn't* arrive by email (a Facebook post, a broker message) into
+**Manual Add** with less friction than hand-copying.
 
 ## Optional: a copy-to-clipboard bookmarklet
 

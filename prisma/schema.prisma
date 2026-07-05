@@ -114,6 +114,23 @@ model Match {
   @@unique([profileId, listingId])
 }
 
+// One row per automatic source (e.g. "EMAIL"), upserted on every poll tick —
+// powers the dashboard's source-health panel.
+model SourceHealth {
+  id                String    @id @default(cuid())
+  source            String    @unique // EMAIL (more connectors later)
+  enabled           Boolean   @default(true)
+  lastCheckAt       DateTime?
+  lastSuccessAt     DateTime?
+  lastError         String?
+  consecutiveErrors Int       @default(0)
+  lastItemsFound    Int       @default(0) // items seen in the most recent poll
+  lastNewListings   Int       @default(0) // of those, how many were new (not updates/dups)
+  totalIngested     Int       @default(0) // lifetime counter
+  updatedAt         DateTime  @updatedAt
+  createdAt         DateTime  @default(now())
+}
+
 model Alert {
   id        String    @id @default(cuid())
   matchId   String?

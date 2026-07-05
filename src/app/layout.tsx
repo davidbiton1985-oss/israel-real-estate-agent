@@ -15,7 +15,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <span className="font-bold">🏠 RE Agent</span>
           <Link href="/" className="hover:underline">Dashboard</Link>
           <Link href="/profiles/new" className="hover:underline">New Profile</Link>
-          <Link href="/add-listing" className="hover:underline">Add Listing</Link>
+          <Link href="/add-listing" className="hover:underline">Manual Add (fallback)</Link>
           <Link href="/matches" className="hover:underline">Matches</Link>
         </nav>
         <main className="max-w-5xl mx-auto p-6">{children}</main>

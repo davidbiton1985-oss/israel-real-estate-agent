@@ -7,7 +7,7 @@ import { scoreListing } from "./matching";
 import { buildAlertMessage, buildPriceDropMessage, buildMaterialChangeMessage, sendAlert, decideAlertAction } from "./alert";
 import type { Listing } from "@prisma/client";
 
-export type Source = "YAD2" | "FACEBOOK" | "WHATSAPP" | "MANUAL" | "URL" | "DEMO";
+export type Source = "YAD2" | "FACEBOOK" | "WHATSAPP" | "MANUAL" | "URL" | "DEMO" | "EMAIL";
 
 export interface IngestResult {
   listing: Listing;
