@@ -16,6 +16,9 @@ function debugFieldsText(l: Listing): string {
   const dedupType = l.fingerprint.split(":")[0]; // "yad2" | "url" | "content"
   const lines = [
     `source=${l.source}  url=${l.url ?? "—"}`,
+    ...(l.source === "FACEBOOK"
+      ? [`fbSurface=${fmtDebug(l.fbSurface)}  fbSourceName=${fmtDebug(l.fbSourceName)}  fbAuthor=${fmtDebug(l.fbAuthor)}`]
+      : []),
     `yad2ListingId=${fmtDebug(l.yad2ListingId)}`,
     `fingerprint=${l.fingerprint}  (dedup key type: ${dedupType})`,
     `isDuplicateOf=${fmtDebug(l.isDuplicateOf)}${l.isDuplicateOf ? " (fuzzy text match — see docs/browser-helper.md / README)" : ""}`,
@@ -220,6 +223,13 @@ export default async function MatchesPage({ searchParams }: { searchParams: Matc
                     <span className="text-2xl font-bold">{m.score}/100</span>
                     <span className={`text-xs px-2 py-1 rounded border ${STATUS_STYLES[m.status] ?? ""}`}>{m.status}</span>
                     <span className="text-xs px-2 py-1 rounded bg-slate-100">{l.source}</span>
+                    {l.source === "FACEBOOK" && l.fbSurface && (
+                      <span className="text-xs px-2 py-1 rounded bg-indigo-100 text-indigo-800">
+                        FB {l.fbSurface.toLowerCase().replace("_", " ")}
+                        {l.fbSourceName ? `: ${l.fbSourceName}` : ""}
+                        {l.fbAuthor ? ` · ${l.fbAuthor}` : ""}
+                      </span>
+                    )}
                     {l.isDuplicateOf && <span className="text-xs px-2 py-1 rounded bg-orange-100 text-orange-800">duplicate</span>}
                     {l.qaNotes && <span className="text-xs px-2 py-1 rounded bg-pink-100 text-pink-800">📝 has QA notes</span>}
                     {latestAlert && (

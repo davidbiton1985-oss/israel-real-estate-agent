@@ -10,12 +10,37 @@ function fmt(v: boolean | null | undefined): string {
   return "Unknown";
 }
 
+const FB_SURFACE_LABELS: Record<string, string> = {
+  GROUP: "group",
+  PAGE: "page",
+  PROFILE: "profile",
+  PUBLIC_POST: "public post",
+  SHARED: "shared post",
+  MARKETPLACE: "marketplace",
+  UNKNOWN: "unknown",
+};
+
+/** e.g. "Facebook group — דירות להשכרה בגני תקווה (by דוד כהן)"; page+broker → broker page. */
+export function describeFbSource(listing: Listing): string | null {
+  if (listing.source !== "FACEBOOK") return null;
+  let surface = FB_SURFACE_LABELS[listing.fbSurface ?? "UNKNOWN"] ?? "unknown";
+  if ((listing.fbSurface === "PAGE" || listing.fbSurface === "PUBLIC_POST") && listing.brokerStatus === "BROKER") {
+    surface = "broker page";
+  }
+  const parts = [`Facebook ${surface}`];
+  if (listing.fbSourceName) parts.push(`— ${listing.fbSourceName}`);
+  if (listing.fbAuthor) parts.push(`(by ${listing.fbAuthor})`);
+  return parts.join(" ");
+}
+
 export function buildAlertMessage(profile: Profile, listing: Listing, result: MatchResult): string {
   const feeLabel = listing.brokerFeeStatus === "NONE" ? "None" : listing.brokerFeeStatus === "EXISTS" ? "Exists" : "Unknown";
   const brokerLabel = listing.brokerStatus === "PRIVATE" ? "Private" : listing.brokerStatus === "BROKER" ? "Broker" : "Unknown";
+  const fbSource = describeFbSource(listing);
   return [
     `🏠 New real-estate match: ${result.score}/100`,
     `Profile: ${profile.name}`,
+    ...(fbSource ? [`Source: ${fbSource}`] : []),
     `Type: ${listing.dealType === "SALE" ? "Sale" : "Rental"}`,
     `Area: ${[listing.city, listing.neighborhood, listing.street].filter(Boolean).join(", ") || "Unknown"}`,
     `Price: ${listing.price != null ? `₪${listing.price.toLocaleString()}` : "Unknown"}`,

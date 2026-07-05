@@ -10,6 +10,7 @@
 import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 import type { Source } from "../pipeline";
+import { isFacebookNotification, parseFacebookNotification, type FbMeta } from "./facebook";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -64,15 +65,30 @@ export interface EmailRawItem {
   url: string | null;
   source: Source;
   subject: string;
+  fbMeta?: FbMeta; // set for Facebook notification emails
 }
 
 /**
  * Turn one alert email into one ingestible raw item.
+ * Facebook notification emails get surface/source/author metadata extracted;
+ * portal alerts (Yad2 etc.) are used as-is.
  * Returns null for emails that clearly aren't listing alerts (no usable text).
  * NOTE: assumes "immediate"-style alerts (one listing per email) — configure
  * Yad2 alerts as immediate, not daily digest, for best results (see README).
  */
 export function emailToRawItem(fromAddress: string, subject: string, textBody: string): EmailRawItem | null {
+  if (isFacebookNotification(fromAddress)) {
+    const fb = parseFacebookNotification(subject, textBody);
+    if (!fb) return null; // comment/like noise, no post body
+    return {
+      rawText: fb.postText,
+      url: fb.postUrl,
+      source: "FACEBOOK",
+      subject,
+      fbMeta: { fbSurface: fb.fbSurface, fbSourceName: fb.fbSourceName, fbAuthor: fb.fbAuthor },
+    };
+  }
+
   const text = textBody.trim();
   if (text.length < 20) return null; // empty/stub email — nothing to parse
   const rawText = `${subject}\n${text}`;

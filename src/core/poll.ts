@@ -13,6 +13,8 @@ export interface PollSummary {
   emailsSeen: number;
   listingsIngested: number;
   newListings: number;
+  facebookItems: number; // of the ingested items, how many came from Facebook notifications
+  newFacebookListings: number;
   alertsSent: number;
   scannedLeftovers: number;
 }
@@ -58,11 +60,14 @@ export async function pollSources(): Promise<PollSummary> {
     emailsSeen: 0,
     listingsIngested: 0,
     newListings: 0,
+    facebookItems: 0,
+    newFacebookListings: 0,
     alertsSent: 0,
     scannedLeftovers: 0,
   };
 
-  // --- Email connector (the first real automatic source) ---
+  // --- Email inbox: carries both portal alerts (Yad2 etc.) AND Facebook
+  // --- notification emails (group/page posts) — split health per source.
   if (summary.emailConfigured) {
     const poll = await pollEmailInbox();
     summary.emailOk = poll.ok;
@@ -71,32 +76,31 @@ export async function pollSources(): Promise<PollSummary> {
 
     for (const item of poll.items) {
       try {
-        const result = await ingestAndMatch(item.rawText, item.source, item.url);
+        const result = await ingestAndMatch(item.rawText, item.source, item.url, item.fbMeta ?? {});
         summary.listingsIngested++;
         if (result.isNew) summary.newListings++;
+        if (item.source === "FACEBOOK") {
+          summary.facebookItems++;
+          if (result.isNew) summary.newFacebookListings++;
+        }
         summary.alertsSent += result.alertsSent;
       } catch (e) {
         console.error("[poll] failed to ingest email item:", e instanceof Error ? e.message : e);
       }
     }
-    await recordHealth("EMAIL", poll.ok, poll.error, poll.itemsFound, summary.newListings);
+    await recordHealth("EMAIL", poll.ok, poll.error, poll.itemsFound, summary.newListings - summary.newFacebookListings);
+    await recordHealth("FACEBOOK", poll.ok, poll.error, summary.facebookItems, summary.newFacebookListings);
   } else {
     // Not configured is a setup state, not an error — don't accumulate error counts.
-    await prisma.sourceHealth.upsert({
-      where: { source: "EMAIL" },
-      create: {
-        source: "EMAIL",
-        enabled: false,
-        lastCheckAt: new Date(),
-        lastError: `not configured (missing: ${emailConfigVars().missing.join(", ")})`,
-      },
-      update: {
-        enabled: false,
-        lastCheckAt: new Date(),
-        lastError: `not configured (missing: ${emailConfigVars().missing.join(", ")})`,
-        consecutiveErrors: 0,
-      },
-    });
+    // Facebook monitoring rides the same IMAP inbox, so both rows reflect it.
+    const notConfigured = `not configured (missing: ${emailConfigVars().missing.join(", ")})`;
+    for (const source of ["EMAIL", "FACEBOOK"]) {
+      await prisma.sourceHealth.upsert({
+        where: { source },
+        create: { source, enabled: false, lastCheckAt: new Date(), lastError: notConfigured },
+        update: { enabled: false, lastCheckAt: new Date(), lastError: notConfigured, consecutiveErrors: 0 },
+      });
+    }
   }
 
   // --- Leftovers: anything unscanned (manual paste from UI, demo seed, etc.) ---

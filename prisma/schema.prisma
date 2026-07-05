@@ -75,6 +75,11 @@ model Listing {
   brokerEvidence  String?
   brokerFeeStatus String   @default("UNKNOWN") // NONE | EXISTS | UNKNOWN
   brokerFeeText   String?
+  // Facebook source metadata (set when source=FACEBOOK, from notification
+  // emails or browser capture): which surface the post came from and from whom.
+  fbSurface       String? // GROUP | PAGE | PROFILE | PUBLIC_POST | SHARED | MARKETPLACE | UNKNOWN
+  fbSourceName    String? // group/page name if known
+  fbAuthor        String? // post author if known
   fingerprint     String
   isDuplicateOf   String?
   // JSON array of {amount, seenAt} — appended whenever a re-paste of the same

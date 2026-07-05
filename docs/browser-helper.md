@@ -1,35 +1,43 @@
-# Browser helper for Quick Capture
+# Browser capture helper (one-click Facebook/any-site ingestion)
 
-The app's main workflow is **automatic** (saved-search email alerts polled every
-5 minutes — see the README). This helper is for the fallback path: getting a
-listing that *didn't* arrive by email (a Facebook post, a broker message) into
-**Manual Add** with less friction than hand-copying.
+The app's fully-automatic paths are saved-search **email alerts** (Yad2 etc.)
+and **Facebook notification emails** (groups/pages you subscribed to) — see the
+README. This helper covers everything else on Facebook: **public posts by
+strangers, profiles, broker pages, shared posts, marketplace** — any post you
+can see while browsing normally.
 
-## Optional: a copy-to-clipboard bookmarklet
+## One-click capture bookmarklet (recommended)
 
-If you want one click instead of manual copy/paste, this bookmarklet grabs the
-current page's **title, URL, and whatever text you've selected** and copies it
-to your clipboard, ready to paste into the app's "Listing text" field.
+Select the post text on the page, click the bookmarklet — it POSTs the
+selection + page URL + title straight into the app (`/api/capture`), which
+runs the full pipeline immediately: parse → dedup → score → **WhatsApp if
+strong**. No copy/paste, no app tab needed. A popup tells you the outcome and
+top score.
 
 **What it does and doesn't do:**
-- ✅ User-initiated only — it runs once, when you click it, on the page you're
-  already viewing.
-- ✅ Reads only what your browser already rendered for you (title, URL, your
-  text selection).
-- ❌ Does not log in, bypass a paywall, solve a CAPTCHA, or fetch any other
-  page.
-- ❌ Does not auto-run, auto-crawl, or repeat itself.
+- ✅ User-initiated, one post at a time, on a page you're already viewing.
+- ✅ Sends only what your browser already rendered (your selection + URL + title).
+- ❌ No login/CAPTCHA bypass, no crawling, no background scanning, nothing
+  automated on Facebook's side. Your account is never touched.
 
-**Setup:** show your browser's bookmarks bar, create a new bookmark, and paste
-the following as its URL/address (it's plain JavaScript, not a real link):
+**Setup:** show the bookmarks bar, create a new bookmark, paste this as its
+URL (requires the app running at `http://localhost:3000`):
 
 ```
-javascript:(function(){var sel=window.getSelection().toString();var text=document.title+"\n"+location.href+(sel?"\n\n"+sel:"");if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(function(){alert("Copied! Paste it into Quick Capture.");},function(){prompt("Copy this manually:",text);});}else{prompt("Copy this manually:",text);}})();
+javascript:(function(){var t=window.getSelection().toString().trim();if(t.length<20){alert('Select the post text first (at least a sentence), then click again.');return;}fetch('http://localhost:3000/api/capture',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t,url:location.href,title:document.title})}).then(function(r){return r.json();}).then(function(d){if(!d.ok){alert('Capture failed: '+(d.error||'unknown'));return;}var msg='Captured ('+d.outcome+')';if(d.topScore!=null){msg+='\nTop score: '+d.topScore+'/100 ('+d.topStatus+')';}if(d.alertsSent>0){msg+='\n📱 WhatsApp alert sent!';}alert(msg);}).catch(function(e){alert('Capture failed — is the app running on localhost:3000? '+e);});})();
 ```
 
-**Usage:** on a Yad2 or Facebook listing page, optionally select the post text
-first (for a cleaner paste), then click the bookmarklet. Paste the clipboard
-contents into the app's Add Listing page.
+**Usage on Facebook:** open the post ("See more" if truncated), select its
+text, click the bookmarklet. The popup shows the score; strong matches WhatsApp
+you instantly. The post's surface type (group/page/profile/share/marketplace)
+is detected from the URL automatically.
 
-If your browser blocks bookmarklets or clipboard access, just copy the text
-and URL manually — functionally identical, zero setup.
+**Note:** the `/api/capture` endpoint accepts requests from any origin so the
+bookmarklet can call it from facebook.com. The server binds to localhost only
+(personal single-user tool), so nothing is exposed to the network.
+
+## Fallback: clipboard bookmarklet / manual paste
+
+If clipboard-only is preferred, the old approach still works — copy the post
+text and paste it into **Manual Add** in the app. Functionally identical
+pipeline, more clicks.

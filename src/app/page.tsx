@@ -15,13 +15,15 @@ const BROKER_LABELS: Record<string, string> = {
 };
 
 export default async function Home({ searchParams }: { searchParams: { testAlert?: string } }) {
-  const [profiles, listingCount, matchCount, pendingCount, latestTestAlert, emailHealth] = await Promise.all([
+  const [profiles, listingCount, matchCount, pendingCount, latestTestAlert, emailHealth, fbHealth, fbListingCount] = await Promise.all([
     prisma.profile.findMany({ orderBy: { createdAt: "desc" } }),
     prisma.listing.count(),
     prisma.match.count({ where: { status: { in: ["strong_match", "possible_match"] } } }),
     prisma.listing.count({ where: { scanned: false } }),
     prisma.alert.findFirst({ where: { kind: "TEST_ALERT" }, orderBy: { createdAt: "desc" } }),
     prisma.sourceHealth.findUnique({ where: { source: "EMAIL" } }),
+    prisma.sourceHealth.findUnique({ where: { source: "FACEBOOK" } }),
+    prisma.listing.count({ where: { source: "FACEBOOK" } }),
   ]);
   const twilio = twilioConfigVars();
   const email = emailConfigVars();
@@ -66,6 +68,34 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
             {emailHealth.lastError && (
               <div className="col-span-2 text-amber-700">Last error: {emailHealth.lastError}</div>
             )}
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white rounded shadow p-4 text-sm space-y-2">
+        <div className="font-semibold">📘 Facebook monitoring</div>
+        {email.configured ? (
+          <div className="text-green-700">
+            ✓ Automatic path active — Facebook notification emails (group/page posts) are ingested from the same inbox
+            every scan. Subscribe to groups with &quot;All posts&quot; notifications (see README).
+          </div>
+        ) : (
+          <div className="text-amber-700">
+            ⚠ Automatic path needs IMAP — Facebook group/page notification emails ride the same inbox as Yad2 alerts.
+            Configure IMAP in <code>.env</code>, then enable per-group &quot;All posts&quot; notifications (see README).
+          </div>
+        )}
+        <div className="text-slate-600">
+          One-click capture is always available for any Facebook surface (public posts, profiles, broker pages, shares,
+          marketplace): select the post text and click the capture bookmarklet — see <code>docs/browser-helper.md</code>.
+        </div>
+        {(fbHealth || fbListingCount > 0) && (
+          <div className="border-t pt-2 mt-2 grid grid-cols-2 gap-x-6 gap-y-0.5 text-xs text-slate-600">
+            <div>Facebook listings in system: {fbListingCount}</div>
+            <div>Total auto/captured: {fbHealth?.totalIngested ?? 0}</div>
+            <div>Last check: {fbHealth?.lastCheckAt ? new Date(fbHealth.lastCheckAt).toLocaleString() : "never"}</div>
+            <div>Last poll: {fbHealth?.lastItemsFound ?? 0} FB email(s), {fbHealth?.lastNewListings ?? 0} new</div>
+            {fbHealth?.lastError && <div className="col-span-2 text-amber-700">Last error: {fbHealth.lastError}</div>}
           </div>
         )}
       </div>

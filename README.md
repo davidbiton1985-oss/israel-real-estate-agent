@@ -9,25 +9,27 @@ Define your search criteria once. The watcher checks your sources **every 5 minu
 ## How it works (the automatic loop)
 
 ```
-Yad2 saved-search alerts ──► your email inbox ──► IMAP poll (every 5 min)
-other portals / broker lists ─┘                        │
-                                                parse → dedup → score
-                                                       │
-                              strong match ──► WhatsApp immediately
-                              possible match ─► dashboard
-                              repost/duplicate ► suppressed
-                              price drop ─────► re-alert 📉
+Yad2 saved-search alerts ────┐
+other portals / broker lists ─┼──► your email inbox ──► IMAP poll (every 5 min)
+Facebook group/page           │                              │
+  notification emails ────────┘                       parse → dedup → score
+                                                             │
+Facebook public posts /             strong match ──► WhatsApp immediately
+profiles / broker pages /           possible match ─► dashboard
+shares / marketplace ──► one-click  repost/duplicate ► suppressed
+capture bookmarklet ──► /api/capture price drop ─────► re-alert 📉
 ```
 
-1. **You tell the portals what you want** — save your searches on Yad2 (and any other portal) and turn on their **email alerts (immediate mode)**, pointed at an inbox you control.
-2. **The watcher polls that inbox every 5 minutes** (`npm run scheduler`) — every alert email is ingested through the full pipeline automatically.
-3. **Strong matches hit your WhatsApp within one poll cycle.** Possible matches wait on the dashboard. Duplicates/reposts are suppressed. Price drops re-alert.
+1. **You tell the sources what you want** — save your searches on Yad2 (and any other portal) with **email alerts (immediate mode)**, and on Facebook subscribe to relevant groups/pages with **"All posts" notifications + email notifications**, all pointed at an inbox you control.
+2. **The watcher polls that inbox every 5 minutes** (`npm run scheduler`) — every portal alert AND every Facebook group/page notification email is ingested through the full pipeline automatically, with Facebook surface/group/author metadata attached.
+3. **For Facebook posts you encounter while browsing** (a stranger's public post, a broker page, a share, marketplace) — select the text, click the **capture bookmarklet**, done: same pipeline, WhatsApp within seconds. See `docs/browser-helper.md`.
+4. **Strong matches hit your WhatsApp within one poll cycle.** Possible matches wait on the dashboard. Duplicates/reposts/reshares are suppressed. Price drops re-alert.
 
 Setup for the automatic loop is ~5 minutes — see **Automatic ingestion setup** below.
 
 ## Daily workflow
 
-There isn't one — that's the point. Keep `npm run scheduler` running; read your WhatsApp. Open the dashboard when you want to review possible matches, tune profiles, or check source health. **Manual paste still exists** ("Manual Add" in the nav) as a fallback for listings that don't arrive by email — a Facebook post you stumbled on, a broker's WhatsApp message — and as a parser-debug tool. It is not the main workflow.
+There isn't one — that's the point. Keep `npm run scheduler` running; read your WhatsApp. Open the dashboard when you want to review possible matches, tune profiles, or check source health. **Manual paste still exists** ("Manual Add" in the nav) as a fallback and parser-debug tool. It is not the main workflow — for Facebook posts you're viewing, the one-click capture bookmarklet replaces copy/paste.
 
 ## Real-world QA checklist
 
@@ -83,18 +85,46 @@ This is the main workflow. The portals' own saved-search alert emails become you
    IMAP_USER="your.alerts.inbox@gmail.com"
    IMAP_PASS="<the app password>"
    IMAP_FOLDER="INBOX"
-   EMAIL_ALLOWED_SENDERS="yad2"     # comma-separated From-header filters; empty = ingest all unseen mail
+   EMAIL_ALLOWED_SENDERS="yad2,facebookmail"  # comma-separated From-header filters; empty = ingest all unseen mail
    ```
 4. **On Yad2:** save your searches (matching your app profiles) and enable **email alerts in immediate mode** (one email per new listing — not the daily digest) to that inbox. Do the same on any other portal or broker mailing list; senders not matching `EMAIL_ALLOWED_SENDERS` are left unread for you.
 5. **Validate:** `npm run ingest:email` runs one poll and prints what it found. Then leave `npm run scheduler` running — the dashboard's **🤖 Automatic ingestion** panel shows last check, last success, items found, and errors.
 
 **How the mailbox is used:** the app reads **unseen** messages in the configured folder, ingests the ones from allowed senders, and marks them read. It never sends mail, never deletes anything, and the fingerprint dedup means a re-read email can't double-alert.
 
+## Facebook monitoring
+
+Facebook is a first-class source, covering **all** surfaces — not just groups — through two complementary paths:
+
+### Path A — automatic (notification emails, every 5 minutes)
+
+Facebook emails you (from `facebookmail.com`) about activity you subscribed to. Those notification emails ride the **same IMAP inbox** as Yad2 alerts and are recognized automatically: the app extracts the post text, the **surface type** (group/page/shared/…), the **group/page name**, the **author**, and the **post permalink**, then runs the normal pipeline. Setup:
+
+1. On Facebook (logged in as you, on the account that's in the groups): join the relevant apartment groups and follow relevant broker/real-estate pages.
+2. For each group: group page → **Notifications → All posts** (not "Highlights").
+3. Facebook **Settings → Notifications → Email** → make sure email notifications are on, delivered to the same inbox the app polls.
+4. Keep `facebookmail` in `EMAIL_ALLOWED_SENDERS`. Done — new group/page posts flow in automatically with full metadata; comment/like noise is filtered out.
+
+### Path B — one-click capture (any surface, while you browse)
+
+For everything Facebook doesn't email you about — **a stranger's public post, a profile, a broker page you don't follow, a shared post, marketplace** — select the post text and click the **capture bookmarklet** (`docs/browser-helper.md`): it POSTs the selection + URL to the app's local `/api/capture` endpoint, which parses, dedupes, scores, and **WhatsApps you within seconds** if it's strong. The surface type is detected from the URL. No copy/paste, no app tab needed.
+
+### What Facebook coverage looks like honestly
+
+| Surface | Coverage |
+|---|---|
+| Groups you joined | ✅ Automatic (notification emails, per-group "All posts") |
+| Pages you follow | ✅ Automatic where Facebook emails page notifications; otherwise one-click capture |
+| Public posts / profiles / broker pages / shares / marketplace | ✅ One click while browsing (capture bookmarklet) |
+| Posts by strangers you never see and never get notified about | ❌ Not possible safely — Facebook offers no public search API, and logged-in crawling risks your account and breaks in days. Mitigation: join the groups where such posts appear (→ automatic), and capture anything you encounter (→ one click). |
+
+Facebook alerts include the source type, group/page name, author, and post link. Reposts/reshares of the same apartment are caught by the existing exact + fuzzy dedup and won't spam you; price drops and material changes re-alert per your profile settings. The dashboard's **📘 Facebook monitoring** panel shows configuration state, last check, and ingestion counts.
+
 ## Using it
 
 1. **Dashboard** (`/`) — profiles overview, **Run scan now** (processes pending/demo listings), **Send test alert**.
 2. **New Profile** — rent/sale, cities, price/rooms/size, features (balcony/parking/elevator/mamad as Required/Preferred/Indifferent), **broker filter** (הכל / רק ללא תיווך / רק בתיווך / עדיף ללא תיווך… / לא משנה), broker-fee preference, WhatsApp threshold (default 80) and dashboard threshold (default 60).
-3. **Manual Add (fallback/debug)** — for listings that don't arrive by email (a Facebook post, a broker WhatsApp message) or for testing the parser: choose source, paste text and/or URL → same pipeline as automatic ingestion (parsed, scored, alerted if strong). Pasting a URL alone just saves it (with a nudge to add text). Re-pasting an existing listing (same Yad2 URL/ID, source URL, or matching content) **updates it in place** instead of creating a duplicate row — see "Duplicate suppression & price-drop re-alerts" below.
+3. **Manual Add (fallback/debug)** — for listings with no automatic/capture path (e.g. a broker WhatsApp message) or for testing the parser: choose source, paste text and/or URL → same pipeline as automatic ingestion (parsed, scored, alerted if strong). For Facebook posts, prefer the one-click capture bookmarklet. Pasting a URL alone just saves it (with a nudge to add text). Re-pasting an existing listing (same Yad2 URL/ID, source URL, or matching content) **updates it in place** instead of creating a duplicate row — see "Duplicate suppression & price-drop re-alerts" below.
 4. **Matches** — filterable by profile / status / source / broker status / alert type / min score / has-red-flags; each card shows score, status, a **prominent recommended action**, reasons ±, missing fields, red flags, broker status + evidence, the **latest alert's status/channel/reason/timestamp**, price history when available, and two collapsed debug sections: **🔍 Debug: parsed fields** (every field the parser extracted, for QA) and **📝 QA notes** (a free-text note you can attach per listing — see "Real-world QA checklist" below).
 
 ## WhatsApp (Twilio)

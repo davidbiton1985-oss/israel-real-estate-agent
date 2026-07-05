@@ -9,6 +9,13 @@ import type { Listing } from "@prisma/client";
 
 export type Source = "YAD2" | "FACEBOOK" | "WHATSAPP" | "MANUAL" | "URL" | "DEMO" | "EMAIL";
 
+/** Optional per-source metadata (currently Facebook surface/source/author). */
+export interface IngestMeta {
+  fbSurface?: string | null;
+  fbSourceName?: string | null;
+  fbAuthor?: string | null;
+}
+
 export interface IngestResult {
   listing: Listing;
   isNew: boolean;
@@ -31,11 +38,16 @@ function materialSnapshot(listing: Listing): string {
  * rather than creating a new duplicate row — a price change is recorded in
  * priceHistory so the matching step can fire a price-drop re-alert.
  */
-export async function ingestListing(rawText: string, source: Source, url: string | null): Promise<IngestResult> {
+export async function ingestListing(rawText: string, source: Source, url: string | null, meta: IngestMeta = {}): Promise<IngestResult> {
   const parsed = parseListing(rawText, url);
   const fp = fingerprint(parsed, rawText, url);
   const existing = await prisma.listing.findFirst({ where: { fingerprint: fp } });
 
+  const metaData = {
+    fbSurface: meta.fbSurface ?? null,
+    fbSourceName: meta.fbSourceName ?? null,
+    fbAuthor: meta.fbAuthor ?? null,
+  };
   const parsedData = {
     dealType: parsed.dealType,
     city: parsed.city,
@@ -71,7 +83,7 @@ export async function ingestListing(rawText: string, source: Source, url: string
   if (!existing) {
     // No exact fingerprint match. Fall back to fuzzy text similarity against
     // recent listings sharing city + a close price (and rooms, if known) —
-    // catches reposts with no shared URL/Yad2 ID (e.g. Yad2 → Facebook repost).
+    // catches reposts/reshares with no shared URL/Yad2 ID (Yad2→Facebook, FB reshares).
     let fuzzyDuplicateOf: string | null = null;
     if (parsed.city && parsed.price != null) {
       const candidates = await prisma.listing.findMany({
@@ -92,7 +104,7 @@ export async function ingestListing(rawText: string, source: Source, url: string
     }
 
     const listing = await prisma.listing.create({
-      data: { source, url, rawText, fingerprint: fp, isDuplicateOf: fuzzyDuplicateOf, priceHistory: "[]", ...parsedData },
+      data: { source, url, rawText, fingerprint: fp, isDuplicateOf: fuzzyDuplicateOf, priceHistory: "[]", ...metaData, ...parsedData },
     });
     return { listing, isNew: true, priceChanged: false, oldPrice: null };
   }
@@ -118,6 +130,10 @@ export async function ingestListing(rawText: string, source: Source, url: string
       rawText,
       priceHistory: JSON.stringify(history),
       scanned: false, // force re-match so price-drop/material-change can be evaluated
+      // keep earlier FB metadata if the re-paste lacks it
+      fbSurface: metaData.fbSurface ?? existing.fbSurface,
+      fbSourceName: metaData.fbSourceName ?? existing.fbSourceName,
+      fbAuthor: metaData.fbAuthor ?? existing.fbAuthor,
       ...parsedData,
     },
   });
@@ -223,9 +239,9 @@ export async function matchListing(listing: Listing): Promise<MatchSummary> {
 
 export type IngestOutcome = "new" | "price_drop" | "material_change" | "suppressed" | "updated";
 
-/** Full ingestion for a pasted/URL listing: store (or update in place) + match + alert. */
-export async function ingestAndMatch(rawText: string, source: Source, url: string | null) {
-  const ingest = await ingestListing(rawText, source, url);
+/** Full ingestion for a pasted/URL/automatic listing: store (or update in place) + match + alert. */
+export async function ingestAndMatch(rawText: string, source: Source, url: string | null, meta: IngestMeta = {}) {
+  const ingest = await ingestListing(rawText, source, url, meta);
   const summary = await matchListing(ingest.listing);
 
   let outcome: IngestOutcome = "updated";
