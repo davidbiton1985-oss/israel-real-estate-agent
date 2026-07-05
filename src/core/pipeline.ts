@@ -2,7 +2,7 @@
 // score vs profiles → decide + send alerts (new match / price-drop / material-change / suppressed).
 import { prisma } from "../lib/db";
 import { parseListing } from "./parser";
-import { fingerprint } from "./dedup";
+import { fingerprint, isLikelyDuplicateText } from "./dedup";
 import { scoreListing } from "./matching";
 import { buildAlertMessage, buildPriceDropMessage, buildMaterialChangeMessage, sendAlert, decideAlertAction } from "./alert";
 import type { Listing } from "@prisma/client";
@@ -69,8 +69,30 @@ export async function ingestListing(rawText: string, source: Source, url: string
   };
 
   if (!existing) {
+    // No exact fingerprint match. Fall back to fuzzy text similarity against
+    // recent listings sharing city + a close price (and rooms, if known) —
+    // catches reposts with no shared URL/Yad2 ID (e.g. Yad2 → Facebook repost).
+    let fuzzyDuplicateOf: string | null = null;
+    if (parsed.city && parsed.price != null) {
+      const candidates = await prisma.listing.findMany({
+        where: {
+          city: parsed.city,
+          price: { gte: Math.round(parsed.price * 0.97), lte: Math.round(parsed.price * 1.03) },
+          ...(parsed.rooms != null ? { rooms: parsed.rooms } : {}),
+        },
+        take: 25,
+        orderBy: { createdAt: "desc" },
+      });
+      for (const c of candidates) {
+        if (isLikelyDuplicateText(rawText, c.rawText)) {
+          fuzzyDuplicateOf = c.id;
+          break;
+        }
+      }
+    }
+
     const listing = await prisma.listing.create({
-      data: { source, url, rawText, fingerprint: fp, isDuplicateOf: null, priceHistory: "[]", ...parsedData },
+      data: { source, url, rawText, fingerprint: fp, isDuplicateOf: fuzzyDuplicateOf, priceHistory: "[]", ...parsedData },
     });
     return { listing, isNew: true, priceChanged: false, oldPrice: null };
   }

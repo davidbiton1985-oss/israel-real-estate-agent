@@ -211,3 +211,37 @@ describe("dedup fingerprints", () => {
     expect(fingerprint(parseListing(t1), t1, null)).not.toBe(fingerprint(parseListing(t2), t2, null));
   });
 });
+
+// ---- entry-date matching -------------------------------------------------------
+describe("entry-date matching", () => {
+  const BASE = 'להשכרה בגני תקווה! דירת 4 חדרים משופצת, 100 מ"ר, מרפסת שמש, חניה, קומה 2 מתוך 4 עם מעלית. ללא תיווך. 7,200 ש"ח.';
+
+  it("profile with no entryBy → entry date has no effect on reasons", () => {
+    const r = scoreListing(makeProfile({ entryBy: null }), makeListing(BASE + " כניסה מיידית."));
+    expect(r.reasonsPositive.join(" ")).not.toContain("Entry date");
+    expect(r.missingFields).not.toContain("entry date");
+  });
+
+  it("listing says מיידי + profile has entryBy → compatible", () => {
+    const r = scoreListing(makeProfile({ entryBy: "2026-09-01" }), makeListing(BASE + " כניסה מיידית."));
+    expect(r.reasonsPositive.join(" ")).toContain("Entry date looks compatible (immediate/flexible)");
+  });
+
+  it("listing entry date at/before profile's entryBy → compatible", () => {
+    const r = scoreListing(makeProfile({ entryBy: "2026-09-01" }), makeListing(BASE + " כניסה ב-1.9.2026."));
+    expect(r.reasonsPositive.join(" ")).toContain("Entry date looks compatible");
+  });
+
+  it("listing entry date clearly later than profile's entryBy → penalty + capped, never rejected outright", () => {
+    const r = scoreListing(makeProfile({ entryBy: "2026-09-01" }), makeListing(BASE + " כניסה ב-1.12.2026."));
+    expect(r.reasonsNegative.join(" ")).toContain("Entry date may be too late");
+    expect(r.status).not.toBe("strong_match");
+    expect(r.status).not.toBe("rejected"); // soft penalty only, not a hard reject
+  });
+
+  it("listing has no entry-date info at all + profile has entryBy → missing field, not a rejection", () => {
+    const r = scoreListing(makeProfile({ entryBy: "2026-09-01" }), makeListing(BASE));
+    expect(r.missingFields).toContain("entry date");
+    expect(r.status).not.toBe("rejected");
+  });
+});

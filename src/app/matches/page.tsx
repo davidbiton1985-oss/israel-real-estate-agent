@@ -9,6 +9,13 @@ const STATUS_STYLES: Record<string, string> = {
   rejected: "bg-red-50 text-red-700 border-red-200",
 };
 
+const RECOMMENDED_ACTION_STYLES: Record<string, string> = {
+  strong_match: "bg-green-50 text-green-900 border-green-200",
+  possible_match: "bg-amber-50 text-amber-900 border-amber-200",
+  weak_match: "bg-slate-50 text-slate-600 border-slate-200",
+  rejected: "bg-slate-50 text-slate-500 border-slate-200",
+};
+
 function parseArr(s: string): string[] {
   try {
     const v = JSON.parse(s);
@@ -43,11 +50,41 @@ const ALERT_STATUS_STYLES: Record<string, string> = {
   SUPPRESSED: "bg-slate-200 text-slate-600",
 };
 
-export default async function MatchesPage({ searchParams }: { searchParams: { scanned?: string; alertsSent?: string; outcome?: string } }) {
-  const matches = await prisma.match.findMany({
-    include: { profile: true, listing: true, alerts: { orderBy: { createdAt: "desc" }, take: 1 } },
-    orderBy: { score: "desc" },
+interface MatchesSearchParams {
+  scanned?: string;
+  alertsSent?: string;
+  outcome?: string;
+  profile?: string;
+  status?: string;
+  source?: string;
+  broker?: string;
+  alertReason?: string;
+  hasRedFlags?: string;
+  minScore?: string;
+}
+
+export default async function MatchesPage({ searchParams }: { searchParams: MatchesSearchParams }) {
+  const [allMatches, profiles] = await Promise.all([
+    prisma.match.findMany({
+      include: { profile: true, listing: true, alerts: { orderBy: { createdAt: "desc" }, take: 1 } },
+      orderBy: { score: "desc" },
+    }),
+    prisma.profile.findMany({ orderBy: { name: "asc" } }),
+  ]);
+
+  const minScore = searchParams.minScore ? Number(searchParams.minScore) : null;
+  const matches = allMatches.filter((m) => {
+    if (searchParams.profile && m.profileId !== searchParams.profile) return false;
+    if (searchParams.status && m.status !== searchParams.status) return false;
+    if (searchParams.source && m.listing.source !== searchParams.source) return false;
+    if (searchParams.broker && m.listing.brokerStatus !== searchParams.broker) return false;
+    if (searchParams.alertReason && m.alerts[0]?.reason !== searchParams.alertReason) return false;
+    if (searchParams.hasRedFlags === "1" && parseArr(m.redFlags).length === 0) return false;
+    if (minScore != null && !isNaN(minScore) && m.score < minScore) return false;
+    return true;
   });
+
+  const selectCls = "border border-slate-300 rounded px-2 py-1.5 text-sm";
 
   return (
     <div className="space-y-4">
@@ -62,8 +99,72 @@ export default async function MatchesPage({ searchParams }: { searchParams: { sc
           {OUTCOME_MESSAGES[searchParams.outcome] ?? "Listing processed."}
         </div>
       )}
+
+      <form method="GET" className="bg-white rounded shadow p-3 flex flex-wrap items-end gap-3 text-sm">
+        <label className="flex flex-col gap-1">
+          <span className="text-xs text-slate-500">Profile</span>
+          <select name="profile" defaultValue={searchParams.profile ?? ""} className={selectCls}>
+            <option value="">All</option>
+            {profiles.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-xs text-slate-500">Status</span>
+          <select name="status" defaultValue={searchParams.status ?? ""} className={selectCls}>
+            <option value="">All</option>
+            <option value="strong_match">Strong</option>
+            <option value="possible_match">Possible</option>
+            <option value="weak_match">Weak</option>
+            <option value="rejected">Rejected</option>
+          </select>
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-xs text-slate-500">Source</span>
+          <select name="source" defaultValue={searchParams.source ?? ""} className={selectCls}>
+            <option value="">All</option>
+            <option value="YAD2">Yad2</option>
+            <option value="FACEBOOK">Facebook</option>
+            <option value="WHATSAPP">WhatsApp</option>
+            <option value="MANUAL">Manual</option>
+            <option value="URL">URL</option>
+            <option value="DEMO">Demo</option>
+          </select>
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-xs text-slate-500">Broker</span>
+          <select name="broker" defaultValue={searchParams.broker ?? ""} className={selectCls}>
+            <option value="">All</option>
+            <option value="PRIVATE">Private</option>
+            <option value="BROKER">Broker</option>
+            <option value="UNKNOWN">Unknown</option>
+          </select>
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-xs text-slate-500">Alert type</span>
+          <select name="alertReason" defaultValue={searchParams.alertReason ?? ""} className={selectCls}>
+            <option value="">All</option>
+            <option value="NEW_MATCH">New match</option>
+            <option value="PRICE_DROP">Price drop</option>
+            <option value="MATERIAL_CHANGE">Material change</option>
+          </select>
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-xs text-slate-500">Min score</span>
+          <input name="minScore" type="number" min={0} max={100} defaultValue={searchParams.minScore ?? ""} className={selectCls + " w-20"} />
+        </label>
+        <label className="flex items-center gap-1.5 pb-1.5">
+          <input type="checkbox" name="hasRedFlags" value="1" defaultChecked={searchParams.hasRedFlags === "1"} />
+          <span className="text-xs text-slate-500">🚩 Has red flags</span>
+        </label>
+        <button type="submit" className="bg-slate-700 text-white px-3 py-1.5 rounded text-sm">Filter</button>
+        <a href="/matches" className="text-xs text-blue-600 hover:underline">Clear</a>
+        <span className="text-xs text-slate-400 ml-auto">{matches.length} of {allMatches.length} shown</span>
+      </form>
+
       {matches.length === 0 && (
-        <p className="text-slate-500">No matches yet. Add a listing or run a scan from the dashboard.</p>
+        <p className="text-slate-500">No matches match these filters. Try clearing filters, adding a listing, or running a scan.</p>
       )}
       <div className="space-y-4">
         {matches.map((m) => {
@@ -132,6 +233,10 @@ export default async function MatchesPage({ searchParams }: { searchParams: { sc
                 )}
               </div>
 
+              <div className={`mt-3 rounded p-3 text-sm font-medium border ${RECOMMENDED_ACTION_STYLES[m.status] ?? ""}`}>
+                👉 {m.recommendedAction}
+              </div>
+
               <div className="grid grid-cols-2 gap-4 mt-3 text-sm">
                 <div>
                   {pos.length > 0 && (
@@ -161,10 +266,6 @@ export default async function MatchesPage({ searchParams }: { searchParams: { sc
                     </div>
                   )}
                 </div>
-              </div>
-
-              <div className="mt-3 bg-slate-50 rounded p-2 text-sm">
-                <b>Recommended action:</b> {m.recommendedAction}
               </div>
 
               <details className="mt-2 text-xs text-slate-500">

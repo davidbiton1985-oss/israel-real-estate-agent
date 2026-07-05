@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { ingestAndMatch, runScan, type Source } from "@/core/pipeline";
+import { ingestAndMatch, ingestListing, runScan, type Source } from "@/core/pipeline";
 import { sendAlert } from "@/core/alert";
 
 const TEST_ALERT_MESSAGE = ["🏠 Real Estate Agent test alert", "If you received this, WhatsApp alerts are working."].join("\n");
@@ -68,7 +68,17 @@ export async function addListing(formData: FormData) {
   const url = str(formData, "url");
   const source = (str(formData, "source") ?? "MANUAL") as Source;
   if (!rawText && !url) return; // nothing to ingest
-  const result = await ingestAndMatch(rawText ?? `(URL only) ${url}`, source, url);
+
+  if (!rawText && url) {
+    // URL-only capture: store the reference (+ extracted Yad2 ID for future dedup)
+    // but do not score/alert — there's nothing meaningful to match on yet, and we
+    // never fetch the URL ourselves. The user is nudged to paste the listing text.
+    const ingest = await ingestListing("", source, url);
+    revalidatePath("/matches");
+    redirect(`/add-listing?urlSaved=1&yad2Id=${ingest.listing.yad2ListingId ?? ""}`);
+  }
+
+  const result = await ingestAndMatch(rawText!, source, url);
   revalidatePath("/matches");
   redirect(`/matches?outcome=${result.outcome}&listingId=${result.listing.id}`);
 }

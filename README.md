@@ -6,11 +6,20 @@ Paste a listing (Yad2 / Facebook / WhatsApp / broker message / any text, Hebrew 
 
 **Personal-use tool. Not a SaaS. Localhost only.**
 
+## Daily workflow (Quick Capture)
+
+1. Open Yad2 or Facebook and find a listing.
+2. Copy the listing's URL, and/or select and copy its text (an optional [bookmarklet](docs/browser-helper.md) can do this in one click).
+3. Paste into **Add Listing — Quick Capture** in the app (URL field and/or text field).
+4. Review the score, reasons, missing info, red flags, and the prominent **recommended action** on the Matches page.
+5. If it's a strong match, you already got a WhatsApp alert (or a console message if Twilio isn't configured) — usually before you finish reading the card.
+
 ## Legal / safety stance
 
-- **No scraping** of Yad2, Facebook, or any site behind logins, CAPTCHAs, rate limits, or robots.txt.
+- **No scraping** of Yad2, Facebook, or any site behind logins, CAPTCHAs, rate limits, or robots.txt. The app never fetches a page on your behalf — you always paste the text/URL yourself.
 - Yad2 is a first-class *source type*: you paste the listing URL and/or text; the Yad2 listing ID is extracted from the URL for exact duplicate detection. Future safe paths (user-assisted Yad2 email alerts, browser-assisted capture) plug into the same pipeline.
 - URLs are stored as references only — the app does not fetch Yad2/Facebook pages.
+- Pasting **only a URL** (no text) just saves the reference and extracts a Yad2 ID if present — it is intentionally **not** scored or alerted on until you paste the listing text too. See `docs/browser-helper.md`.
 
 ## Setup
 
@@ -29,8 +38,8 @@ If the seed didn't run: `npm run db:seed`.
 
 1. **Dashboard** (`/`) — profiles overview, **Run scan now** (processes pending/demo listings), **Send test alert**.
 2. **New Profile** — rent/sale, cities, price/rooms/size, features (balcony/parking/elevator/mamad as Required/Preferred/Indifferent), **broker filter** (הכל / רק ללא תיווך / רק בתיווך / עדיף ללא תיווך… / לא משנה), broker-fee preference, WhatsApp threshold (default 80) and dashboard threshold (default 60).
-3. **Add Listing** — choose source (Yad2/Facebook/WhatsApp/Manual/URL), paste text and/or URL → parsed, scored, and alerted immediately if strong. Re-pasting a listing that already exists (same Yad2 URL/ID, source URL, or matching content) **updates it in place** instead of creating a duplicate row — see "Duplicate suppression & price-drop re-alerts" below.
-4. **Matches** — score, status, reasons ±, missing fields, red flags, broker status + evidence, recommended action, plus the **latest alert's status/channel/reason/timestamp** and price history when available.
+3. **Add Listing — Quick Capture** — choose source (Yad2/Facebook/WhatsApp/Manual/URL), paste text and/or URL → parsed, scored, and alerted immediately if strong. Pasting a URL alone just saves it (with a nudge to add text). Re-pasting a listing that already exists (same Yad2 URL/ID, source URL, or matching content) **updates it in place** instead of creating a duplicate row — see "Duplicate suppression & price-drop re-alerts" below.
+4. **Matches** — filterable by profile / status / source / broker status / alert type / min score / has-red-flags; each card shows score, status, a **prominent recommended action**, reasons ±, missing fields, red flags, broker status + evidence, the **latest alert's status/channel/reason/timestamp**, and price history when available.
 
 ## WhatsApp (Twilio)
 
@@ -81,7 +90,12 @@ Processes queued/unscanned listings every `SCAN_INTERVAL_MIN` minutes (default 5
 - Unknown fields never auto-reject — they reduce score and appear as *missing info* to ask about.
 - `private_only` + unknown broker ⇒ capped at possible_match with "broker status unknown".
 - Private-preferred + broker listing ⇒ penalty, not rejection.
-- Duplicates are detected (Yad2 ID → URL → content fingerprint) and update the existing listing rather than alerting again for no reason (see "Duplicate suppression & price-drop re-alerts" above).
+- Duplicates are detected (Yad2 ID → URL → content fingerprint, plus fuzzy text matching — see below) and update the existing listing rather than alerting again for no reason (see "Duplicate suppression & price-drop re-alerts" above).
+- **Entry-date matching**: if a profile has a desired entry-by date, an immediate/flexible listing (מיידי/גמיש) or one whose parsed date is at/before that date scores a small bonus ("Entry date looks compatible"); a clearly later date is a soft penalty ("Entry date may be too late") — never a hard rejection; an entry date the parser couldn't read at all is just listed as missing info. Only simple `D.M`, `D/M`, and `D.M.YYYY`-style dates are understood (plus מיידי/גמיש) — no natural-language date math, and a date with no year assumes the current year.
+
+## Fuzzy duplicate detection
+
+Reposts of the same apartment across different sources (e.g. Yad2 → Facebook) often share no URL or ID. For listings with no exact fingerprint match, the app compares text against recent listings in the same city and a close price band (±3%, same room count if known) using token-overlap similarity — **after stripping generic real-estate boilerplate** (״להשכרה״, ״דירת״, ״מרפסת״, ״תיווך״, etc.) so that only distinguishing content (street/neighborhood, distinctive descriptions, negations like "no balcony") drives the match. This avoids the false-positive trap where two *different* apartments in the same city/price/room-count look similar purely because real-estate listings share so much common vocabulary. A likely match is flagged as a duplicate (capped score, suppressed re-alert) rather than merged — you can still see it on the Matches page.
 
 ## Tests
 
@@ -89,7 +103,7 @@ Processes queued/unscanned listings every `SCAN_INTERVAL_MIN` minutes (default 5
 npm test
 ```
 
-71+ Vitest unit tests: parser extraction, broker classification, Yad2 ID extraction, scoring rules (price/location/brokerage/required-features), and the alert-lifecycle decision (`decideAlertAction` — new match / price drop / material change / suppressed) plus Twilio fallback safety, all pure-function tests with no database or network required.
+87+ Vitest unit tests: parser extraction, broker classification, Yad2 ID extraction, scoring rules (price/location/brokerage/required-features/entry-date), fuzzy-duplicate detection (reworded reposts vs. genuinely different listings), and the alert-lifecycle decision (`decideAlertAction` — new match / price drop / material change / suppressed) plus Twilio fallback safety — all pure-function tests with no database or network required.
 
 ## Stack
 
