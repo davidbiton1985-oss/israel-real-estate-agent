@@ -1,101 +1,96 @@
-import Image from "next/image";
+import Link from "next/link";
+import { prisma } from "@/lib/db";
+import { runScanAction, sendTestAlertAction, deleteProfile } from "./actions";
 
-export default function Home() {
+export const dynamic = "force-dynamic";
+
+const BROKER_LABELS: Record<string, string> = {
+  any: "הכל",
+  private_only: "רק ללא תיווך",
+  broker_only: "רק בתיווך",
+  private_preferred_broker_allowed_if_strong_match: "עדיף ללא תיווך, אבל תיווך מותר אם הנכס מתאים מאוד",
+  unknown_allowed: "לא משנה / גם לא ידוע",
+};
+
+export default async function Home({ searchParams }: { searchParams: { testAlert?: string } }) {
+  const [profiles, listingCount, matchCount, pendingCount] = await Promise.all([
+    prisma.profile.findMany({ orderBy: { createdAt: "desc" } }),
+    prisma.listing.count(),
+    prisma.match.count({ where: { status: { in: ["strong_match", "possible_match"] } } }),
+    prisma.listing.count({ where: { scanned: false } }),
+  ]);
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="https://nextjs.org/icons/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="https://nextjs.org/icons/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Dashboard</h1>
+        <div className="flex gap-3">
+          <form action={runScanAction}>
+            <button className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+              ▶ Run scan now {pendingCount > 0 ? `(${pendingCount} pending)` : ""}
+            </button>
+          </form>
+          <form action={sendTestAlertAction}>
+            <button className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
+              📱 Send test alert
+            </button>
+          </form>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+      </div>
+
+      {searchParams.testAlert && (
+        <div className="bg-green-100 border border-green-300 rounded p-3 text-sm">
+          Test alert sent via <b>{searchParams.testAlert}</b>
+          {searchParams.testAlert === "console" && " (Twilio not configured — check the terminal running the app)"}
+        </div>
+      )}
+
+      <div className="grid grid-cols-3 gap-4">
+        <div className="bg-white rounded shadow p-4"><div className="text-3xl font-bold">{profiles.length}</div><div className="text-slate-500">Search profiles</div></div>
+        <div className="bg-white rounded shadow p-4"><div className="text-3xl font-bold">{listingCount}</div><div className="text-slate-500">Listings</div></div>
+        <div className="bg-white rounded shadow p-4"><div className="text-3xl font-bold">{matchCount}</div><div className="text-slate-500">Strong/possible matches</div></div>
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-xl font-semibold">Search Profiles</h2>
+          <Link href="/profiles/new" className="text-blue-600 hover:underline">+ New profile</Link>
+        </div>
+        {profiles.length === 0 && <p className="text-slate-500">No profiles yet. Create one, or run <code>npm run db:seed</code> for a demo.</p>}
+        <div className="space-y-3">
+          {profiles.map((p) => (
+            <div key={p.id} className="bg-white rounded shadow p-4 flex items-start justify-between">
+              <div>
+                <div className="font-semibold">
+                  {p.name}{" "}
+                  <span className={`text-xs px-2 py-0.5 rounded ${p.dealType === "RENT" ? "bg-blue-100 text-blue-800" : "bg-purple-100 text-purple-800"}`}>
+                    {p.dealType}
+                  </span>{" "}
+                  {!p.active && <span className="text-xs px-2 py-0.5 rounded bg-slate-200">inactive</span>}
+                </div>
+                <div className="text-sm text-slate-600 mt-1">
+                  {p.cities} · up to ₪{p.priceMax.toLocaleString()}
+                  {p.roomsMin ? ` · ${p.roomsMin}+ rooms` : ""}
+                  {p.sizeMinSqm ? ` · ${p.sizeMinSqm}+ sqm` : ""}
+                </div>
+                <div className="text-sm mt-1" dir="rtl">
+                  תיווך: <b>{BROKER_LABELS[p.brokerStatusPref] ?? p.brokerStatusPref}</b>
+                </div>
+                <div className="text-xs text-slate-400 mt-1">
+                  WhatsApp alert ≥ {p.whatsappThreshold} · dashboard ≥ {p.dashboardThreshold}
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Link href={`/profiles/${p.id}`} className="text-blue-600 hover:underline text-sm">Edit</Link>
+                <form action={deleteProfile}>
+                  <input type="hidden" name="id" value={p.id} />
+                  <button className="text-red-500 hover:underline text-sm">Delete</button>
+                </form>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,0 +1,89 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Profile {
+  id                 String   @id @default(cuid())
+  name               String
+  dealType           String // RENT | SALE
+  cities             String // comma-separated
+  neighborhoods      String? // comma-separated
+  streets            String? // comma-separated
+  priceMin           Int?
+  priceMax           Int
+  roomsMin           Float?
+  roomsMax           Float?
+  sizeMinSqm         Int?
+  propertyType       String? // APARTMENT | HOUSE | GARDEN_APT | PENTHOUSE | ANY
+  entryBy            String? // ISO date the user needs entry by (optional)
+  // feature prefs: REQUIRED | PREFERRED | INDIFFERENT
+  balcony            String   @default("INDIFFERENT")
+  parking            String   @default("INDIFFERENT")
+  elevator           String   @default("INDIFFERENT")
+  mamad              String   @default("INDIFFERENT")
+  // brokerage filters (first-class)
+  brokerStatusPref   String   @default("any") // any | private_only | broker_only | private_preferred_broker_allowed_if_strong_match | unknown_allowed
+  brokerFeePref      String   @default("unknown_allowed") // no_fee_only | fee_allowed | unknown_allowed | max_fee_if_known
+  maxFeeIfKnown      Int?
+  whatsappThreshold  Int      @default(80)
+  dashboardThreshold Int      @default(60)
+  active             Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  matches            Match[]
+}
+
+model Listing {
+  id              String   @id @default(cuid())
+  source          String // YAD2 | FACEBOOK | WHATSAPP | MANUAL | URL | DEMO
+  url             String?
+  yad2ListingId   String?
+  rawText         String
+  dealType        String? // RENT | SALE
+  city            String?
+  neighborhood    String?
+  street          String?
+  price           Int?
+  rooms           Float?
+  sizeSqm         Int?
+  floor           Int?
+  balcony         Boolean?
+  parking         Boolean?
+  elevator        Boolean?
+  mamad           Boolean?
+  propertyType    String?
+  entryImmediate  Boolean?
+  brokerStatus    String   @default("UNKNOWN") // PRIVATE | BROKER | UNKNOWN
+  brokerEvidence  String?
+  brokerFeeStatus String   @default("UNKNOWN") // NONE | EXISTS | UNKNOWN
+  brokerFeeText   String?
+  fingerprint     String
+  isDuplicateOf   String?
+  scanned         Boolean  @default(false) // processed by matching pipeline
+  createdAt       DateTime @default(now())
+  matches         Match[]
+}
+
+model Match {
+  id                String   @id @default(cuid())
+  profileId         String
+  listingId         String
+  profile           Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  listing           Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  score             Int
+  status            String // strong_match | possible_match | weak_match | rejected
+  reasonsPositive   String // JSON string[]
+  reasonsNegative   String // JSON string[]
+  missingFields     String // JSON string[]
+  redFlags          String // JSON string[]
+  recommendedAction String
+  alerted           Boolean  @default(false)
+  alertChannel      String? // whatsapp | console
+  createdAt         DateTime @default(now())
+
+  @@unique([profileId, listingId])
+}
