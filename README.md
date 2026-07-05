@@ -29,12 +29,12 @@ If the seed didn't run: `npm run db:seed`.
 
 1. **Dashboard** (`/`) — profiles overview, **Run scan now** (processes pending/demo listings), **Send test alert**.
 2. **New Profile** — rent/sale, cities, price/rooms/size, features (balcony/parking/elevator/mamad as Required/Preferred/Indifferent), **broker filter** (הכל / רק ללא תיווך / רק בתיווך / עדיף ללא תיווך… / לא משנה), broker-fee preference, WhatsApp threshold (default 80) and dashboard threshold (default 60).
-3. **Add Listing** — choose source (Yad2/Facebook/WhatsApp/Manual/URL), paste text and/or URL → parsed, dedup'd, scored, and alerted immediately if strong.
-4. **Matches** — score, status, reasons ±, missing fields, red flags, broker status + evidence, recommended action.
+3. **Add Listing** — choose source (Yad2/Facebook/WhatsApp/Manual/URL), paste text and/or URL → parsed, scored, and alerted immediately if strong. Re-pasting a listing that already exists (same Yad2 URL/ID, source URL, or matching content) **updates it in place** instead of creating a duplicate row — see "Duplicate suppression & price-drop re-alerts" below.
+4. **Matches** — score, status, reasons ±, missing fields, red flags, broker status + evidence, recommended action, plus the **latest alert's status/channel/reason/timestamp** and price history when available.
 
-## WhatsApp
+## WhatsApp (Twilio)
 
-Set in `.env` (Twilio WhatsApp sandbox works for personal use):
+Required `.env` vars — **all four** must be set for real WhatsApp delivery to be attempted (any missing var falls back to console):
 
 ```
 TWILIO_ACCOUNT_SID=...
@@ -43,7 +43,29 @@ TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
 ALERT_WHATSAPP_TO=whatsapp:+9725XXXXXXXX
 ```
 
-When unset, alerts print to the terminal running the app (console fallback) and matches are still visible in the dashboard.
+### Testing with the Twilio Sandbox (free, ~2 minutes)
+
+1. Sign up at [console.twilio.com](https://console.twilio.com) and open **Messaging → Try it out → Send a WhatsApp message**.
+2. Copy your **Account SID** and **Auth Token** into `.env`.
+3. The sandbox's "From" number is shown on that page (default `whatsapp:+14155238886` already in `.env.example`).
+4. From the phone you want alerts on, send the sandbox's **"join &lt;code-word&gt;"** message to that number on WhatsApp. (Sessions expire after ~72h of inactivity — rejoin if alerts stop arriving.)
+5. Set `ALERT_WHATSAPP_TO` to your own number in `whatsapp:+<countrycode><number>` format.
+6. Run the app and click **Send test alert** on the dashboard. The dashboard's "WhatsApp (Twilio) status" panel shows SENT/FAILED, the channel used, and the exact Twilio error (with a plain-English hint for common cases like the recipient not having joined the sandbox) — without ever printing your auth token.
+
+### Fallback behavior
+
+If any Twilio var is missing, or if a real Twilio request fails for any reason (bad credentials, recipient not joined, rate limit, network error), the alert is **always** also written to the console running `npm run dev` / `npm run scheduler` — an alert is never silently lost. The dashboard always shows whether Twilio is configured and, per-alert, which channel actually delivered it.
+
+## Duplicate suppression & price-drop re-alerts
+
+- Listings are matched by **fingerprint** (Yad2 ID → source URL → content hash). Re-pasting the same listing **updates the existing row in place** rather than creating a duplicate — this is what "Add Listing" means by "existing listing updated."
+- Each (profile, listing) match remembers the **price and key fields (rooms/balcony/parking/broker status) at the time its last alert was sent**.
+- On a re-scan of the same listing:
+  - **Nothing changed** (same price, same key fields) → the match is refreshed silently; no new alert. Logged as a `SUPPRESSED` alert record (reason `NO_CHANGE_SUPPRESSED`, or `DUPLICATE_SUPPRESSED` if flagged as a duplicate).
+  - **Price dropped** → a `📉 Price drop detected` alert fires (old price / new price / difference / link), if the profile's "Re-alert on price drop or major changes" option is on (default: on).
+  - **Rooms/balcony/parking/broker status changed** (and price didn't drop) → a `🔄 Listing details changed` alert fires, same setting.
+  - A **price increase** never triggers a re-alert.
+- This is one setting per profile (`priceDropReAlert`, shown as "Re-alert if this listing later drops in price or changes materially") covering both price-drop and material-change re-alerts, to keep the UI simple.
 
 ## 5-minute scheduler (foundation)
 
@@ -59,7 +81,15 @@ Processes queued/unscanned listings every `SCAN_INTERVAL_MIN` minutes (default 5
 - Unknown fields never auto-reject — they reduce score and appear as *missing info* to ask about.
 - `private_only` + unknown broker ⇒ capped at possible_match with "broker status unknown".
 - Private-preferred + broker listing ⇒ penalty, not rejection.
-- Duplicates are detected (Yad2 ID → URL → content fingerprint), shown, and never re-alerted.
+- Duplicates are detected (Yad2 ID → URL → content fingerprint) and update the existing listing rather than alerting again for no reason (see "Duplicate suppression & price-drop re-alerts" above).
+
+## Tests
+
+```bash
+npm test
+```
+
+71+ Vitest unit tests: parser extraction, broker classification, Yad2 ID extraction, scoring rules (price/location/brokerage/required-features), and the alert-lifecycle decision (`decideAlertAction` — new match / price drop / material change / suppressed) plus Twilio fallback safety, all pure-function tests with no database or network required.
 
 ## Stack
 

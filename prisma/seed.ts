@@ -1,8 +1,8 @@
-// Seed v2: two demo profiles (rent + sale) + 12 realistic Hebrew demo listings.
-// Listings are parsed + stored with scanned=false, so "Run scan now" processes them.
+// Seed v2/v3: two demo profiles (rent + sale) + 12 realistic Hebrew demo listings,
+// plus a scripted price-drop repost of listing #1 to demonstrate the re-alert path.
 // To re-seed from scratch: rm prisma/dev.db && npx prisma migrate dev
 import { prisma } from "../src/lib/db";
-import { ingestListing } from "../src/core/pipeline";
+import { ingestListing, runScan } from "../src/core/pipeline";
 
 const RENT_PROFILE = "4-room rental — Ganei Tikva area (demo)";
 const SALE_PROFILE = "4-room purchase — Petah Tikva / Givat Shmuel (demo)";
@@ -131,13 +131,28 @@ async function main() {
   ];
 
   for (const d of demoListings) {
-    const listing = await ingestListing(d.text, d.source, d.url);
-    console.log(
-      `✓ [${d.source}] ${d.note}${listing.isDuplicateOf ? " [marked duplicate]" : ""} — broker=${listing.brokerStatus}(${listing.brokerConfidence})`
-    );
+    const { listing, isNew } = await ingestListing(d.text, d.source, d.url);
+    console.log(`✓ [${d.source}] ${d.note}${isNew ? "" : " [updated existing listing in place]"} — broker=${listing.brokerStatus}(${listing.brokerConfidence})`);
   }
 
-  console.log('\nSeed v2 done. Start the app and click "Run scan now" to score the demo listings.');
+  // Scan now so the 12 listings above get their initial NEW_MATCH alerts (console
+  // fallback if Twilio isn't configured) — this sets Match.lastAlertedPrice, which
+  // the price-drop repost below needs in order to actually demonstrate PRICE_DROP.
+  const firstScan = await runScan();
+  console.log(`\n✓ Initial scan: ${firstScan.processed} listing(s) processed, ${firstScan.alertsSent} alert(s) sent (see console above).`);
+
+  // Phase 3 demo: re-paste of listing #1 (same Yad2 ID, same URL) at a LOWER price.
+  // Because listing #1 already has a lastAlertedPrice (₪7,200) from the scan above,
+  // scanning this one triggers a real PRICE_DROP re-alert, not another NEW_MATCH.
+  await ingestListing(
+    'גני תקווה — 4 חדרים, 100 מ"ר עם מרפסת שמש, חניה בטאבו, מעלית, ממ"ד ומחסן, ללא תיווך. ירידת מחיר! עכשיו רק 6,900 ש"ח לחודש.',
+    "YAD2",
+    "https://www.yad2.co.il/realestate/item/demo1abc"
+  );
+  const dropScan = await runScan();
+  console.log(`✓ Price-drop repost of listing #1 (₪7,200 → ₪6,900) scanned: ${dropScan.alertsSent} alert(s) sent — check for a "📉 Price drop detected" message above.`);
+
+  console.log("\nSeed v2 done. Open the dashboard/Matches page to see all scored listings and their alert history.");
 }
 
 main()

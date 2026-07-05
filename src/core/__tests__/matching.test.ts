@@ -29,6 +29,7 @@ function makeProfile(overrides: Partial<Profile> = {}): Profile {
     maxFeeIfKnown: null,
     whatsappThreshold: 80,
     dashboardThreshold: 60,
+    priceDropReAlert: true,
     active: true,
     createdAt: new Date(),
     ...overrides,

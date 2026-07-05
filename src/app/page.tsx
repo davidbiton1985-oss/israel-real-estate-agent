@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { runScanAction, sendTestAlertAction, deleteProfile } from "./actions";
+import { twilioConfigVars } from "@/core/alert";
 
 export const dynamic = "force-dynamic";
 
@@ -13,12 +14,14 @@ const BROKER_LABELS: Record<string, string> = {
 };
 
 export default async function Home({ searchParams }: { searchParams: { testAlert?: string } }) {
-  const [profiles, listingCount, matchCount, pendingCount] = await Promise.all([
+  const [profiles, listingCount, matchCount, pendingCount, latestTestAlert] = await Promise.all([
     prisma.profile.findMany({ orderBy: { createdAt: "desc" } }),
     prisma.listing.count(),
     prisma.match.count({ where: { status: { in: ["strong_match", "possible_match"] } } }),
     prisma.listing.count({ where: { scanned: false } }),
+    prisma.alert.findFirst({ where: { kind: "TEST_ALERT" }, orderBy: { createdAt: "desc" } }),
   ]);
+  const twilio = twilioConfigVars();
 
   return (
     <div className="space-y-6">
@@ -38,10 +41,36 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
         </div>
       </div>
 
+      <div className="bg-white rounded shadow p-4 text-sm space-y-2">
+        <div className="font-semibold">WhatsApp (Twilio) status</div>
+        {twilio.configured ? (
+          <div className="text-green-700">✓ Configured — alerts will attempt real WhatsApp delivery.</div>
+        ) : (
+          <div className="text-amber-700">
+            ⚠ Not configured — alerts fall back to console. Missing: <b>{twilio.missing.join(", ")}</b>. See <code>.env.example</code>.
+          </div>
+        )}
+        {latestTestAlert && (
+          <div className="border-t pt-2 mt-2">
+            <div className="text-slate-500">Last test alert ({new Date(latestTestAlert.createdAt).toLocaleString()}):</div>
+            <div className="flex items-center gap-2 mt-1">
+              <span
+                className={`text-xs px-2 py-0.5 rounded ${
+                  latestTestAlert.status === "SENT" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                }`}
+              >
+                {latestTestAlert.status}
+              </span>
+              <span className="text-xs px-2 py-0.5 rounded bg-slate-100">via {latestTestAlert.channel}</span>
+            </div>
+            {latestTestAlert.error && <div className="text-xs text-amber-700 mt-1">{latestTestAlert.error}</div>}
+          </div>
+        )}
+      </div>
+
       {searchParams.testAlert && (
-        <div className="bg-green-100 border border-green-300 rounded p-3 text-sm">
-          Test alert sent via <b>{searchParams.testAlert}</b>
-          {searchParams.testAlert === "console" && " (Twilio not configured — check the terminal running the app)"}
+        <div className="bg-blue-100 border border-blue-300 rounded p-3 text-sm">
+          Test alert attempted — see the WhatsApp status panel above for the result.
         </div>
       )}
 
@@ -77,7 +106,8 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
                   תיווך: <b>{BROKER_LABELS[p.brokerStatusPref] ?? p.brokerStatusPref}</b>
                 </div>
                 <div className="text-xs text-slate-400 mt-1">
-                  WhatsApp alert ≥ {p.whatsappThreshold} · dashboard ≥ {p.dashboardThreshold}
+                  WhatsApp alert ≥ {p.whatsappThreshold} · dashboard ≥ {p.dashboardThreshold} ·{" "}
+                  {p.priceDropReAlert ? "re-alerts on price drop/changes" : "one alert only (no re-alerts)"}
                 </div>
               </div>
               <div className="flex gap-2">

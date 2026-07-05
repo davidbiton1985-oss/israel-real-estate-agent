@@ -1,110 +1,229 @@
-// Ingestion + scan pipeline: parse → fingerprint/dedup → store → score vs profiles → alert strong matches.
+// Ingestion + scan pipeline: parse → fingerprint/dedup(update-in-place) → store →
+// score vs profiles → decide + send alerts (new match / price-drop / material-change / suppressed).
 import { prisma } from "../lib/db";
 import { parseListing } from "./parser";
 import { fingerprint } from "./dedup";
 import { scoreListing } from "./matching";
-import { buildAlertMessage, sendAlert } from "./alert";
+import { buildAlertMessage, buildPriceDropMessage, buildMaterialChangeMessage, sendAlert, decideAlertAction } from "./alert";
 import type { Listing } from "@prisma/client";
 
 export type Source = "YAD2" | "FACEBOOK" | "WHATSAPP" | "MANUAL" | "URL" | "DEMO";
 
-/** Parse + store a raw pasted listing. Marks duplicates but still stores them. */
-export async function ingestListing(rawText: string, source: Source, url: string | null): Promise<Listing> {
+export interface IngestResult {
+  listing: Listing;
+  isNew: boolean;
+  priceChanged: boolean;
+  oldPrice: number | null;
+}
+
+function materialSnapshot(listing: Listing): string {
+  return JSON.stringify({
+    rooms: listing.rooms,
+    balcony: listing.balcony,
+    parking: listing.parking,
+    brokerStatus: listing.brokerStatus,
+  });
+}
+
+/**
+ * Parse a raw pasted listing and store it. If the same listing (matched by
+ * Yad2 ID → URL → content fingerprint) already exists, it is UPDATED IN PLACE
+ * rather than creating a new duplicate row — a price change is recorded in
+ * priceHistory so the matching step can fire a price-drop re-alert.
+ */
+export async function ingestListing(rawText: string, source: Source, url: string | null): Promise<IngestResult> {
   const parsed = parseListing(rawText, url);
   const fp = fingerprint(parsed, rawText, url);
   const existing = await prisma.listing.findFirst({ where: { fingerprint: fp } });
 
-  return prisma.listing.create({
+  const parsedData = {
+    dealType: parsed.dealType,
+    city: parsed.city,
+    neighborhood: parsed.neighborhood,
+    street: parsed.street,
+    price: parsed.price,
+    rooms: parsed.rooms,
+    sizeSqm: parsed.sizeSqm,
+    floor: parsed.floor,
+    totalFloors: parsed.totalFloors,
+    balcony: parsed.balcony,
+    parking: parsed.parking,
+    elevator: parsed.elevator,
+    mamad: parsed.mamad,
+    storage: parsed.storage,
+    garden: parsed.garden,
+    condition: parsed.condition,
+    furnished: parsed.furnished,
+    propertyType: parsed.propertyType,
+    entryImmediate: parsed.entryImmediate,
+    entryFlexible: parsed.entryFlexible,
+    entryDate: parsed.entryDate,
+    arnonaMonthly: parsed.arnonaMonthly,
+    vaadMonthly: parsed.vaadMonthly,
+    brokerStatus: parsed.brokerStatus,
+    brokerConfidence: parsed.brokerConfidence,
+    brokerEvidence: parsed.brokerEvidence,
+    brokerFeeStatus: parsed.brokerFeeStatus,
+    brokerFeeText: parsed.brokerFeeText,
+    yad2ListingId: parsed.yad2ListingId,
+  };
+
+  if (!existing) {
+    const listing = await prisma.listing.create({
+      data: { source, url, rawText, fingerprint: fp, isDuplicateOf: null, priceHistory: "[]", ...parsedData },
+    });
+    return { listing, isNew: true, priceChanged: false, oldPrice: null };
+  }
+
+  const oldPrice = existing.price;
+  const priceChanged = parsed.price != null && oldPrice != null && parsed.price !== oldPrice;
+
+  let history: { amount: number; seenAt: string }[] = [];
+  try {
+    history = JSON.parse(existing.priceHistory || "[]");
+  } catch {
+    history = [];
+  }
+  if (priceChanged && oldPrice != null) {
+    history.push({ amount: oldPrice, seenAt: existing.createdAt.toISOString() });
+  }
+
+  const listing = await prisma.listing.update({
+    where: { id: existing.id },
     data: {
       source,
-      url,
-      yad2ListingId: parsed.yad2ListingId,
+      url: url ?? existing.url,
       rawText,
-      dealType: parsed.dealType,
-      city: parsed.city,
-      neighborhood: parsed.neighborhood,
-      street: parsed.street,
-      price: parsed.price,
-      rooms: parsed.rooms,
-      sizeSqm: parsed.sizeSqm,
-      floor: parsed.floor,
-      totalFloors: parsed.totalFloors,
-      balcony: parsed.balcony,
-      parking: parsed.parking,
-      elevator: parsed.elevator,
-      mamad: parsed.mamad,
-      storage: parsed.storage,
-      garden: parsed.garden,
-      condition: parsed.condition,
-      furnished: parsed.furnished,
-      propertyType: parsed.propertyType,
-      entryImmediate: parsed.entryImmediate,
-      entryFlexible: parsed.entryFlexible,
-      entryDate: parsed.entryDate,
-      arnonaMonthly: parsed.arnonaMonthly,
-      vaadMonthly: parsed.vaadMonthly,
-      brokerStatus: parsed.brokerStatus,
-      brokerConfidence: parsed.brokerConfidence,
-      brokerEvidence: parsed.brokerEvidence,
-      brokerFeeStatus: parsed.brokerFeeStatus,
-      brokerFeeText: parsed.brokerFeeText,
-      fingerprint: fp,
-      isDuplicateOf: existing?.id ?? null,
+      priceHistory: JSON.stringify(history),
+      scanned: false, // force re-match so price-drop/material-change can be evaluated
+      ...parsedData,
     },
   });
+
+  return { listing, isNew: false, priceChanged, oldPrice };
 }
 
-/** Score one listing against all active profiles; create matches; alert strong non-duplicate matches. */
-export async function matchListing(listing: Listing): Promise<number> {
+export interface MatchSummary {
+  matchesCreated: number;
+  alertsSent: number;
+  priceDropFired: boolean;
+  materialChangeFired: boolean;
+  suppressedCount: number;
+}
+
+/** Score one listing against all active profiles; create/refresh matches; act on the alert lifecycle. */
+export async function matchListing(listing: Listing): Promise<MatchSummary> {
   const profiles = await prisma.profile.findMany({ where: { active: true } });
-  let created = 0;
+  const summary: MatchSummary = { matchesCreated: 0, alertsSent: 0, priceDropFired: false, materialChangeFired: false, suppressedCount: 0 };
+
   for (const profile of profiles) {
     const result = scoreListing(profile, listing);
+    const scoreFields = {
+      score: result.score,
+      status: result.status,
+      reasonsPositive: JSON.stringify(result.reasonsPositive),
+      reasonsNegative: JSON.stringify(result.reasonsNegative),
+      missingFields: JSON.stringify(result.missingFields),
+      redFlags: JSON.stringify(result.redFlags),
+      recommendedAction: result.recommendedAction,
+    };
     const match = await prisma.match.upsert({
       where: { profileId_listingId: { profileId: profile.id, listingId: listing.id } },
-      update: {},
-      create: {
-        profileId: profile.id,
-        listingId: listing.id,
-        score: result.score,
-        status: result.status,
-        reasonsPositive: JSON.stringify(result.reasonsPositive),
-        reasonsNegative: JSON.stringify(result.reasonsNegative),
-        missingFields: JSON.stringify(result.missingFields),
-        redFlags: JSON.stringify(result.redFlags),
-        recommendedAction: result.recommendedAction,
+      update: scoreFields, // re-scan must refresh score/status — fixes a Phase1/2 no-op bug
+      create: { profileId: profile.id, listingId: listing.id, ...scoreFields },
+    });
+    summary.matchesCreated++;
+
+    const currentSnapshot = materialSnapshot(listing);
+    const action = decideAlertAction({
+      scoreQualifies: result.score >= profile.whatsappThreshold,
+      isDuplicate: Boolean(listing.isDuplicateOf),
+      alreadyAlertedBefore: match.lastAlertedPrice != null,
+      lastAlertedPrice: match.lastAlertedPrice,
+      currentPrice: listing.price,
+      priceDropReAlert: profile.priceDropReAlert,
+      lastAlertedSnapshot: match.lastAlertedSnapshot,
+      currentSnapshot,
+    });
+
+    if (action === "NONE") continue;
+
+    if (action === "SUPPRESSED") {
+      summary.suppressedCount++;
+      await prisma.alert.create({
+        data: {
+          matchId: match.id,
+          kind: "MATCH_ALERT",
+          channel: "none",
+          status: "SUPPRESSED",
+          reason: listing.isDuplicateOf ? "DUPLICATE_SUPPRESSED" : "NO_CHANGE_SUPPRESSED",
+          message: listing.isDuplicateOf
+            ? "Duplicate listing — alert suppressed to avoid repeat noise."
+            : "Listing unchanged since the last alert — suppressed to avoid repeat noise.",
+        },
+      });
+      continue;
+    }
+
+    const message =
+      action === "PRICE_DROP"
+        ? buildPriceDropMessage(profile, listing, match.lastAlertedPrice!, listing.price!)
+        : action === "MATERIAL_CHANGE"
+          ? buildMaterialChangeMessage(profile, listing, match.lastAlertedSnapshot, currentSnapshot)
+          : buildAlertMessage(profile, listing, result);
+
+    const pendingAlert = await prisma.alert.create({
+      data: { matchId: match.id, kind: "MATCH_ALERT", channel: "pending", status: "SENDING", reason: action, message },
+    });
+    const sent = await sendAlert(message);
+    await prisma.alert.update({
+      where: { id: pendingAlert.id },
+      data: {
+        channel: sent.channel,
+        status: sent.status,
+        error: sent.error ?? null,
+        sentAt: sent.status === "SENT" ? new Date() : null,
       },
     });
-    created++;
+    await prisma.match.update({
+      where: { id: match.id },
+      data: { alerted: true, alertChannel: sent.channel, lastAlertedPrice: listing.price, lastAlertedSnapshot: currentSnapshot },
+    });
 
-    // Alert: score >= profile WhatsApp threshold, not a duplicate, not already alerted
-    const shouldAlert = result.score >= profile.whatsappThreshold && !listing.isDuplicateOf && !match.alerted;
-    if (shouldAlert) {
-      const message = buildAlertMessage(profile, listing, result);
-      const sent = await sendAlert(message);
-      await prisma.match.update({
-        where: { id: match.id },
-        data: { alerted: true, alertChannel: sent.channel },
-      });
-    }
+    if (sent.status === "SENT") summary.alertsSent++;
+    if (action === "PRICE_DROP") summary.priceDropFired = true;
+    if (action === "MATERIAL_CHANGE") summary.materialChangeFired = true;
   }
+
   await prisma.listing.update({ where: { id: listing.id }, data: { scanned: true } });
-  return created;
+  return summary;
 }
 
-/** Full ingestion for a pasted/URL listing: store + match + alert. */
+export type IngestOutcome = "new" | "price_drop" | "material_change" | "suppressed" | "updated";
+
+/** Full ingestion for a pasted/URL listing: store (or update in place) + match + alert. */
 export async function ingestAndMatch(rawText: string, source: Source, url: string | null) {
-  const listing = await ingestListing(rawText, source, url);
-  await matchListing(listing);
-  return listing;
+  const ingest = await ingestListing(rawText, source, url);
+  const summary = await matchListing(ingest.listing);
+
+  let outcome: IngestOutcome = "updated";
+  if (ingest.isNew) outcome = "new";
+  else if (summary.priceDropFired) outcome = "price_drop";
+  else if (summary.materialChangeFired) outcome = "material_change";
+  else if (summary.suppressedCount > 0) outcome = "suppressed";
+
+  return { ...ingest, ...summary, outcome };
 }
 
 /** "Run scan now": process all listings not yet scanned (e.g. seeded demo listings, queued items). */
-export async function runScan(): Promise<{ processed: number; matchesCreated: number }> {
+export async function runScan(): Promise<{ processed: number; matchesCreated: number; alertsSent: number }> {
   const pending = await prisma.listing.findMany({ where: { scanned: false } });
   let matchesCreated = 0;
+  let alertsSent = 0;
   for (const listing of pending) {
-    matchesCreated += await matchListing(listing);
+    const summary = await matchListing(listing);
+    matchesCreated += summary.matchesCreated;
+    alertsSent += summary.alertsSent;
   }
-  return { processed: pending.length, matchesCreated };
+  return { processed: pending.length, matchesCreated, alertsSent };
 }

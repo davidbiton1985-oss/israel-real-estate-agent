@@ -6,6 +6,8 @@ import { prisma } from "@/lib/db";
 import { ingestAndMatch, runScan, type Source } from "@/core/pipeline";
 import { sendAlert } from "@/core/alert";
 
+const TEST_ALERT_MESSAGE = ["🏠 Real Estate Agent test alert", "If you received this, WhatsApp alerts are working."].join("\n");
+
 function str(fd: FormData, key: string): string | null {
   const v = fd.get(key);
   if (typeof v !== "string" || v.trim() === "") return null;
@@ -42,6 +44,7 @@ export async function saveProfile(formData: FormData) {
     maxFeeIfKnown: num(formData, "maxFeeIfKnown"),
     whatsappThreshold: num(formData, "whatsappThreshold") ?? 80,
     dashboardThreshold: num(formData, "dashboardThreshold") ?? 60,
+    priceDropReAlert: formData.get("priceDropReAlert") === "on",
     active: formData.get("active") === "on",
   };
   if (id) {
@@ -65,24 +68,31 @@ export async function addListing(formData: FormData) {
   const url = str(formData, "url");
   const source = (str(formData, "source") ?? "MANUAL") as Source;
   if (!rawText && !url) return; // nothing to ingest
-  await ingestAndMatch(rawText ?? `(URL only) ${url}`, source, url);
+  const result = await ingestAndMatch(rawText ?? `(URL only) ${url}`, source, url);
   revalidatePath("/matches");
-  redirect("/matches");
+  redirect(`/matches?outcome=${result.outcome}&listingId=${result.listing.id}`);
 }
 
 export async function runScanAction() {
   const result = await runScan();
   revalidatePath("/");
   revalidatePath("/matches");
-  redirect(`/matches?scanned=${result.processed}`);
+  redirect(`/matches?scanned=${result.processed}&alertsSent=${result.alertsSent}`);
 }
 
 export async function sendTestAlertAction() {
-  const message = [
-    "🏠 Test alert from Israel Real Estate Agent",
-    "If you can read this, alerts are working.",
-    "Channel: WhatsApp if Twilio is configured, otherwise console.",
-  ].join("\n");
-  const result = await sendAlert(message);
-  redirect(`/?testAlert=${result.channel}`);
+  const result = await sendAlert(TEST_ALERT_MESSAGE);
+  await prisma.alert.create({
+    data: {
+      kind: "TEST_ALERT",
+      channel: result.channel,
+      status: result.status,
+      reason: "TEST",
+      message: TEST_ALERT_MESSAGE,
+      error: result.error ?? null,
+      sentAt: result.status === "SENT" ? new Date() : null,
+    },
+  });
+  revalidatePath("/");
+  redirect("/?testAlert=1");
 }

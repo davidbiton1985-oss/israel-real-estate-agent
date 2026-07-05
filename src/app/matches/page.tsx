@@ -18,9 +18,34 @@ function parseArr(s: string): string[] {
   }
 }
 
-export default async function MatchesPage({ searchParams }: { searchParams: { scanned?: string } }) {
+function parsePriceHistory(s: string): { amount: number; seenAt: string }[] {
+  try {
+    const v = JSON.parse(s);
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
+}
+
+const OUTCOME_MESSAGES: Record<string, string> = {
+  new: "✓ New listing added.",
+  price_drop: "📉 Price drop detected on an existing listing — alert queued/sent.",
+  material_change: "🔄 Listing details changed since the last alert — alert queued/sent.",
+  suppressed: "Existing listing updated — no new alert (nothing alert-worthy changed since last time). Duplicate/repeat suppressed.",
+  updated: "Existing listing updated (re-parsed and re-scored).",
+};
+
+const ALERT_STATUS_STYLES: Record<string, string> = {
+  SENT: "bg-green-100 text-green-800",
+  SENDING: "bg-blue-100 text-blue-800",
+  QUEUED: "bg-blue-100 text-blue-800",
+  FAILED: "bg-red-100 text-red-800",
+  SUPPRESSED: "bg-slate-200 text-slate-600",
+};
+
+export default async function MatchesPage({ searchParams }: { searchParams: { scanned?: string; alertsSent?: string; outcome?: string } }) {
   const matches = await prisma.match.findMany({
-    include: { profile: true, listing: true },
+    include: { profile: true, listing: true, alerts: { orderBy: { createdAt: "desc" }, take: 1 } },
     orderBy: { score: "desc" },
   });
 
@@ -29,7 +54,12 @@ export default async function MatchesPage({ searchParams }: { searchParams: { sc
       <h1 className="text-2xl font-bold">Matches</h1>
       {searchParams.scanned && (
         <div className="bg-blue-100 border border-blue-300 rounded p-3 text-sm">
-          Scan complete — processed {searchParams.scanned} pending listing(s).
+          Scan complete — processed {searchParams.scanned} pending listing(s), {searchParams.alertsSent ?? 0} alert(s) sent.
+        </div>
+      )}
+      {searchParams.outcome && (
+        <div className="bg-blue-100 border border-blue-300 rounded p-3 text-sm">
+          {OUTCOME_MESSAGES[searchParams.outcome] ?? "Listing processed."}
         </div>
       )}
       {matches.length === 0 && (
@@ -42,6 +72,8 @@ export default async function MatchesPage({ searchParams }: { searchParams: { sc
           const missing = parseArr(m.missingFields);
           const flags = parseArr(m.redFlags);
           const l = m.listing;
+          const priceHistory = parsePriceHistory(l.priceHistory);
+          const latestAlert = m.alerts[0];
           return (
             <div key={m.id} className={`rounded border shadow-sm p-4 bg-white`}>
               <div className="flex items-start justify-between gap-4">
@@ -51,8 +83,19 @@ export default async function MatchesPage({ searchParams }: { searchParams: { sc
                     <span className={`text-xs px-2 py-1 rounded border ${STATUS_STYLES[m.status] ?? ""}`}>{m.status}</span>
                     <span className="text-xs px-2 py-1 rounded bg-slate-100">{l.source}</span>
                     {l.isDuplicateOf && <span className="text-xs px-2 py-1 rounded bg-orange-100 text-orange-800">duplicate</span>}
-                    {m.alerted && <span className="text-xs px-2 py-1 rounded bg-green-100 text-green-800">alerted via {m.alertChannel}</span>}
+                    {latestAlert && (
+                      <span className={`text-xs px-2 py-1 rounded ${ALERT_STATUS_STYLES[latestAlert.status] ?? "bg-slate-100"}`}>
+                        {latestAlert.status} via {latestAlert.channel}
+                        {latestAlert.reason ? ` (${latestAlert.reason})` : ""}
+                      </span>
+                    )}
                   </div>
+                  {latestAlert && (latestAlert.sentAt || latestAlert.error) && (
+                    <div className="text-xs text-slate-400 mt-0.5">
+                      {latestAlert.sentAt && <>Sent {new Date(latestAlert.sentAt).toLocaleString()}</>}
+                      {latestAlert.error && <span className="text-amber-700"> · {latestAlert.error}</span>}
+                    </div>
+                  )}
                   <div className="text-sm text-slate-600 mt-1">
                     Profile: <b>{m.profile.name}</b>
                   </div>
@@ -75,6 +118,12 @@ export default async function MatchesPage({ searchParams }: { searchParams: { sc
                       <span className="text-xs text-slate-400"> ({l.brokerConfidence} confidence)</span>
                     )}
                   </div>
+                  {priceHistory.length > 0 && (
+                    <div className="text-xs text-slate-400 mt-1">
+                      Price history: {priceHistory.map((h) => `₪${h.amount.toLocaleString()}`).join(" → ")}
+                      {l.price != null ? ` → ₪${l.price.toLocaleString()} (current)` : ""}
+                    </div>
+                  )}
                 </div>
                 {l.url && (
                   <a href={l.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm shrink-0">

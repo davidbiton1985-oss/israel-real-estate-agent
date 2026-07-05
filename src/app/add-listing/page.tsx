@@ -8,7 +8,10 @@ export default function AddListingPage() {
       <h1 className="text-2xl font-bold">Add Listing</h1>
       <p className="text-slate-600 text-sm">
         Paste a listing from Yad2, Facebook, a WhatsApp/broker message, or any source. Hebrew and English both work.
-        The listing is parsed, checked for duplicates, scored against all active profiles, and strong matches trigger an alert.
+        The listing is parsed, scored against all active profiles, and strong matches trigger an alert. If you re-paste a
+        listing that already exists (same Yad2 URL/ID, source URL, or matching content), it updates the existing listing
+        in place instead of creating a duplicate — a price drop or a change to rooms/balcony/parking/broker status can
+        trigger a fresh re-alert; an unchanged repeat is suppressed.
       </p>
       <form action={addListing} className="space-y-4 bg-white rounded shadow p-6">
         <label className="block">

@@ -148,6 +148,10 @@ export default function ProfileForm({ profile }: { profile?: Profile }) {
             <span className="text-sm">Active</span>
           </label>
         </div>
+        <label className="flex items-center gap-2 mt-3">
+          <input type="checkbox" name="priceDropReAlert" defaultChecked={profile?.priceDropReAlert ?? true} />
+          <span className="text-sm">Re-alert if this listing later drops in price or changes materially (rooms/balcony/parking/broker status)</span>
+        </label>
       </fieldset>
 
       <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded hover:bg-blue-700">

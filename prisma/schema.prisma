@@ -32,6 +32,10 @@ model Profile {
   maxFeeIfKnown      Int?
   whatsappThreshold  Int      @default(80)
   dashboardThreshold Int      @default(60)
+  // Re-alert once a listing that already fired an alert later drops in price
+  // or changes materially (rooms/balcony/parking/broker status). Without this,
+  // a listing only ever alerts once per profile.
+  priceDropReAlert   Boolean  @default(true)
   active             Boolean  @default(true)
   createdAt          DateTime @default(now())
   matches            Match[]
@@ -73,6 +77,9 @@ model Listing {
   brokerFeeText   String?
   fingerprint     String
   isDuplicateOf   String?
+  // JSON array of {amount, seenAt} — appended whenever a re-paste of the same
+  // fingerprint (Yad2 ID / URL / content) arrives with a different price.
+  priceHistory    String   @default("[]")
   scanned         Boolean  @default(false) // processed by matching pipeline
   createdAt       DateTime @default(now())
   matches         Match[]
@@ -93,7 +100,27 @@ model Match {
   recommendedAction String
   alerted           Boolean  @default(false)
   alertChannel      String? // whatsapp | console
-  createdAt         DateTime @default(now())
+  // Snapshot of state at the moment the last alert fired for this (profile, listing)
+  // pair — used to detect price drops / material changes on re-scan without
+  // re-alerting on unchanged repeats.
+  lastAlertedPrice    Int?
+  lastAlertedSnapshot String? // JSON: {rooms, balcony, parking, brokerStatus}
+  alerts              Alert[]
+  createdAt           DateTime @default(now())
 
   @@unique([profileId, listingId])
+}
+
+model Alert {
+  id        String    @id @default(cuid())
+  matchId   String?
+  match     Match?    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  kind      String // MATCH_ALERT | TEST_ALERT
+  channel   String // whatsapp | console | none
+  status    String // QUEUED | SENDING | SENT | FAILED | SUPPRESSED
+  reason    String? // NEW_MATCH | PRICE_DROP | MATERIAL_CHANGE | DUPLICATE_SUPPRESSED | NO_CHANGE_SUPPRESSED | TEST
+  message   String
+  error     String?
+  sentAt    DateTime?
+  createdAt DateTime  @default(now())
 }
