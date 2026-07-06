@@ -111,9 +111,24 @@ export function scoreListing(profile: Profile, listing: Listing): MatchResult {
   if (listing.price != null && listing.price > profile.priceMax * 1.05) {
     return reject(`price ₪${listing.price.toLocaleString()} exceeds max ₪${profile.priceMax.toLocaleString()} by more than 5%`);
   }
+  // Known price clearly below the minimum (with 5% tolerance) — a set price range
+  // is a hard filter, symmetric to the max above. (priceMin null = no minimum.)
+  if (profile.priceMin != null && listing.price != null && listing.price < profile.priceMin * 0.95) {
+    return reject(`price ₪${listing.price.toLocaleString()} below minimum ₪${profile.priceMin.toLocaleString()}`);
+  }
   const cities = profileCities(profile);
   if (listing.city && cities.length > 0 && !cities.includes(listing.city)) {
     return reject(`city ${listing.city} not in target cities (${cities.join(", ")})`);
+  }
+  // Known room count clearly outside the target range (beyond a ±0.5 tolerance)
+  // is a hard filter — a 3-room won't alert when you asked for 4–5. A room count
+  // within 0.5 of the range (e.g. 3.5 for a 4–5 search) still scores, penalized.
+  if (listing.rooms != null && (profile.roomsMin != null || profile.roomsMax != null)) {
+    const rMin = profile.roomsMin ?? 0;
+    const rMax = profile.roomsMax ?? 99;
+    if (listing.rooms < rMin - 0.5 || listing.rooms > rMax + 0.5) {
+      return reject(`${listing.rooms} rooms outside target ${rMin}–${rMax}`);
+    }
   }
   // Brokerage hard rules
   if (profile.brokerStatusPref === "private_only" && listing.brokerStatus === "BROKER") {

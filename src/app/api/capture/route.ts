@@ -8,7 +8,10 @@
 // already legitimately viewing in their own session.
 //
 // CORS is open because callers run on facebook.com/yad2.co.il origins and the
-// server binds to localhost only (personal single-user tool).
+// server binds to localhost only (personal single-user tool). We also grant
+// Chrome's Private Network Access (PNA) preflight — without it, Chrome
+// silently blocks a public HTTPS page (Yad2/Facebook) from reaching a
+// localhost server even though CORS itself allows it.
 import { NextRequest, NextResponse } from "next/server";
 import { ingestAndMatch } from "@/core/pipeline";
 import { classifyCaptureSource } from "@/core/capture";
@@ -18,6 +21,7 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type",
+  "Access-Control-Allow-Private-Network": "true",
 };
 
 export async function OPTIONS() {

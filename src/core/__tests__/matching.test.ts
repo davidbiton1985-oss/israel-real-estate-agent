@@ -139,6 +139,60 @@ describe("price rules", () => {
     expect(r.status).toBe("possible_match");
     expect(r.reasonsNegative.join(" ")).toContain("slightly over budget");
   });
+
+  it("known price clearly below priceMin → rejected (a range is a hard filter)", () => {
+    // profile 7,500–9,500; a ₪4,500 listing must not alert
+    const r = scoreListing(
+      makeProfile({ priceMin: 7500, priceMax: 9500 }),
+      makeListing('להשכרה בגני תקווה דירת 4 חדרים, מרפסת, חניה, מעלית. 4,500 ש"ח')
+    );
+    expect(r.status).toBe("rejected");
+    expect(r.reasonsNegative.join(" ")).toContain("below minimum");
+  });
+
+  it("no priceMin set → cheap listing is not rejected on price", () => {
+    const r = scoreListing(
+      makeProfile({ priceMin: null, priceMax: 9500 }),
+      makeListing('להשכרה בגני תקווה דירת 4 חדרים, מרפסת, חניה, מעלית. 4,500 ש"ח')
+    );
+    expect(r.status).not.toBe("rejected");
+  });
+});
+
+// ---- rooms rules -----------------------------------------------------------
+describe("rooms rules", () => {
+  it("known rooms clearly below range → rejected (4–5 profile, 3-room listing)", () => {
+    const r = scoreListing(
+      makeProfile({ roomsMin: 4, roomsMax: 5 }),
+      makeListing('להשכרה בקרית אונו דירת 3 חדרים, מרפסת, חניה, מעלית. 7,000 ש"ח')
+    );
+    expect(r.status).toBe("rejected");
+    expect(r.reasonsNegative.join(" ")).toContain("outside target");
+  });
+
+  it("rooms within ±0.5 tolerance → still scores, not rejected (3.5 for a 4–5 search)", () => {
+    const r = scoreListing(
+      makeProfile({ roomsMin: 4, roomsMax: 5 }),
+      makeListing('להשכרה בקרית אונו דירת 3.5 חדרים, מרפסת, חניה, מעלית. 7,000 ש"ח')
+    );
+    expect(r.status).not.toBe("rejected");
+  });
+
+  it("rooms in range → not rejected on rooms", () => {
+    const r = scoreListing(
+      makeProfile({ roomsMin: 4, roomsMax: 5 }),
+      makeListing('להשכרה בקרית אונו דירת 5 חדרים, מרפסת, חניה, מעלית. 7,000 ש"ח')
+    );
+    expect(r.status).not.toBe("rejected");
+  });
+
+  it("unknown rooms → not rejected (missing ≠ reject)", () => {
+    const r = scoreListing(
+      makeProfile({ roomsMin: 4, roomsMax: 5 }),
+      makeListing('להשכרה בקרית אונו דירה יפה, מרפסת, חניה, מעלית. 7,000 ש"ח')
+    );
+    expect(r.status).not.toBe("rejected");
+  });
 });
 
 // ---- location rules ----------------------------------------------------------

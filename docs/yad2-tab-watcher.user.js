@@ -3,8 +3,7 @@
 // @namespace    israel-real-estate-agent
 // @version      1.0
 // @description  Watches YOUR open Yad2 search tab: every few minutes it re-checks the results and sends new listings to your local Israel Real Estate Agent (localhost:3000), which scores them and WhatsApps you strong matches. Runs only in your own browser session — no CAPTCHA bypass, no fake fingerprints, no login automation. If Yad2 ever shows a verification page, solve it yourself like normal and the watcher resumes.
-// @match        https://www.yad2.co.il/realestate/rent*
-// @match        https://www.yad2.co.il/realestate/forsale*
+// @match        https://www.yad2.co.il/realestate/*
 // @grant        none
 // ==/UserScript==
 
