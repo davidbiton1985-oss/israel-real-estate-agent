@@ -15,7 +15,7 @@ const BROKER_LABELS: Record<string, string> = {
 };
 
 export default async function Home({ searchParams }: { searchParams: { testAlert?: string } }) {
-  const [profiles, listingCount, matchCount, pendingCount, latestTestAlert, emailHealth, fbHealth, fbListingCount] = await Promise.all([
+  const [profiles, listingCount, matchCount, pendingCount, latestTestAlert, emailHealth, fbHealth, fbListingCount, yad2Health, yad2ListingCount] = await Promise.all([
     prisma.profile.findMany({ orderBy: { createdAt: "desc" } }),
     prisma.listing.count(),
     prisma.match.count({ where: { status: { in: ["strong_match", "possible_match"] } } }),
@@ -24,6 +24,8 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
     prisma.sourceHealth.findUnique({ where: { source: "EMAIL" } }),
     prisma.sourceHealth.findUnique({ where: { source: "FACEBOOK" } }),
     prisma.listing.count({ where: { source: "FACEBOOK" } }),
+    prisma.sourceHealth.findUnique({ where: { source: "YAD2_BROWSER" } }),
+    prisma.listing.count({ where: { source: "YAD2" } }),
   ]);
   const twilio = twilioConfigVars();
   const email = emailConfigVars();
@@ -68,6 +70,28 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
             {emailHealth.lastError && (
               <div className="col-span-2 text-amber-700">Last error: {emailHealth.lastError}</div>
             )}
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white rounded shadow p-4 text-sm space-y-2">
+        <div className="font-semibold">🏘 Yad2 monitoring (free — tab watcher)</div>
+        <div className="text-slate-600">
+          Yad2&apos;s own email alerts are a paid feature, so the free path is the <b>tab watcher</b>: keep your Yad2
+          search open in a pinned browser tab with the userscript installed (<code>docs/yad2-tab-watcher.user.js</code>) —
+          it re-checks the results every ~5 minutes in your own browser and sends new listings here automatically.
+          Setup steps in the README.
+        </div>
+        {yad2Health?.lastSuccessAt ? (
+          <div className="border-t pt-2 mt-2 grid grid-cols-2 gap-x-6 gap-y-0.5 text-xs text-slate-600">
+            <div className="text-green-700 col-span-2">✓ Tab watcher has delivered listings.</div>
+            <div>Last capture: {new Date(yad2Health.lastSuccessAt).toLocaleString()}</div>
+            <div>Total captured: {yad2Health.totalIngested}</div>
+            <div>Yad2 listings in system: {yad2ListingCount}</div>
+          </div>
+        ) : (
+          <div className="text-amber-700 text-xs">
+            ⚠ No tab-watcher captures yet — install the userscript and open your Yad2 search tab (README → “Yad2 for free”).
           </div>
         )}
       </div>

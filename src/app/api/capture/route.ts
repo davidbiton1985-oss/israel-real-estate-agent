@@ -1,15 +1,17 @@
-// One-click capture endpoint for the browser bookmarklet (docs/browser-helper.md).
-// While browsing ANY Facebook surface (public post, profile, broker page, share,
-// marketplace) — or any other listing site — one click POSTs the selected text +
-// page URL here and it runs through the full pipeline: parse → dedup → score →
-// WhatsApp if strong. No page fetching happens server-side; the browser sends
-// what the user is already legitimately viewing.
+// Capture endpoint for browser-side ingestion — used by:
+//   • the one-click bookmarklet (docs/browser-helper.md): any Facebook surface
+//     or listing page the user is viewing
+//   • the Yad2 tab watcher userscript (docs/yad2-tab-watcher.user.js): posts
+//     new listing cards from the user's own open Yad2 search tab
+// Everything runs the full pipeline: parse → dedup → score → WhatsApp if strong.
+// No page fetching happens server-side; the browser sends what the user is
+// already legitimately viewing in their own session.
 //
-// CORS is open because the bookmarklet runs on facebook.com's origin and the
+// CORS is open because callers run on facebook.com/yad2.co.il origins and the
 // server binds to localhost only (personal single-user tool).
 import { NextRequest, NextResponse } from "next/server";
-import { ingestAndMatch, type Source } from "@/core/pipeline";
-import { classifyFbUrl } from "@/core/connectors/facebook";
+import { ingestAndMatch } from "@/core/pipeline";
+import { classifyCaptureSource } from "@/core/capture";
 import { prisma } from "@/lib/db";
 
 const CORS_HEADERS = {
@@ -40,21 +42,31 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const isFacebook = url != null && /facebook\.com/i.test(url);
-  const source: Source = isFacebook ? "FACEBOOK" : url != null && /yad2\.co\.il/i.test(url) ? "YAD2" : "URL";
-  const meta = isFacebook
-    ? { fbSurface: classifyFbUrl(url), fbSourceName: title || null, fbAuthor: null }
-    : {};
+  const { source, meta, healthSource } = classifyCaptureSource(url, title);
 
   const rawText = title && !text.includes(title) ? `${title}\n${text}` : text;
   const result = await ingestAndMatch(rawText, source, url, meta);
 
-  // Count captures in the FACEBOOK health row so the dashboard reflects activity.
-  if (isFacebook && result.isNew) {
+  // Credit the capture in the right SourceHealth row so the dashboard reflects activity.
+  if (healthSource) {
     await prisma.sourceHealth.upsert({
-      where: { source: "FACEBOOK" },
-      create: { source: "FACEBOOK", lastSuccessAt: new Date(), totalIngested: 1 },
-      update: { lastSuccessAt: new Date(), totalIngested: { increment: 1 } },
+      where: { source: healthSource },
+      create: {
+        source: healthSource,
+        lastCheckAt: new Date(),
+        lastSuccessAt: new Date(),
+        lastItemsFound: 1,
+        lastNewListings: result.isNew ? 1 : 0,
+        totalIngested: result.isNew ? 1 : 0,
+      },
+      update: {
+        enabled: true,
+        lastCheckAt: new Date(),
+        lastSuccessAt: new Date(),
+        lastError: null,
+        consecutiveErrors: 0,
+        ...(result.isNew ? { totalIngested: { increment: 1 } } : {}),
+      },
     });
   }
 
@@ -70,7 +82,7 @@ export async function POST(req: NextRequest) {
       outcome: result.outcome,
       alertsSent: result.alertsSent,
       source,
-      fbSurface: isFacebook ? meta.fbSurface : undefined,
+      fbSurface: source === "FACEBOOK" ? meta.fbSurface : undefined,
       topScore: topMatch?.score ?? null,
       topStatus: topMatch?.status ?? null,
       topProfile: topMatch?.profile.name ?? null,

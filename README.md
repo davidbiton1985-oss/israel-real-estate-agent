@@ -9,23 +9,25 @@ Define your search criteria once. The watcher checks your sources **every 5 minu
 ## How it works (the automatic loop)
 
 ```
-Yad2 saved-search alerts ────┐
-other portals / broker lists ─┼──► your email inbox ──► IMAP poll (every 5 min)
-Facebook group/page           │                              │
-  notification emails ────────┘                       parse → dedup → score
-                                                             │
-Facebook public posts /             strong match ──► WhatsApp immediately
-profiles / broker pages /           possible match ─► dashboard
-shares / marketplace ──► one-click  repost/duplicate ► suppressed
-capture bookmarklet ──► /api/capture price drop ─────► re-alert 📉
+Facebook group/page            ──► your email inbox ──► IMAP poll (every 5 min)
+  notification emails               (free portals like        │
+free portal alerts                   Madlan/Homeless too)     │
+  (Madlan, Homeless, …) ──────────►─┘                  parse → dedup → score
+                                                              │
+Yad2: pinned search tab              strong match ──► WhatsApp immediately
+  + tab-watcher userscript ──►       possible match ─► dashboard
+  /api/capture (every ~5 min)        repost/duplicate ► suppressed
+Facebook posts while browsing        price drop ─────► re-alert 📉
+  ──► one-click bookmarklet ──► /api/capture
 ```
 
-1. **You tell the sources what you want** — save your searches on Yad2 (and any other portal) with **email alerts (immediate mode)**, and on Facebook subscribe to relevant groups/pages with **"All posts" notifications + email notifications**, all pointed at an inbox you control.
-2. **The watcher polls that inbox every 5 minutes** (`npm run scheduler`) — every portal alert AND every Facebook group/page notification email is ingested through the full pipeline automatically, with Facebook surface/group/author metadata attached.
-3. **For Facebook posts you encounter while browsing** (a stranger's public post, a broker page, a share, marketplace) — select the text, click the **capture bookmarklet**, done: same pipeline, WhatsApp within seconds. See `docs/browser-helper.md`.
-4. **Strong matches hit your WhatsApp within one poll cycle.** Possible matches wait on the dashboard. Duplicates/reposts/reshares are suppressed. Price drops re-alert.
+The free source stack (Yad2's own email alerts are a **paid** feature, so we don't use them):
 
-Setup for the automatic loop is ~5 minutes — see **Automatic ingestion setup** below.
+1. **Facebook groups/pages (free, zero-risk, primary)** — subscribe to relevant groups with **"All posts" notifications + email notifications**; Facebook's notification emails land in your inbox and the watcher ingests them every 5 minutes with group/author metadata.
+2. **Yad2 tab watcher (free)** — keep your Yad2 search open in a pinned browser tab with a small userscript installed; it re-checks the results every ~5 minutes *in your own browser* and posts new listings to the app. See **"Yad2 for free"** below, including the honest fine print.
+3. **Free competitor portals (free)** — Madlan / Homeless / Komo have historically offered free saved-search email alerts; point them at the same inbox. Many Yad2 listings cross-post there.
+4. **Anything you stumble on while browsing** — select text, click the **capture bookmarklet**, done (`docs/browser-helper.md`).
+5. **Strong matches hit your WhatsApp within one cycle.** Possible matches wait on the dashboard. Duplicates/reposts are suppressed. Price drops re-alert.
 
 ## Daily workflow
 
@@ -87,10 +89,29 @@ This is the main workflow. The portals' own saved-search alert emails become you
    IMAP_FOLDER="INBOX"
    EMAIL_ALLOWED_SENDERS="yad2,facebookmail"  # comma-separated From-header filters; empty = ingest all unseen mail
    ```
-4. **On Yad2:** save your searches (matching your app profiles) and enable **email alerts in immediate mode** (one email per new listing — not the daily digest) to that inbox. Do the same on any other portal or broker mailing list; senders not matching `EMAIL_ALLOWED_SENDERS` are left unread for you.
+4. **Point free alert emails at that inbox:** Facebook notification emails (see "Facebook monitoring"), and free portal alerts — try **Madlan** (madlan.co.il) and **Homeless** (homeless.co.il) saved-search email alerts; add their sender domains to `EMAIL_ALLOWED_SENDERS` (e.g. `"yad2,facebookmail,madlan,homeless"`). *Yad2's own email alerts are paid — use the free tab watcher instead (next section).* Senders not matching `EMAIL_ALLOWED_SENDERS` are left unread for you.
 5. **Validate:** `npm run ingest:email` runs one poll and prints what it found. Then leave `npm run scheduler` running — the dashboard's **🤖 Automatic ingestion** panel shows last check, last success, items found, and errors.
 
 **How the mailbox is used:** the app reads **unseen** messages in the configured folder, ingests the ones from allowed senders, and marks them read. It never sends mail, never deletes anything, and the fingerprint dedup means a re-read email can't double-alert.
+
+## Yad2 for free (the tab watcher)
+
+Yad2 charges for saved-search email alerts, and server-side scraping is off the table (their anti-bot protection would break it within days, and it's against their terms). The free path that actually works is the **tab watcher**: your own browser, on your own Yad2 search page, doing what you would do by hand — re-checking the results every few minutes — with a small userscript that sends anything new to the app.
+
+**Setup (~5 minutes, once):**
+
+1. Install the **Tampermonkey** browser extension (Chrome/Firefox/Safari — free, the standard userscript manager).
+2. Tampermonkey → **Create a new script** → delete the template → paste the entire contents of **`docs/yad2-tab-watcher.user.js`** → save (⌘S).
+3. On Yad2, build your search (e.g. rent, Ganei Tikva + Kiryat Ono, 4–5 rooms, up to your budget) and leave that results page open in a **pinned tab**.
+4. You'll see a small **"RE-Agent: …"** badge at the bottom-right of the Yad2 page — that's the watcher running. It re-checks every ~5 minutes and posts new listings to the app (which must be running: `npm run dev`).
+
+**What it does:** finds the listing cards on the page, remembers which listing IDs it has already seen, and POSTs only new ones to `/api/capture` — where they get parsed, deduped (by Yad2 listing ID), scored, and WhatsApp'd if strong. The **first run sends everything currently listed** (that's good — it seeds the system and alerts you to existing matches); after that, only new listings.
+
+**The honest fine print:**
+- It works **only while your browser is open** with that tab alive (your Mac is awake anyway for the watcher).
+- It's your real browser and your real session — **no CAPTCHA bypass, no fake fingerprints, no login automation**. If Yad2 ever shows a verification page, you solve it by hand like a normal person; the badge will say "no listings visible" until you do.
+- Auto-refreshing a page may conflict with Yad2's terms on automated access. It's the same behavior as you pressing ⌘R every 5 minutes, at human-plausible frequency with randomized timing, in your own logged-in browser — but you should know it's a gray zone and it's your call to run it. Disabling it takes one click in Tampermonkey.
+- One search URL per tab. Want rent in two areas covered? Either one search covering both cities (recommended — Yad2 supports multi-city search), or two pinned tabs.
 
 ## Facebook monitoring
 
