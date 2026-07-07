@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RE-Agent Facebook Groups Watcher
 // @namespace    israel-real-estate-agent
-// @version      7.0
+// @version      8.0
 // @description  Watches YOUR combined Facebook groups feed (facebook.com/groups/feed) in your own logged-in browser, and sends new posts to your local Israel Real Estate Agent (localhost:3000) — parsed, scored, WhatsApp'd. One tab covers all your groups. Runs only in your own session — no scraping server, no login/CAPTCHA bypass, no account automation. Facebook's page is messy, so this is best-effort and may need tuning.
 // @match        https://www.facebook.com/groups/*
 // @grant        GM_xmlhttpRequest
@@ -50,8 +50,28 @@
     "position:fixed;bottom:10px;right:10px;z-index:2147483647;background:#4f46e5;color:#fff;" +
     "font:12px/1.4 -apple-system,Arial;padding:6px 10px;border-radius:8px;opacity:.9;direction:ltr;";
   badge.textContent = "RE-Agent FB: starting…";
-  function setBadge(m) { badge.textContent = "RE-Agent FBv7: " + m; }
-  function addBadge() { if (document.body) document.body.appendChild(badge); }
+  function setBadge(m) { badge.textContent = "RE-Agent FBv8: " + m; }
+  // Manual "capture selected post" button — the reliable path. Facebook makes
+  // posts and comments look identical to code, so auto-reading grabs comments;
+  // but YOU can see which is a real apartment post. Select its text, click this.
+  var capBtn = document.createElement("button");
+  capBtn.textContent = "📩 Send selected apartment";
+  capBtn.style.cssText =
+    "position:fixed;bottom:44px;right:10px;z-index:2147483647;background:#16a34a;color:#fff;border:none;" +
+    "font:12px/1.4 -apple-system,Arial;padding:8px 11px;border-radius:8px;cursor:pointer;opacity:.95;";
+  function resetBtn() { capBtn.textContent = "📩 Send selected apartment"; }
+  capBtn.onclick = function () {
+    var t = (window.getSelection().toString() || "").trim();
+    if (t.length < 20) { capBtn.textContent = "⚠ select the post text first"; setTimeout(resetBtn, 2500); return; }
+    capBtn.textContent = "sending…";
+    postToApp({ text: t, url: location.href, title: "" }, function (d, err) {
+      if (d && d.ok) capBtn.textContent = "✓ sent · score " + (d.topScore != null ? d.topScore : "?") + (d.alertsSent > 0 ? " · 📱 alert!" : "");
+      else capBtn.textContent = "✗ failed (" + (err || "?") + ")";
+      setTimeout(resetBtn, 4000);
+    });
+  };
+
+  function addBadge() { if (document.body) { document.body.appendChild(badge); document.body.appendChild(capBtn); } }
   if (document.body) addBadge(); else window.addEventListener("DOMContentLoaded", addBadge);
 
   // --- seen memory ---------------------------------------------------------
