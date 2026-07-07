@@ -17,6 +17,7 @@
   // POST via Tampermonkey's privileged request — bypasses Facebook's strict
   // page security policy (CSP), which blocks a plain fetch() to localhost.
   function postToApp(body, onDone) {
+    if (typeof GM_xmlhttpRequest !== "function") { onDone(null, "NO_GM_API"); return; }
     try {
       GM_xmlhttpRequest({
         method: "POST",
@@ -27,13 +28,13 @@
         onload: function (res) {
           var d = null;
           try { d = JSON.parse(res.responseText); } catch (e) {}
-          onDone(d);
+          onDone(d, d ? null : "HTTP" + res.status);
         },
-        onerror: function () { onDone(null, "neterror"); },
+        onerror: function (res) { onDone(null, "neterr" + (res && res.status ? res.status : "")); },
         ontimeout: function () { onDone(null, "timeout"); },
       });
     } catch (e) {
-      onDone(null, "exception");
+      onDone(null, "throw:" + (e && e.message ? e.message.slice(0, 20) : "?"));
     }
   }
 
@@ -97,25 +98,24 @@
 
   function sendNew() {
     var posts = collectPosts();
-    if (posts.length === 0) { setBadge("no posts visible (loading, or Facebook layout changed?)"); return; }
     var seen = loadSeen();
     var fresh = posts.filter(function (p) { return seen.indexOf(p.key) === -1; });
-    if (fresh.length === 0) { setBadge("watching · " + posts.length + " posts · nothing new " + new Date().toLocaleTimeString()); return; }
-    setBadge("sending " + fresh.length + " new post(s)…");
-    var sent = 0, alerts = 0, sentKeys = [], lastErr = null;
+    // DIAGNOSTIC badge: shows found / fresh so we can see where it stalls.
+    if (posts.length === 0) { setBadge("DIAG found:0 posts (role=article not matching feed?) " + new Date().toLocaleTimeString()); return; }
+    if (fresh.length === 0) { setBadge("DIAG found:" + posts.length + " fresh:0 (all already seen) " + new Date().toLocaleTimeString()); return; }
+    setBadge("DIAG found:" + posts.length + " fresh:" + fresh.length + " sending…");
+    var ok = 0, alerts = 0, fail = 0, sentKeys = [], lastDetail = "";
     function next(i) {
       if (i >= fresh.length) {
-        // Only remember posts that ACTUALLY reached the app, so a blocked/failed
-        // send retries next cycle instead of being lost.
         if (sentKeys.length) { seen = seen.concat(sentKeys); saveSeen(seen); }
-        if (sent === 0 && lastErr) setBadge("could not reach app (" + lastErr + ") — is `npm run dev` running? " + new Date().toLocaleTimeString());
-        else setBadge("sent " + sent + " new · " + alerts + " alert(s) 📱 · " + new Date().toLocaleTimeString());
+        setBadge("DIAG found:" + posts.length + " fresh:" + fresh.length + " ok:" + ok + " fail:" + fail +
+          " alerts:" + alerts + " [" + lastDetail + "] " + new Date().toLocaleTimeString());
         return;
       }
       var p = fresh[i];
       postToApp({ text: p.text, url: p.url, title: document.title }, function (d, err) {
-        if (d && d.ok) { sent++; sentKeys.push(p.key); if (d.alertsSent > 0) alerts++; }
-        else if (err) { lastErr = err; }
+        if (d && d.ok) { ok++; sentKeys.push(p.key); if (d.alertsSent > 0) alerts++; lastDetail = "ok score=" + (d.topScore != null ? d.topScore : "?"); }
+        else { fail++; lastDetail = err || (d && d.error ? String(d.error).slice(0, 24) : "notok"); }
         setTimeout(function () { next(i + 1); }, 500);
       });
     }
