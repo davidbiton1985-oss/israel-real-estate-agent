@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { listingCandidatesDetailed, listingCandidates, groupContext } from "../bulkExtract";
+import { listingCandidatesDetailed, listingCandidates, groupContext, extractListingFromPost } from "../bulkExtract";
 import { parseListing } from "../parser";
 import { scoreListing } from "../matching";
 import type { Listing, Profile } from "@prisma/client";
@@ -96,5 +96,33 @@ describe("bulkExtract — real Facebook group structure", () => {
     const cands = listingCandidatesDetailed(blob);
     expect(cands.length).toBe(1);
     expect(cands[0].city).toBe("Ganei Tikva");
+  });
+});
+
+describe("extractListingFromPost — one post, correct deal type, reject non-offers", () => {
+  const ctx = { city: "Kiryat Ono" as string | null, dealType: "RENT" as "RENT" | "SALE" | null };
+  it("rejects a roommate-wanted post", () => {
+    expect(extractListingFromPost("מחפשת שותפה לדירת 4 שותפות\n1850₪", ctx)).toBeNull();
+  });
+  it("rejects a land/investment post", () => {
+    expect(extractListingFromPost("3 חדרים. זה לא רק מגרש – זו השקעה. קרקע בקריית אונו", ctx)).toBeNull();
+  });
+  it("labels a ₪2.7M post as SALE (so a rent profile rejects it) — never a fake rent", () => {
+    const c = extractListingFromPost("דירת 4 חדרים למכירה\nמחיר 2,700,000 שח\n050-1234567", ctx)!;
+    expect(parseListing(c.text).dealType).toBe("SALE");
+  });
+  it("a monthly rent is RENT even with a long phone number present (no false SALE)", () => {
+    const c = extractListingFromPost("דירת 4 חדרים משופצת\nמחיר 8,700 שח לחודש\n050-1111111", ctx)!;
+    const p = parseListing(c.text);
+    expect(p.dealType).toBe("RENT");
+    expect(p.price).toBe(8700);
+  });
+  it("stitches a city-less multi-line rent and fills the city from the group", () => {
+    const c = extractListingFromPost("פנטהאוז 3 חדרים\nמרפסת נוף\n8,200 שח לחודש\n0521234567", ctx)!;
+    const p = parseListing(c.text);
+    expect(p.dealType).toBe("RENT");
+    expect(p.city).toBe("Kiryat Ono");
+    expect(p.rooms).toBe(3);
+    expect(p.price).toBe(8200);
   });
 });

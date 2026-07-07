@@ -16,7 +16,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ingestAndMatch } from "@/core/pipeline";
 import { classifyCaptureSource } from "@/core/capture";
 import { classifyFbUrl } from "@/core/connectors/facebook";
-import { listingCandidates, listingCandidatesDetailed, groupContext } from "@/core/bulkExtract";
+import { listingCandidates, groupContext, extractListingFromPost } from "@/core/bulkExtract";
 import { prisma } from "@/lib/db";
 
 const CORS_HEADERS = {
@@ -63,20 +63,20 @@ export async function POST(req: NextRequest) {
       const pText = (post.text ?? "").trim();
       const pUrl = (post.url ?? "").trim() || url; // fall back to group page if no permalink
       if (pText.length < 15) continue;
-      for (const cand of listingCandidatesDetailed(pText, ctx)) {
-        const sig = `${cand.city}|${cand.text.slice(0, 30)}`;
-        if (seenSig.has(sig)) continue;
-        seenSig.add(sig);
-        try {
-          const result = await ingestAndMatch(cand.text, "FACEBOOK", pUrl, { fbSurface, fbSourceName: body.groupName ?? null });
-          ingested++;
-          if (result.isNew) newCount++;
-          alertsSent += result.alertsSent;
-          const m = await prisma.match.findFirst({ where: { listingId: result.listing.id }, orderBy: { score: "desc" }, include: { profile: true } });
-          if (m && (!top || m.score > top.score)) top = { score: m.score, status: m.status, profile: m.profile.name };
-        } catch (e) {
-          console.error("[capture/posts] ingest failed:", e instanceof Error ? e.message : e);
-        }
+      const cand = extractListingFromPost(pText, ctx); // ONE listing per post (whole-post parse)
+      if (!cand) continue;
+      const sig = `${cand.city}|${cand.text.slice(0, 40)}`;
+      if (seenSig.has(sig)) continue;
+      seenSig.add(sig);
+      try {
+        const result = await ingestAndMatch(cand.text, "FACEBOOK", pUrl, { fbSurface, fbSourceName: body.groupName ?? null });
+        ingested++;
+        if (result.isNew) newCount++;
+        alertsSent += result.alertsSent;
+        const m = await prisma.match.findFirst({ where: { listingId: result.listing.id }, orderBy: { score: "desc" }, include: { profile: true } });
+        if (m && (!top || m.score > top.score)) top = { score: m.score, status: m.status, profile: m.profile.name };
+      } catch (e) {
+        console.error("[capture/posts] ingest failed:", e instanceof Error ? e.message : e);
       }
     }
     if (ingested > 0) {

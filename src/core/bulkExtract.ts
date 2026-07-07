@@ -107,3 +107,47 @@ export function listingCandidatesDetailed(
 export function listingCandidates(text: string): string[] {
   return listingCandidatesDetailed(text).map((c) => c.text);
 }
+
+// Posts that are NOT an apartment offer we care about — reject outright.
+const NOT_AN_OFFER =
+  /שותף|שותפה|שותפים|שותפות|roommate|מחפש(?:ת|ים|ות)?\s*(?:דירה|דירת|שותף|לשכור|יחיד)|דרוש(?:ה|ים|ות)?\s*דיר|מעוניינ|מגרש|קרקע(?:\s|,|\.|$)|השקעה|נחלה|למסירה/i;
+
+/**
+ * Extract ONE listing from a SINGLE Facebook post (posts-mode). Parses the whole
+ * post as one unit — no sub-window slicing, which was creating false matches by
+ * combining unrelated numbers/words. Detects SALE by an explicit word OR a large
+ * price (rent is monthly = thousands; sale = hundreds of thousands / millions),
+ * so a ₪2.7M sale is never mislabeled as an in-range rental. City/deal fall back
+ * to the group context. Returns null if it isn't a real offer we can locate.
+ */
+export function extractListingFromPost(
+  rawText: string,
+  ctx: { city: string | null; dealType: "RENT" | "SALE" | null }
+): Candidate | null {
+  const clean = contentLines(rawText).join("  ");
+  if (clean.length < 15) return null;
+  if (NOT_AN_OFFER.test(clean)) return null; // roommate / wanted / land / investment
+
+  const p = parseListing(clean);
+  if (p.price == null || p.rooms == null) return null; // need both hard facts
+
+  // Deal type: explicit sale word, "מיליון", OR a large PARSED price (rent is
+  // monthly = thousands; a parsed price ≥ 50,000 means sale). We use the parsed
+  // price — not a raw digit scan — so phone numbers don't trip it.
+  let dealType: "RENT" | "SALE" | null;
+  if (/למכירה|נמכרת/.test(clean) || /מיליון|million/i.test(clean) || p.price >= 50000) {
+    dealType = "SALE";
+  } else if (/להשכרה|להשכיר|שכירות|לחודש|לחו['׳]/.test(clean)) {
+    dealType = "RENT";
+  } else {
+    dealType = ctx.dealType;
+  }
+
+  const city = p.city ?? ctx.city;
+  if (city == null) return null;
+
+  const dealWord = dealType === "SALE" ? "למכירה" : dealType === "RENT" ? "להשכרה" : "";
+  const cityWord = p.city ? "" : city;
+  const text = [dealWord, cityWord, clean].filter(Boolean).join(" ");
+  return { text, city, dealType };
+}
