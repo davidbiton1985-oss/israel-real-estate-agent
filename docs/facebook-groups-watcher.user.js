@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RE-Agent Facebook Groups Watcher
 // @namespace    israel-real-estate-agent
-// @version      5.0
+// @version      6.0
 // @description  Watches YOUR combined Facebook groups feed (facebook.com/groups/feed) in your own logged-in browser, and sends new posts to your local Israel Real Estate Agent (localhost:3000) — parsed, scored, WhatsApp'd. One tab covers all your groups. Runs only in your own session — no scraping server, no login/CAPTCHA bypass, no account automation. Facebook's page is messy, so this is best-effort and may need tuning.
 // @match        https://www.facebook.com/groups/feed*
 // @match        https://www.facebook.com/groups/feed/*
@@ -40,9 +40,10 @@
 
   var CHECK_EVERY_MS = 5 * 60 * 1000;
   var JITTER_MS = 60 * 1000;
-  var SEEN_KEY = "reAgentSeenFbPosts3"; // v2: fresh start (old key had stale entries from failed sends)
+  var SEEN_KEY = "reAgentSeenFbPosts4";
   var SEEN_MAX = 1000;
-  var SCROLL_STEPS = 6; // how many times to scroll to load more posts before sending
+  var SCROLL_STEPS = 25;   // how many viewport-steps to scroll through the feed
+  var STEP_DELAY_MS = 1800; // pause per step so posts + "See more" render before we read
 
   // --- status badge --------------------------------------------------------
   var badge = document.createElement("div");
@@ -50,7 +51,7 @@
     "position:fixed;bottom:10px;right:10px;z-index:2147483647;background:#4f46e5;color:#fff;" +
     "font:12px/1.4 -apple-system,Arial;padding:6px 10px;border-radius:8px;opacity:.9;direction:ltr;";
   badge.textContent = "RE-Agent FB: starting…";
-  function setBadge(m) { badge.textContent = "RE-Agent FBv5: " + m; }
+  function setBadge(m) { badge.textContent = "RE-Agent FBv6: " + m; }
   function addBadge() { if (document.body) document.body.appendChild(badge); }
   if (document.body) addBadge(); else window.addEventListener("DOMContentLoaded", addBadge);
 
@@ -100,8 +101,7 @@
     return out;
   }
 
-  function sendNew() {
-    var posts = collectPosts();
+  function sendPosts(posts) {
     var seen = loadSeen();
     var fresh = posts.filter(function (p) { return seen.indexOf(p.key) === -1; });
     // DIAGNOSTIC badge: shows found / fresh so we can see where it stalls.
@@ -141,20 +141,29 @@
     return clicked;
   }
 
-  // Scroll a few times to load more of the feed, then expand + send, then reload.
-  function loadThenSend(step) {
+  // Facebook virtualizes the feed — posts are deleted from the page once they
+  // scroll out of view. So we must HARVEST as we scroll: at every step, expand
+  // "See more", read whatever posts are currently on the page, and accumulate
+  // them (deduped by key) before Facebook unmounts them. Only after walking the
+  // whole feed do we send the full accumulated set.
+  var harvested = {};
+  function harvestVisible() {
+    expandSeeMore();
+    collectPosts().forEach(function (p) { if (!harvested[p.key]) harvested[p.key] = p; });
+  }
+  function scrollAndHarvest(step) {
+    harvestVisible();
+    var count = 0; for (var k in harvested) if (harvested.hasOwnProperty(k)) count++;
     if (step < SCROLL_STEPS) {
-      window.scrollTo(0, document.body.scrollHeight);
-      setBadge("loading feed… (" + (step + 1) + "/" + SCROLL_STEPS + ")");
-      setTimeout(function () { loadThenSend(step + 1); }, 2500);
+      setBadge("scanning feed… step " + (step + 1) + "/" + SCROLL_STEPS + " · collected:" + count);
+      window.scrollBy(0, Math.round(window.innerHeight * 0.85)); // one viewport down — renders the next batch
+      setTimeout(function () { scrollAndHarvest(step + 1); }, STEP_DELAY_MS);
     } else {
-      window.scrollTo(0, 0);
-      var n = expandSeeMore();
-      setBadge("expanded " + n + " post(s), reading…");
-      setTimeout(sendNew, 2000); // let expanded text render
+      var all = []; for (var key in harvested) if (harvested.hasOwnProperty(key)) all.push(harvested[key]);
+      sendPosts(all);
     }
   }
 
-  setTimeout(function () { loadThenSend(0); }, 7000); // let the feed render first
+  setTimeout(function () { scrollAndHarvest(0); }, 6000); // let the feed render first
   setTimeout(function () { location.reload(); }, CHECK_EVERY_MS + Math.floor(Math.random() * JITTER_MS));
 })();
