@@ -1,88 +1,78 @@
 import { describe, it, expect } from "vitest";
-import { splitIntoListings, listingCandidates } from "../bulkExtract";
+import { listingCandidatesDetailed, listingCandidates, groupContext } from "../bulkExtract";
 import { parseListing } from "../parser";
 import { scoreListing } from "../matching";
 import type { Listing, Profile } from "@prisma/client";
 
-// A realistic messy blob: two real apartment listings buried among comments,
-// UI chrome, and off-topic chatter — like what the watcher harvests off a
-// Facebook group page.
-const BLOB = [
-  "Groups | Facebook",
-  "Anonymous member 807 · 2h · Like Reply",
-  "Orly Yeffet Valdman שכונה? 2h Like Reply Share",
-  'להשכרה בקרית אונו! דירת 4 חדרים משופצת, 100 מ"ר, מרפסת שמש, חניה, מעלית, ממ"ד. ללא תיווך. 8,900 ש"ח לחודש. כניסה מיידית.',
-  "Shir Sayag היי, ביום חמישי אני יכול לבוא לראות את הדירה? Reply",
-  "Caryn Meiras 17,000 למי שתהה 4d Like Reply Share 1",
-  "באיזה חודש? Reply",
-  'למכירה בגני תקווה, דירת 5 חדרים, 120 מ"ר, קומה 3, מרפסת, חניה כפולה, מעלית, ממ"ד. 2.7 מיליון ש"ח. גמיש.',
-  "Linoy Elbaz Magen איזה רחוב זה? 2m Like Reply Share",
-  "See more Write a comment",
+// Mimics REAL harvested text from a city-specific Facebook rental group:
+// group name (city + deal implied), our own badge pollution, Facebook nav
+// chrome, city-less posts (short AND multi-line), and comments.
+const REAL_BLOB = [
+  "Number of unread notifications",
+  "דירות להשכרה קריית אונו", // group name → Kiryat Ono + RENT
+  "Public group",
+  "20.4K members",
+  "Invite",
+  "Share",
+  "Joined",
+  "RE-Agent FBv10: scanning feed… step 5/25 · 1KB", // our badge — must be ignored
+  "📩 Send selected apartment",
+  "Oz Granit",
+  "Follow",
+  'דירת 4 חדרים משופצת, מרפסת שמש, חניה, 8,500 ש"ח, כניסה מיידית', // short offer, NO city
+  "052-1234567",
+  "All reactions",
+  "Like",
+  "Comment",
+  "Dana Levi",
+  "Follow",
+  "פנטהאוז 5 חדרים בבניין בוטיק", // multi-line offer: rooms here…
+  "משופץ, נוף פתוח, מעלית",
+  "חניה כפולה ומחסן",
+  'מחיר 8,900 ש"ח לחודש', // …price 3 lines later
+  "050-9999999",
+  "All reactions",
+  "Like",
+  "Comment",
+  "שכונה? Reply", // comment
+  "עדיין פנוי? Reply", // comment
 ].join("\n");
 
-describe("bulkExtract — find listings in a text blob (automatic Facebook path)", () => {
-  it("splits the blob at rent/sale anchors", () => {
-    const chunks = splitIntoListings(BLOB);
-    expect(chunks.length).toBeGreaterThanOrEqual(2);
+describe("bulkExtract — real Facebook group structure", () => {
+  it("infers city + deal type from the group name", () => {
+    expect(groupContext(REAL_BLOB)).toEqual({ city: "Kiryat Ono", dealType: "RENT" });
   });
 
-  it("returns exactly the 2 real apartment listings, not the comments/chatter", () => {
-    const candidates = listingCandidates(BLOB);
-    expect(candidates.length).toBe(2);
-    const joined = candidates.join(" || ");
-    expect(joined).toContain("קרית אונו");
-    expect(joined).toContain("גני תקווה");
-    // comment noise must NOT become its own candidate
-    expect(candidates.some((c) => c.trim().startsWith("באיזה חודש"))).toBe(false);
+  it("extracts both offers — including the city-less and the multi-line one", () => {
+    const cands = listingCandidatesDetailed(REAL_BLOB);
+    expect(cands.length).toBe(2);
+    const parsed = cands.map((c) => parseListing(c.text));
+    const short = parsed.find((p) => p.rooms === 4);
+    expect(short?.city).toBe("Kiryat Ono"); // filled from the group
+    expect(short?.price).toBe(8500);
+    expect(short?.dealType).toBe("RENT");
+    const multi = parsed.find((p) => p.rooms === 5);
+    expect(multi?.price).toBe(8900); // stitched across lines
+    expect(multi?.city).toBe("Kiryat Ono");
   });
 
-  it("each candidate parses to a real listing with the right fields", () => {
-    const candidates = listingCandidates(BLOB);
-    const parsed = candidates.map((c) => parseListing(c));
-    const kiryatOno = parsed.find((p) => p.city === "Kiryat Ono");
-    expect(kiryatOno).toBeTruthy();
-    expect(kiryatOno!.price).toBe(8900);
-    expect(kiryatOno!.rooms).toBe(4);
-    expect(kiryatOno!.dealType).toBe("RENT");
-    expect(kiryatOno!.brokerStatus).toBe("PRIVATE");
-
-    const ganeiTikva = parsed.find((p) => p.city === "Ganei Tikva");
-    expect(ganeiTikva!.price).toBe(2700000);
-    expect(ganeiTikva!.rooms).toBe(5);
-    expect(ganeiTikva!.dealType).toBe("SALE");
+  it("ignores badge pollution, nav chrome, and comments", () => {
+    const joined = listingCandidates(REAL_BLOB).join(" || ");
+    expect(joined).not.toContain("RE-Agent");
+    expect(joined).not.toContain("members");
+    expect(joined).not.toContain("שכונה");
   });
 
-  it("a blob with no listings (pure chatter) yields no candidates", () => {
-    const chatter = "שכונה? Reply\nבאיזה חודש? Like Reply\nמישהו יודע? Share\nתודה רבה!";
-    expect(listingCandidates(chatter).length).toBe(0);
+  it("pure chatter with no price+rooms yields nothing", () => {
+    const chatter = "שכונה? Reply\nעדיין פנוי? Like Reply\nמישהו יודע? Share";
+    expect(listingCandidates("דירות להשכרה קריית אונו\n" + chatter).length).toBe(0);
   });
 
-  it("catches listings that OMIT the rent word (city + rooms + price only)", () => {
-    // real posts often skip 'להשכרה' — the group context implies it
-    const blob = [
-      "שכונה? Reply",
-      'בגני תקווה דירת 4 חדרים, קומה 2, מרפסת שמש, חניה, 8,500 ש"ח, כניסה מיידית',
-      "17,000 למי שתהה Like Reply",
-      'קרית אונו, 3 חדרים משופצת, מרפסת, 8200 שח, גמיש',
-      "באיזה חודש? Reply",
-    ].join("\n");
-    const candidates = listingCandidates(blob);
-    expect(candidates.length).toBe(2);
-    const parsed = candidates.map((c) => parseListing(c));
-    expect(parsed.find((p) => p.city === "Ganei Tikva")?.price).toBe(8500);
-    expect(parsed.find((p) => p.city === "Kiryat Ono")?.rooms).toBe(3);
+  it("a lone price comment (no rooms) is not a listing", () => {
+    expect(listingCandidates("דירות להשכרה קריית אונו\nCaryn 17,000 למי שתהה Reply").length).toBe(0);
   });
 
-  it("a lone price in a comment (only one signal) is NOT a listing", () => {
-    expect(listingCandidates("Caryn Meiras 17,000 למי שתהה Like Reply").length).toBe(0);
-  });
-
-  it("dedupes the same listing appearing twice (repeated across scroll snapshots)", () => {
-    const doubled = BLOB + "\n\n" + BLOB;
-    expect(listingCandidates(doubled).length).toBe(2);
-  });
-
-  it("end-to-end: the Kiryat Ono candidate scores as a strong match for the rent profile", () => {
+  it("end-to-end: an extracted candidate scores as a strong match", () => {
     const profile = {
       id: "p", name: "t", dealType: "RENT", cities: "Ganei Tikva, Kiryat Ono",
       neighborhoods: null, streets: null, priceMin: 7500, priceMax: 9500, roomsMin: 3, roomsMax: 5,
@@ -91,11 +81,20 @@ describe("bulkExtract — find listings in a text blob (automatic Facebook path)
       maxFeeIfKnown: null, whatsappThreshold: 80, dashboardThreshold: 60, priceDropReAlert: true,
       active: true, createdAt: new Date(),
     } as Profile;
-    const candidates = listingCandidates(BLOB);
-    const koText = candidates.find((c) => c.includes("קרית אונו"))!;
-    const p = parseListing(koText);
-    const listing = { ...p, id: "l", source: "FACEBOOK", url: null, rawText: koText, isDuplicateOf: null } as unknown as Listing;
-    const r = scoreListing(profile, listing);
-    expect(r.status).toBe("strong_match");
+    const cand = listingCandidatesDetailed(REAL_BLOB).find((c) => parseListing(c.text).rooms === 4)!;
+    const p = parseListing(cand.text);
+    const listing = { ...p, id: "l", source: "FACEBOOK", url: null, rawText: cand.text, isDuplicateOf: null } as unknown as Listing;
+    expect(scoreListing(profile, listing).status).toBe("strong_match");
+  });
+
+  it("multi-city group (no single city) falls back to the city written in the post", () => {
+    const blob = [
+      "דירות למכירה והשכרה בקרית אונו ובגני תקווה", // two cities → no single group city
+      'להשכרה בגני תקווה דירת 3 חדרים, 8,200 ש"ח',
+    ].join("\n");
+    expect(groupContext(blob).city).toBeNull();
+    const cands = listingCandidatesDetailed(blob);
+    expect(cands.length).toBe(1);
+    expect(cands[0].city).toBe("Ganei Tikva");
   });
 });

@@ -1,48 +1,106 @@
 // Text-based listing extraction — the DOM-agnostic automatic path for Facebook.
-// We take ALL the text harvested from the group pages and find apartment
-// listings inside it by their content signature — NOT by the word "להשכרה"
-// (many real posts omit it; the group context implies it). A real listing
-// carries at least TWO of {city, price, rooms}; chatter ("which street?",
-// "17,000?") has at most one. That combination is the reliable discriminator.
-import { parseListing } from "./parser";
+// Calibrated against real harvested group text, which revealed:
+//   • the harvest is polluted with our own watcher badge + Facebook nav chrome
+//   • the group is city-specific ("דירות להשכרה קריית אונו") so posts OMIT the
+//     city and often the rent/sale word — those come from the GROUP, not the post
+//   • posts are multi-line (rooms on one line, price several lines later)
+// So we: strip noise, infer city + deal-type from the group header, and stitch
+// consecutive content lines into windows, keeping windows that carry a price and
+// a room count (the two facts a listing states in-text).
+import { parseListing, CITIES } from "./parser";
 
-/**
- * Break a harvested text blob into candidate segments. A Facebook apartment post
- * is usually one line (the caption) but can span a few; we consider each line on
- * its own AND each line merged with the next two, so multi-line posts (city on
- * one line, price on another) are still captured. Candidates are filtered later
- * by signal count, so extra merged segments are harmless.
- */
-export function splitIntoListings(text: string): string[] {
-  const lines = text
+// Lines that are watcher UI or Facebook page chrome — never listing content.
+const NOISE_LINE = new RegExp(
+  "^(" +
+    [
+      "RE-Agent", "📩",
+      "Number of unread", "Public group", "Private group", "[\\d.,]+K? members?",
+      "Invite", "Share", "Shared", "Joined", "Join group", "Join", "More", "About",
+      "Discussion", "Buy and Sell", "Featured", "People", "Media", "Events", "Files",
+      "Write something", "Anonymous post", "Feeling/activity", "Feeling", "Poll",
+      "\\d+ new", "sort group feed by", "Recent activity", "New activity", "Facebook",
+      "Follow", "Following", "All reactions", "Like", "Comment", "Reply", "Send",
+      "Submit your first", "Public", "Anyone can", "Visible", "Recent media",
+      "See all", "See more", "See less", "Write a comment", "Active", "Top contributor",
+      "Admin", "Moderator", "Author", "·", "\\d+[wdhms]$", "Home", "Menu", "Marketplace",
+      // Hebrew chrome
+      "לייק", "תגובה", "תגובות", "שיתוף", "שתף", "הגב", "כתוב(?:\\/כתבי)? תגובה",
+      "הצג עוד", "הצג פחות", "כל התגובות", "הצטרף", "עקוב", "עוקב", "פעיל",
+      "מנהל", "מנהלת", "כתבו משהו", "חברים", "אודות", "דיון", "פרטי",
+    ].join("|") +
+    ")",
+  "i"
+);
+
+function contentLines(text: string): string[] {
+  return text
     .split("\n")
     .map((l) => l.trim())
-    .filter((l) => l.length > 0);
+    .filter((l) => l.length > 1 && !NOISE_LINE.test(l));
+}
+
+/** Infer the group's city + deal type from the header lines (the group name). */
+export function groupContext(text: string): { city: string | null; dealType: "RENT" | "SALE" | null } {
+  const head = contentLines(text).slice(0, 12).join("  ");
+  let city: string | null = null;
+  const hits: string[] = [];
+  for (const c of CITIES) {
+    if (c.aliases.some((a) => head.includes(a))) hits.push(c.canonical);
+  }
+  if (hits.length === 1) city = hits[0]; // single-city group → confident; multi-city → leave to post
+  let dealType: "RENT" | "SALE" | null = null;
+  const rent = /להשכרה|השכרה|שכירות/.test(head);
+  const sale = /למכירה|מכירה/.test(head);
+  if (rent && !sale) dealType = "RENT";
+  else if (sale && !rent) dealType = "SALE";
+  return { city, dealType };
+}
+
+/** Consecutive-line windows (up to 12 lines) so multi-line posts are stitched. */
+export function splitIntoListings(text: string): string[] {
+  const lines = contentLines(text);
   const out: string[] = [];
   for (let i = 0; i < lines.length; i++) {
-    if (lines[i].length >= 10) out.push(lines[i]); // the line alone
-    if (i + 1 < lines.length) out.push(lines.slice(i, i + 2).join(" ")); // + next
-    if (i + 2 < lines.length) out.push(lines.slice(i, i + 3).join(" ")); // + next two
+    for (let w = 1; w <= 12 && i + w <= lines.length; w++) {
+      out.push(lines.slice(i, i + w).join(" "));
+    }
   }
   return out;
 }
 
+export interface Candidate {
+  text: string;
+  city: string;
+  dealType: "RENT" | "SALE" | null;
+}
+
 /**
- * The real listings: segments carrying at least TWO of {city, price, rooms},
- * deduped by that parsed signature (so a listing captured as line-alone and as
- * line-merged collapses to one).
+ * Real listings: windows carrying a price AND a room count. City and deal-type
+ * fall back to the group context when the post omits them (the common case).
+ * Deduped by city|price|rooms so overlapping windows collapse to one.
  */
-export function listingCandidates(text: string): string[] {
+export function listingCandidatesDetailed(text: string): Candidate[] {
+  const ctx = groupContext(text);
   const seen = new Set<string>();
-  const out: string[] = [];
+  const out: Candidate[] = [];
   for (const seg of splitIntoListings(text)) {
     const p = parseListing(seg);
-    const signals = (p.city != null ? 1 : 0) + (p.price != null ? 1 : 0) + (p.rooms != null ? 1 : 0);
-    if (signals < 2) continue;
-    const sig = `${p.city ?? "?"}|${p.price ?? "?"}|${p.rooms ?? "?"}`;
+    if (p.price == null || p.rooms == null) continue; // need both in-post facts
+    const city = p.city ?? ctx.city;
+    if (city == null) continue; // must be locatable (from post or group)
+    const sig = `${city}|${p.price}|${p.rooms}`;
     if (seen.has(sig)) continue;
     seen.add(sig);
-    out.push(seg);
+    // Fold group context into the text so the downstream parse sees city + deal too.
+    const prefix = [ctx.dealType === "RENT" ? "להשכרה" : ctx.dealType === "SALE" ? "למכירה" : "", p.city ? "" : city]
+      .filter(Boolean)
+      .join(" ");
+    out.push({ text: (prefix ? prefix + " " : "") + seg, city, dealType: p.dealType ?? ctx.dealType });
   }
   return out;
+}
+
+/** Back-compat: just the candidate texts (with group city/deal folded in). */
+export function listingCandidates(text: string): string[] {
+  return listingCandidatesDetailed(text).map((c) => c.text);
 }
