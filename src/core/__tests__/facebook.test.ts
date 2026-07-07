@@ -66,6 +66,14 @@ describe("Facebook notification email parsing", () => {
     expect(c!.fbSurface).toBe("GROUP"); // from the /groups/ permalink
   });
 
+  it("membership/security/engagement emails are NOT ingested as listings", () => {
+    // the exact junk that leaked into the DB:
+    expect(parseFacebookNotification("David, you're now a member of דירות להשכרה קריית אונו", GROUP_BODY)).toBeNull();
+    expect(parseFacebookNotification("081502 is your code to confirm this email", GROUP_BODY)).toBeNull();
+    expect(parseFacebookNotification("דוד, הצטרפת לקבוצה דירות בגני תקווה", GROUP_BODY)).toBeNull();
+    expect(parseFacebookNotification("Ruti commented on your post", GROUP_BODY)).toBeNull();
+  });
+
   it("shared-post subject → SHARED", () => {
     const body = [
       "למכירה בפתח תקווה דירת 4 חדרים, 2.4 מיליון. פרטים אצל רותי.",

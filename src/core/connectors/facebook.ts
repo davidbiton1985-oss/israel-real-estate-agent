@@ -102,12 +102,33 @@ export function extractPostText(body: string): string {
     .slice(0, 3000);
 }
 
+// Facebook emails that are NOT apartment posts — membership confirmations,
+// security codes, friend requests, comment/reaction pings, digests. Facebook
+// deprecated per-post group emails, so in practice these are the only
+// facebookmail emails that arrive; none should become a "listing".
+const NON_POST_EMAIL = new RegExp(
+  [
+    "is your code", "confirm this email", "log ?in", "security",
+    "you're now a member", "now a member", "member of", "request to join", "joined the group",
+    "friend request", "sent you a friend", "wants to be friends",
+    "commented on", "replied to", "reacted to", "liked your", "mentioned you", "tagged you",
+    "birthday", "memories", "notifications? (summary|digest)", "see what you missed",
+    // Hebrew equivalents
+    "הקוד שלך", "אישור", "הצטרפת", "חבר(ה)? בקבוצה", "בקשת(ך)? להצטרף", "בקשת חברות",
+    "הגיב", "הגיבה", "הواكن", "תייג", "אזכר", "יום הולדת", "זיכרונות",
+  ].join("|"),
+  "i"
+);
+
 /**
  * Parse one Facebook notification email into a listing candidate.
- * Returns null when there's not enough text to bother parsing (e.g. a bare
- * "X commented on your post" notification).
+ * Returns null for non-post emails (membership/security/engagement noise) and
+ * when there's not enough text to bother parsing.
  */
 export function parseFacebookNotification(subject: string, textBody: string): FbCandidate | null {
+  // Reject non-post emails outright so they never become fake listings.
+  if (NON_POST_EMAIL.test(subject)) return null;
+
   let surface: FbSurface = "UNKNOWN";
   let author: string | null = null;
   let sourceName: string | null = null;
