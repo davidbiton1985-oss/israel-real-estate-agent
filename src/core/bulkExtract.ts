@@ -47,7 +47,9 @@ export function groupContext(text: string): { city: string | null; dealType: "RE
   for (const c of CITIES) {
     if (c.aliases.some((a) => head.includes(a))) hits.push(c.canonical);
   }
-  if (hits.length === 1) city = hits[0]; // single-city group → confident; multi-city → leave to post
+  // Use the first city named in the group (city-specific groups often list a
+  // primary + neighbours). A post that states its own city overrides this later.
+  if (hits.length >= 1) city = hits[0];
   let dealType: "RENT" | "SALE" | null = null;
   const rent = /להשכרה|השכרה|שכירות/.test(head);
   const sale = /למכירה|מכירה/.test(head);

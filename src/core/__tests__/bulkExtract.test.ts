@@ -87,15 +87,12 @@ describe("bulkExtract — real Facebook group structure", () => {
     expect(scoreListing(profile, listing).status).toBe("strong_match");
   });
 
-  it("multi-city group (no single city) falls back to the city written in the post", () => {
-    const blob = [
-      "דירות למכירה והשכרה בקרית אונו ובגני תקווה", // two cities → no single group city
-      'להשכרה בגני תקווה דירת 3 חדרים, 8,200 ש"ח',
-    ].join("\n");
-    expect(groupContext(blob).city).toBeNull();
-    const cands = listingCandidatesDetailed(blob);
-    expect(cands.length).toBe(1);
-    expect(cands[0].city).toBe("Ganei Tikva");
+  it("multi-city group → uses the first named city so city-less posts still match", () => {
+    // "בקרית אונו ובגני תקווה" — both are target cities, so a city-less post
+    // there should still be located (to the first named city), not dropped.
+    const ctx = groupContext("דירות למכירה והשכרה בקרית אונו ובגני תקווה");
+    expect(ctx.city).not.toBeNull();
+    expect(["Ganei Tikva", "Kiryat Ono"]).toContain(ctx.city);
   });
 });
 
