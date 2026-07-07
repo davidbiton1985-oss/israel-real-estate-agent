@@ -1,10 +1,9 @@
 // ==UserScript==
 // @name         RE-Agent Facebook Groups Watcher
 // @namespace    israel-real-estate-agent
-// @version      6.0
+// @version      7.0
 // @description  Watches YOUR combined Facebook groups feed (facebook.com/groups/feed) in your own logged-in browser, and sends new posts to your local Israel Real Estate Agent (localhost:3000) — parsed, scored, WhatsApp'd. One tab covers all your groups. Runs only in your own session — no scraping server, no login/CAPTCHA bypass, no account automation. Facebook's page is messy, so this is best-effort and may need tuning.
-// @match        https://www.facebook.com/groups/feed*
-// @match        https://www.facebook.com/groups/feed/*
+// @match        https://www.facebook.com/groups/*
 // @grant        GM_xmlhttpRequest
 // @connect      localhost
 // ==/UserScript==
@@ -51,7 +50,7 @@
     "position:fixed;bottom:10px;right:10px;z-index:2147483647;background:#4f46e5;color:#fff;" +
     "font:12px/1.4 -apple-system,Arial;padding:6px 10px;border-radius:8px;opacity:.9;direction:ltr;";
   badge.textContent = "RE-Agent FB: starting…";
-  function setBadge(m) { badge.textContent = "RE-Agent FBv6: " + m; }
+  function setBadge(m) { badge.textContent = "RE-Agent FBv7: " + m; }
   function addBadge() { if (document.body) document.body.appendChild(badge); }
   if (document.body) addBadge(); else window.addEventListener("DOMContentLoaded", addBadge);
 
