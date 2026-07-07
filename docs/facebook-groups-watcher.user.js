@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RE-Agent Facebook Groups Watcher
 // @namespace    israel-real-estate-agent
-// @version      9.0
+// @version      10.0
 // @description  Watches YOUR combined Facebook groups feed (facebook.com/groups/feed) in your own logged-in browser, and sends new posts to your local Israel Real Estate Agent (localhost:3000) — parsed, scored, WhatsApp'd. One tab covers all your groups. Runs only in your own session — no scraping server, no login/CAPTCHA bypass, no account automation. Facebook's page is messy, so this is best-effort and may need tuning.
 // @match        https://www.facebook.com/groups/*
 // @grant        GM_xmlhttpRequest
@@ -50,7 +50,7 @@
     "position:fixed;bottom:10px;right:10px;z-index:2147483647;background:#4f46e5;color:#fff;" +
     "font:12px/1.4 -apple-system,Arial;padding:6px 10px;border-radius:8px;opacity:.9;direction:ltr;";
   badge.textContent = "RE-Agent FB: starting…";
-  function setBadge(m) { badge.textContent = "RE-Agent FBv9: " + m; }
+  function setBadge(m) { badge.textContent = "RE-Agent FBv10: " + m; }
   // Manual "capture selected post" button — the reliable path. Facebook makes
   // posts and comments look identical to code, so auto-reading grabs comments;
   // but YOU can see which is a real apartment post. Select its text, click this.
@@ -154,12 +154,17 @@
   // EVERY scroll step (after expanding "See more"), building one big blob of the
   // whole feed, then send it for server-side listing extraction.
   var bulkText = "";
-  var MAX_BULK = 300000; // ~300KB cap
+  var MAX_BULK = 400000; // ~400KB cap
+  var seenLines = {};
+  // Read ALL visible text on the page (not just article containers, which
+  // Facebook renders sparsely), keeping each unique line once — so repeated
+  // nav/sidebar chrome doesn't bloat it but every post body is captured.
   function harvestText() {
     expandSeeMore();
-    var arts = document.querySelectorAll('[role="article"]');
-    for (var i = 0; i < arts.length && bulkText.length < MAX_BULK; i++) {
-      bulkText += "\n\n" + (arts[i].innerText || "");
+    var lines = (document.body.innerText || "").split("\n");
+    for (var i = 0; i < lines.length && bulkText.length < MAX_BULK; i++) {
+      var ln = lines[i].trim();
+      if (ln.length > 1 && !seenLines[ln]) { seenLines[ln] = 1; bulkText += "\n" + ln; }
     }
   }
   function scrollAndHarvest(step) {

@@ -46,6 +46,15 @@ export async function POST(req: NextRequest) {
   // The watcher sends the whole harvested page text; the server finds the
   // apartment listings inside it and ingests each one.
   if (body.bulk) {
+    // TEMP DEBUG: dump the harvested text so we can see what the real group sent.
+    try {
+      const { writeFileSync } = await import("fs");
+      const anchors = (text.match(/להשכרה|להשכיר|למכירה|for rent|for sale/gi) || []).length;
+      writeFileSync("/tmp/fb-bulk-debug.txt", `len=${text.length} anchors=${anchors}\n\n${text}`);
+      console.log(`[capture/bulk] received ${text.length} chars, ${anchors} rent/sale anchors`);
+    } catch {
+      /* ignore debug write errors */
+    }
     const candidates = listingCandidates(text);
     const fbSurface = classifyFbUrl(url);
     let ingested = 0, newCount = 0, alertsSent = 0;
