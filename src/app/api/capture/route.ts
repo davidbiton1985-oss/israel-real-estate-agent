@@ -15,6 +15,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ingestAndMatch } from "@/core/pipeline";
 import { classifyCaptureSource } from "@/core/capture";
+import { classifyFbUrl } from "@/core/connectors/facebook";
+import { listingCandidates } from "@/core/bulkExtract";
 import { prisma } from "@/lib/db";
 
 const CORS_HEADERS = {
@@ -29,7 +31,7 @@ export async function OPTIONS() {
 }
 
 export async function POST(req: NextRequest) {
-  let body: { text?: string; url?: string; title?: string };
+  let body: { text?: string; url?: string; title?: string; bulk?: boolean };
   try {
     body = await req.json();
   } catch {
@@ -39,6 +41,44 @@ export async function POST(req: NextRequest) {
   const text = (body.text ?? "").trim();
   const url = (body.url ?? "").trim() || null;
   const title = (body.title ?? "").trim();
+
+  // ---- BULK mode (the automatic Facebook path) ----
+  // The watcher sends the whole harvested page text; the server finds the
+  // apartment listings inside it and ingests each one.
+  if (body.bulk) {
+    const candidates = listingCandidates(text);
+    const fbSurface = classifyFbUrl(url);
+    let ingested = 0, newCount = 0, alertsSent = 0;
+    let top: { score: number; status: string; profile: string } | null = null;
+    for (const c of candidates) {
+      try {
+        const result = await ingestAndMatch(c, "FACEBOOK", url, { fbSurface });
+        ingested++;
+        if (result.isNew) newCount++;
+        alertsSent += result.alertsSent;
+        const m = await prisma.match.findFirst({
+          where: { listingId: result.listing.id },
+          orderBy: { score: "desc" },
+          include: { profile: true },
+        });
+        if (m && (!top || m.score > top.score)) top = { score: m.score, status: m.status, profile: m.profile.name };
+      } catch (e) {
+        console.error("[capture/bulk] ingest failed:", e instanceof Error ? e.message : e);
+      }
+    }
+    if (candidates.length > 0) {
+      await prisma.sourceHealth.upsert({
+        where: { source: "FACEBOOK" },
+        create: { source: "FACEBOOK", lastCheckAt: new Date(), lastSuccessAt: new Date(), lastItemsFound: candidates.length, lastNewListings: newCount, totalIngested: newCount },
+        update: { enabled: true, lastCheckAt: new Date(), lastSuccessAt: new Date(), lastError: null, consecutiveErrors: 0, lastItemsFound: candidates.length, lastNewListings: newCount, totalIngested: { increment: newCount } },
+      });
+    }
+    return NextResponse.json(
+      { ok: true, bulk: true, candidates: candidates.length, ingested, new: newCount, alertsSent, topScore: top?.score ?? null, topStatus: top?.status ?? null, topProfile: top?.profile ?? null },
+      { headers: CORS_HEADERS }
+    );
+  }
+
   if (text.length < 20) {
     return NextResponse.json(
       { ok: false, error: "Select the post text first (at least a sentence), then click the bookmarklet." },

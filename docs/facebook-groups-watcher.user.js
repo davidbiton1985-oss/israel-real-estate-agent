@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RE-Agent Facebook Groups Watcher
 // @namespace    israel-real-estate-agent
-// @version      8.0
+// @version      9.0
 // @description  Watches YOUR combined Facebook groups feed (facebook.com/groups/feed) in your own logged-in browser, and sends new posts to your local Israel Real Estate Agent (localhost:3000) — parsed, scored, WhatsApp'd. One tab covers all your groups. Runs only in your own session — no scraping server, no login/CAPTCHA bypass, no account automation. Facebook's page is messy, so this is best-effort and may need tuning.
 // @match        https://www.facebook.com/groups/*
 // @grant        GM_xmlhttpRequest
@@ -50,7 +50,7 @@
     "position:fixed;bottom:10px;right:10px;z-index:2147483647;background:#4f46e5;color:#fff;" +
     "font:12px/1.4 -apple-system,Arial;padding:6px 10px;border-radius:8px;opacity:.9;direction:ltr;";
   badge.textContent = "RE-Agent FB: starting…";
-  function setBadge(m) { badge.textContent = "RE-Agent FBv8: " + m; }
+  function setBadge(m) { badge.textContent = "RE-Agent FBv9: " + m; }
   // Manual "capture selected post" button — the reliable path. Facebook makes
   // posts and comments look identical to code, so auto-reading grabs comments;
   // but YOU can see which is a real apartment post. Select its text, click this.
@@ -120,30 +120,19 @@
     return out;
   }
 
-  function sendPosts(posts) {
-    var seen = loadSeen();
-    var fresh = posts.filter(function (p) { return seen.indexOf(p.key) === -1; });
-    // DIAGNOSTIC badge: shows found / fresh so we can see where it stalls.
-    if (posts.length === 0) { setBadge("DIAG found:0 posts (role=article not matching feed?) " + new Date().toLocaleTimeString()); return; }
-    if (fresh.length === 0) { setBadge("DIAG found:" + posts.length + " fresh:0 (all already seen) " + new Date().toLocaleTimeString()); return; }
-    setBadge("DIAG found:" + posts.length + " fresh:" + fresh.length + " sending…");
-    var ok = 0, alerts = 0, fail = 0, sentKeys = [], lastDetail = "";
-    function next(i) {
-      if (i >= fresh.length) {
-        if (sentKeys.length) { seen = seen.concat(sentKeys); saveSeen(seen); }
-        setBadge("DIAG found:" + posts.length + " fresh:" + fresh.length + " ok:" + ok + " fail:" + fail +
-          " alerts:" + alerts + " [" + lastDetail + "] " + new Date().toLocaleTimeString());
-        return;
+  // Send the whole harvested page text; the SERVER finds the apartment listings
+  // inside it (by content), so we don't have to identify posts in Facebook's DOM.
+  function sendBulk(text) {
+    if (text.length < 60) { setBadge("no text harvested (page didn't load?) " + new Date().toLocaleTimeString()); return; }
+    setBadge("analyzing " + Math.round(text.length / 1000) + "KB of feed text…");
+    postToApp({ bulk: true, text: text, url: location.href }, function (d, err) {
+      if (d && d.ok) {
+        setBadge("listings found:" + d.candidates + " · new:" + d["new"] + " · alerts:" + d.alertsSent +
+          (d.topScore != null ? " · topScore:" + d.topScore : "") + " · " + new Date().toLocaleTimeString());
+      } else {
+        setBadge("could not reach app (" + (err || "?") + ") — is `npm run dev` running? " + new Date().toLocaleTimeString());
       }
-      var p = fresh[i];
-      // No title — Facebook's page title ("Groups | Facebook") is just noise.
-      postToApp({ text: p.text, url: p.url, title: "" }, function (d, err) {
-        if (d && d.ok) { ok++; sentKeys.push(p.key); if (d.alertsSent > 0) alerts++; lastDetail = "ok score=" + (d.topScore != null ? d.topScore : "?"); }
-        else { fail++; lastDetail = err || (d && d.error ? String(d.error).slice(0, 24) : "notok"); }
-        setTimeout(function () { next(i + 1); }, 500);
-      });
-    }
-    next(0);
+    });
   }
 
   // Click every "See more" / "הצג עוד" so long posts (where the price/rooms
@@ -160,26 +149,27 @@
     return clicked;
   }
 
-  // Facebook virtualizes the feed — posts are deleted from the page once they
-  // scroll out of view. So we must HARVEST as we scroll: at every step, expand
-  // "See more", read whatever posts are currently on the page, and accumulate
-  // them (deduped by key) before Facebook unmounts them. Only after walking the
-  // whole feed do we send the full accumulated set.
-  var harvested = {};
-  function harvestVisible() {
+  // Facebook virtualizes the feed — posts are deleted from the page as they
+  // scroll out of view. So we accumulate the text of everything on screen at
+  // EVERY scroll step (after expanding "See more"), building one big blob of the
+  // whole feed, then send it for server-side listing extraction.
+  var bulkText = "";
+  var MAX_BULK = 300000; // ~300KB cap
+  function harvestText() {
     expandSeeMore();
-    collectPosts().forEach(function (p) { if (!harvested[p.key]) harvested[p.key] = p; });
+    var arts = document.querySelectorAll('[role="article"]');
+    for (var i = 0; i < arts.length && bulkText.length < MAX_BULK; i++) {
+      bulkText += "\n\n" + (arts[i].innerText || "");
+    }
   }
   function scrollAndHarvest(step) {
-    harvestVisible();
-    var count = 0; for (var k in harvested) if (harvested.hasOwnProperty(k)) count++;
-    if (step < SCROLL_STEPS) {
-      setBadge("scanning feed… step " + (step + 1) + "/" + SCROLL_STEPS + " · collected:" + count);
+    harvestText();
+    if (step < SCROLL_STEPS && bulkText.length < MAX_BULK) {
+      setBadge("scanning feed… step " + (step + 1) + "/" + SCROLL_STEPS + " · " + Math.round(bulkText.length / 1000) + "KB");
       window.scrollBy(0, Math.round(window.innerHeight * 0.85)); // one viewport down — renders the next batch
       setTimeout(function () { scrollAndHarvest(step + 1); }, STEP_DELAY_MS);
     } else {
-      var all = []; for (var key in harvested) if (harvested.hasOwnProperty(key)) all.push(harvested[key]);
-      sendPosts(all);
+      sendBulk(bulkText);
     }
   }
 
