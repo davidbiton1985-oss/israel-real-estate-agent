@@ -5,16 +5,41 @@
 // @description  Watches YOUR combined Facebook groups feed (facebook.com/groups/feed) in your own logged-in browser, and sends new posts to your local Israel Real Estate Agent (localhost:3000) — parsed, scored, WhatsApp'd. One tab covers all your groups. Runs only in your own session — no scraping server, no login/CAPTCHA bypass, no account automation. Facebook's page is messy, so this is best-effort and may need tuning.
 // @match        https://www.facebook.com/groups/feed*
 // @match        https://www.facebook.com/groups/feed/*
-// @grant        none
+// @grant        GM_xmlhttpRequest
+// @connect      localhost
 // ==/UserScript==
 
 (function () {
   "use strict";
 
   var APP = "http://localhost:3000/api/capture";
+
+  // POST via Tampermonkey's privileged request — bypasses Facebook's strict
+  // page security policy (CSP), which blocks a plain fetch() to localhost.
+  function postToApp(body, onDone) {
+    try {
+      GM_xmlhttpRequest({
+        method: "POST",
+        url: APP,
+        headers: { "Content-Type": "application/json" },
+        data: JSON.stringify(body),
+        timeout: 15000,
+        onload: function (res) {
+          var d = null;
+          try { d = JSON.parse(res.responseText); } catch (e) {}
+          onDone(d);
+        },
+        onerror: function () { onDone(null, "neterror"); },
+        ontimeout: function () { onDone(null, "timeout"); },
+      });
+    } catch (e) {
+      onDone(null, "exception");
+    }
+  }
+
   var CHECK_EVERY_MS = 5 * 60 * 1000;
   var JITTER_MS = 60 * 1000;
-  var SEEN_KEY = "reAgentSeenFbPosts";
+  var SEEN_KEY = "reAgentSeenFbPosts2"; // v2: fresh start (old key had stale entries from failed sends)
   var SEEN_MAX = 1000;
   var SCROLL_STEPS = 6; // how many times to scroll to load more posts before sending
 
@@ -77,21 +102,22 @@
     var fresh = posts.filter(function (p) { return seen.indexOf(p.key) === -1; });
     if (fresh.length === 0) { setBadge("watching · " + posts.length + " posts · nothing new " + new Date().toLocaleTimeString()); return; }
     setBadge("sending " + fresh.length + " new post(s)…");
-    var sent = 0, alerts = 0;
+    var sent = 0, alerts = 0, sentKeys = [], lastErr = null;
     function next(i) {
       if (i >= fresh.length) {
-        seen = seen.concat(fresh.map(function (p) { return p.key; }));
-        saveSeen(seen);
-        setBadge("sent " + sent + " new · " + alerts + " alert(s) 📱 · " + new Date().toLocaleTimeString());
+        // Only remember posts that ACTUALLY reached the app, so a blocked/failed
+        // send retries next cycle instead of being lost.
+        if (sentKeys.length) { seen = seen.concat(sentKeys); saveSeen(seen); }
+        if (sent === 0 && lastErr) setBadge("could not reach app (" + lastErr + ") — is `npm run dev` running? " + new Date().toLocaleTimeString());
+        else setBadge("sent " + sent + " new · " + alerts + " alert(s) 📱 · " + new Date().toLocaleTimeString());
         return;
       }
       var p = fresh[i];
-      fetch(APP, { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: p.text, url: p.url, title: document.title }) })
-        .then(function (r) { return r.json(); })
-        .then(function (d) { if (d && d.ok) { sent++; if (d.alertsSent > 0) alerts++; } })
-        .catch(function () { setBadge("app not reachable — is `npm run dev` running?"); })
-        .then(function () { setTimeout(function () { next(i + 1); }, 500); });
+      postToApp({ text: p.text, url: p.url, title: document.title }, function (d, err) {
+        if (d && d.ok) { sent++; sentKeys.push(p.key); if (d.alertsSent > 0) alerts++; }
+        else if (err) { lastErr = err; }
+        setTimeout(function () { next(i + 1); }, 500);
+      });
     }
     next(0);
   }
