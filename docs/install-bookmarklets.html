@@ -1,0 +1,48 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>RE-Agent — install your buttons</title>
+<style>
+  body{font:16px/1.6 -apple-system,Segoe UI,Arial;max-width:720px;margin:40px auto;padding:0 20px;color:#0f172a}
+  h1{font-size:22px}
+  .btn{display:inline-block;background:#2563eb;color:#fff;padding:10px 16px;border-radius:8px;
+       text-decoration:none;font-weight:600;margin:8px 0}
+  .step{background:#f1f5f9;border-radius:10px;padding:16px 20px;margin:16px 0}
+  code{background:#e2e8f0;padding:1px 6px;border-radius:4px}
+  .note{color:#64748b;font-size:14px}
+</style>
+</head>
+<body>
+  <h1>🏠 RE-Agent — install your buttons</h1>
+  <p>These buttons send listings from a page you're viewing to your local agent (which must be running:
+  <code>npm run dev</code>). No extension needed.</p>
+
+  <div class="step">
+    <b>Step 1 — show your bookmarks bar</b><br>
+    In Chrome/Safari press <code>⌘ + Shift + B</code> so the bookmarks bar is visible under the address bar.
+  </div>
+
+  <div class="step">
+    <b>Step 2 — drag each button up to the bookmarks bar</b><br>
+    Grab the blue button and drop it onto your bookmarks bar. (Don't click it here — <i>drag</i> it up.)
+    <div style="margin-top:14px">
+      <a class="btn" href="javascript:(function(){var A=document.querySelectorAll('a[href*=%22/item/%22]');var seen={};var cards=[];A.forEach(function(a){var h=(a.href||'').split('?')[0];var m=h.match(/\/item\/([A-Za-z0-9]+)/);if(!m)return;var id=m[1];if(seen[id])return;var n=a,t='';for(var u=0;u<6&&n;u++){t=(n.innerText||'').trim();if(t.length>60)break;n=n.parentElement;}if(t.length>=25){seen[id]=1;cards.push({url:h,text:t.slice(0,1200)});}});if(!cards.length){alert('No listings found on this page. Open a Yad2 search RESULTS page with listings visible, then click again.');return;}var sent=0,alerts=0,done=0;cards.forEach(function(c){fetch('http://localhost:3000/api/capture',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:c.text,url:c.url,title:document.title})}).then(function(r){return r.json();}).then(function(d){if(d&&d.ok){sent++;if(d.alertsSent>0)alerts++;}}).catch(function(){}).then(function(){done++;if(done===cards.length){alert('Sent '+sent+' of '+cards.length+' listings to your agent.\n'+alerts+' triggered a WhatsApp alert. 📱');}});});})();">📤 Send Yad2 listings</a>
+      &nbsp;&nbsp;
+      <a class="btn" style="background:#4f46e5" href="javascript:(function(){var t=window.getSelection().toString().trim();if(t.length<20){alert('Select the post text first (a sentence or more), then click this again.');return;}fetch('http://localhost:3000/api/capture',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t,url:location.href,title:document.title})}).then(function(r){return r.json();}).then(function(d){if(!d.ok){alert('Capture failed: '+(d.error||'unknown'));return;}var m='Captured ('+d.outcome+')';if(d.topScore!=null)m+='\nTop score: '+d.topScore+'/100 ('+d.topStatus+')';if(d.alertsSent>0)m+='\n📱 WhatsApp alert sent!';alert(m);}).catch(function(e){alert('Capture failed — is the app running on localhost:3000?');});})();">📌 Capture this post</a>
+    </div>
+    <p class="note">Left button = grab every listing on a Yad2 search page. Right button = grab one selected Facebook/any post.</p>
+  </div>
+
+  <div class="step">
+    <b>Step 3 — use it</b><br>
+    Open your Yad2 search (rent, Ganei Tikva + Kiryat Ono, 4–5 rooms, up to ₪9,500) so the results are on screen,
+    then click <b>📤 Send Yad2 listings</b> in your bookmarks bar. A popup tells you how many were sent and how many
+    triggered a WhatsApp alert.
+  </div>
+
+  <p class="note">Nothing here is automatic on its own — you click the button when you want to check. For hands-free
+  every-5-minutes Yad2 watching, the Tampermonkey tab watcher (README → “Yad2 for free”) is the upgrade, but this
+  button needs no install and is the fastest way to see it working.</p>
+</body>
+</html>
