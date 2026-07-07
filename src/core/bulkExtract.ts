@@ -79,8 +79,11 @@ export interface Candidate {
  * fall back to the group context when the post omits them (the common case).
  * Deduped by city|price|rooms so overlapping windows collapse to one.
  */
-export function listingCandidatesDetailed(text: string): Candidate[] {
-  const ctx = groupContext(text);
+export function listingCandidatesDetailed(
+  text: string,
+  ctxOverride?: { city: string | null; dealType: "RENT" | "SALE" | null }
+): Candidate[] {
+  const ctx = ctxOverride ?? groupContext(text);
   const seen = new Set<string>();
   const out: Candidate[] = [];
   for (const seg of splitIntoListings(text)) {

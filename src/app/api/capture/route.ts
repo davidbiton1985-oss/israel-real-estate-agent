@@ -16,7 +16,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { ingestAndMatch } from "@/core/pipeline";
 import { classifyCaptureSource } from "@/core/capture";
 import { classifyFbUrl } from "@/core/connectors/facebook";
-import { listingCandidates } from "@/core/bulkExtract";
+import { listingCandidates, listingCandidatesDetailed, groupContext } from "@/core/bulkExtract";
 import { prisma } from "@/lib/db";
 
 const CORS_HEADERS = {
@@ -31,7 +31,14 @@ export async function OPTIONS() {
 }
 
 export async function POST(req: NextRequest) {
-  let body: { text?: string; url?: string; title?: string; bulk?: boolean };
+  let body: {
+    text?: string;
+    url?: string;
+    title?: string;
+    bulk?: boolean;
+    groupName?: string;
+    posts?: { text?: string; url?: string }[];
+  };
   try {
     body = await req.json();
   } catch {
@@ -41,6 +48,49 @@ export async function POST(req: NextRequest) {
   const text = (body.text ?? "").trim();
   const url = (body.url ?? "").trim() || null;
   const title = (body.title ?? "").trim();
+
+  // ---- POSTS mode (automatic Facebook WITH per-post links) ----
+  // The watcher sends each post's text paired with its own permalink; we extract
+  // the listing from each post and tag it with THAT post's link — so the WhatsApp
+  // alert links straight to the apartment, not just the group.
+  if (Array.isArray(body.posts)) {
+    const ctx = groupContext(body.groupName ?? "");
+    const fbSurface = classifyFbUrl(url);
+    let ingested = 0, newCount = 0, alertsSent = 0;
+    let top: { score: number; status: string; profile: string } | null = null;
+    const seenSig = new Set<string>();
+    for (const post of body.posts) {
+      const pText = (post.text ?? "").trim();
+      const pUrl = (post.url ?? "").trim() || url; // fall back to group page if no permalink
+      if (pText.length < 15) continue;
+      for (const cand of listingCandidatesDetailed(pText, ctx)) {
+        const sig = `${cand.city}|${cand.text.slice(0, 30)}`;
+        if (seenSig.has(sig)) continue;
+        seenSig.add(sig);
+        try {
+          const result = await ingestAndMatch(cand.text, "FACEBOOK", pUrl, { fbSurface, fbSourceName: body.groupName ?? null });
+          ingested++;
+          if (result.isNew) newCount++;
+          alertsSent += result.alertsSent;
+          const m = await prisma.match.findFirst({ where: { listingId: result.listing.id }, orderBy: { score: "desc" }, include: { profile: true } });
+          if (m && (!top || m.score > top.score)) top = { score: m.score, status: m.status, profile: m.profile.name };
+        } catch (e) {
+          console.error("[capture/posts] ingest failed:", e instanceof Error ? e.message : e);
+        }
+      }
+    }
+    if (ingested > 0) {
+      await prisma.sourceHealth.upsert({
+        where: { source: "FACEBOOK" },
+        create: { source: "FACEBOOK", lastCheckAt: new Date(), lastSuccessAt: new Date(), lastItemsFound: body.posts.length, lastNewListings: newCount, totalIngested: newCount },
+        update: { enabled: true, lastCheckAt: new Date(), lastSuccessAt: new Date(), lastError: null, consecutiveErrors: 0, lastItemsFound: body.posts.length, lastNewListings: newCount, totalIngested: { increment: newCount } },
+      });
+    }
+    return NextResponse.json(
+      { ok: true, posts: body.posts.length, listings: ingested, new: newCount, alertsSent, topScore: top?.score ?? null, topStatus: top?.status ?? null, topProfile: top?.profile ?? null },
+      { headers: CORS_HEADERS }
+    );
+  }
 
   // ---- BULK mode (the automatic Facebook path) ----
   // The watcher sends the whole harvested page text; the server finds the
