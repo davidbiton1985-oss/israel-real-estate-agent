@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RE-Agent Facebook Groups Watcher
 // @namespace    israel-real-estate-agent
-// @version      3.0
+// @version      4.0
 // @description  Watches YOUR combined Facebook groups feed (facebook.com/groups/feed) in your own logged-in browser, and sends new posts to your local Israel Real Estate Agent (localhost:3000) — parsed, scored, WhatsApp'd. One tab covers all your groups. Runs only in your own session — no scraping server, no login/CAPTCHA bypass, no account automation. Facebook's page is messy, so this is best-effort and may need tuning.
 // @match        https://www.facebook.com/groups/feed*
 // @match        https://www.facebook.com/groups/feed/*
@@ -40,7 +40,7 @@
 
   var CHECK_EVERY_MS = 5 * 60 * 1000;
   var JITTER_MS = 60 * 1000;
-  var SEEN_KEY = "reAgentSeenFbPosts2"; // v2: fresh start (old key had stale entries from failed sends)
+  var SEEN_KEY = "reAgentSeenFbPosts3"; // v2: fresh start (old key had stale entries from failed sends)
   var SEEN_MAX = 1000;
   var SCROLL_STEPS = 6; // how many times to scroll to load more posts before sending
 
@@ -50,7 +50,7 @@
     "position:fixed;bottom:10px;right:10px;z-index:2147483647;background:#4f46e5;color:#fff;" +
     "font:12px/1.4 -apple-system,Arial;padding:6px 10px;border-radius:8px;opacity:.9;direction:ltr;";
   badge.textContent = "RE-Agent FB: starting…";
-  function setBadge(m) { badge.textContent = "RE-Agent FBv3: " + m; }
+  function setBadge(m) { badge.textContent = "RE-Agent FBv4: " + m; }
   function addBadge() { if (document.body) document.body.appendChild(badge); }
   if (document.body) addBadge(); else window.addEventListener("DOMContentLoaded", addBadge);
 
@@ -113,7 +113,8 @@
         return;
       }
       var p = fresh[i];
-      postToApp({ text: p.text, url: p.url, title: document.title }, function (d, err) {
+      // No title — Facebook's page title ("Groups | Facebook") is just noise.
+      postToApp({ text: p.text, url: p.url, title: "" }, function (d, err) {
         if (d && d.ok) { ok++; sentKeys.push(p.key); if (d.alertsSent > 0) alerts++; lastDetail = "ok score=" + (d.topScore != null ? d.topScore : "?"); }
         else { fail++; lastDetail = err || (d && d.error ? String(d.error).slice(0, 24) : "notok"); }
         setTimeout(function () { next(i + 1); }, 500);
@@ -122,7 +123,21 @@
     next(0);
   }
 
-  // Scroll a few times to load more of the feed, then send, then reload later.
+  // Click every "See more" / "הצג עוד" so long posts (where the price/rooms
+  // usually live) are fully expanded before we read them.
+  function expandSeeMore() {
+    var clicked = 0;
+    var nodes = document.querySelectorAll('[role="button"], div[tabindex], span');
+    nodes.forEach(function (n) {
+      var t = (n.innerText || "").trim();
+      if (t === "See more" || t === "הצג עוד" || t === "ראה עוד") {
+        try { n.click(); clicked++; } catch (e) {}
+      }
+    });
+    return clicked;
+  }
+
+  // Scroll a few times to load more of the feed, then expand + send, then reload.
   function loadThenSend(step) {
     if (step < SCROLL_STEPS) {
       window.scrollTo(0, document.body.scrollHeight);
@@ -130,7 +145,9 @@
       setTimeout(function () { loadThenSend(step + 1); }, 2500);
     } else {
       window.scrollTo(0, 0);
-      sendNew();
+      var n = expandSeeMore();
+      setBadge("expanded " + n + " post(s), reading…");
+      setTimeout(sendNew, 2000); // let expanded text render
     }
   }
 

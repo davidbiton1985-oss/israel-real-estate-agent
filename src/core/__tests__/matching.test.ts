@@ -159,6 +159,20 @@ describe("price rules", () => {
   });
 });
 
+// ---- not-a-listing guard ---------------------------------------------------
+describe("not-a-listing guard (Facebook group chatter)", () => {
+  it("post with no city/price/rooms/size → rejected, not a possible match", () => {
+    const r = scoreListing(makeProfile(), makeListing("ההורים של הילדים בגנים לא תושבים? מישהו יודע?"));
+    expect(r.status).toBe("rejected");
+    expect(r.reasonsNegative.join(" ")).toContain("not a listing");
+  });
+
+  it("post with even one real signal (a target city) is NOT rejected by the guard", () => {
+    const r = scoreListing(makeProfile(), makeListing("דירה בגני תקווה, פרטים בפרטי"));
+    expect(r.status).not.toBe("rejected");
+  });
+});
+
 // ---- rooms rules -----------------------------------------------------------
 describe("rooms rules", () => {
   it("known rooms clearly below range → rejected (4–5 profile, 3-room listing)", () => {

@@ -105,6 +105,12 @@ export function scoreListing(profile: Profile, listing: Listing): MatchResult {
   });
 
   // ---------- HARD REJECTS (only on clearly-known deal-breakers; unknown never auto-rejects) ----------
+  // Not-a-listing guard: a post with NO extractable apartment signal at all
+  // (no city, price, rooms, or size) isn't usable — this is most Facebook group
+  // chatter (discussions, questions). Reject so it doesn't clutter as a "possible".
+  if (listing.city == null && listing.price == null && listing.rooms == null && listing.sizeSqm == null) {
+    return reject("no apartment details found (likely not a listing)");
+  }
   if (listing.dealType && listing.dealType !== profile.dealType) {
     return reject(`deal type mismatch (listing is ${listing.dealType}, profile wants ${profile.dealType})`);
   }
