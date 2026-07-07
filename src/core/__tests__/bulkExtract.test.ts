@@ -57,6 +57,26 @@ describe("bulkExtract — find listings in a text blob (automatic Facebook path)
     expect(listingCandidates(chatter).length).toBe(0);
   });
 
+  it("catches listings that OMIT the rent word (city + rooms + price only)", () => {
+    // real posts often skip 'להשכרה' — the group context implies it
+    const blob = [
+      "שכונה? Reply",
+      'בגני תקווה דירת 4 חדרים, קומה 2, מרפסת שמש, חניה, 8,500 ש"ח, כניסה מיידית',
+      "17,000 למי שתהה Like Reply",
+      'קרית אונו, 3 חדרים משופצת, מרפסת, 8200 שח, גמיש',
+      "באיזה חודש? Reply",
+    ].join("\n");
+    const candidates = listingCandidates(blob);
+    expect(candidates.length).toBe(2);
+    const parsed = candidates.map((c) => parseListing(c));
+    expect(parsed.find((p) => p.city === "Ganei Tikva")?.price).toBe(8500);
+    expect(parsed.find((p) => p.city === "Kiryat Ono")?.rooms).toBe(3);
+  });
+
+  it("a lone price in a comment (only one signal) is NOT a listing", () => {
+    expect(listingCandidates("Caryn Meiras 17,000 למי שתהה Like Reply").length).toBe(0);
+  });
+
   it("dedupes the same listing appearing twice (repeated across scroll snapshots)", () => {
     const doubled = BLOB + "\n\n" + BLOB;
     expect(listingCandidates(doubled).length).toBe(2);

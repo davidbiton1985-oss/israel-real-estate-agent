@@ -1,54 +1,48 @@
 // Text-based listing extraction — the DOM-agnostic automatic path for Facebook.
-// Instead of trying to identify "posts" in Facebook's deliberately-obfuscated
-// page structure (which is nearly impossible to do reliably), we take ALL the
-// text harvested from the group pages and hunt for apartment listings inside it
-// by their content signature: a rent/sale marker with a price / rooms / city
-// nearby. This ignores Facebook's post-vs-comment trickery entirely.
+// We take ALL the text harvested from the group pages and find apartment
+// listings inside it by their content signature — NOT by the word "להשכרה"
+// (many real posts omit it; the group context implies it). A real listing
+// carries at least TWO of {city, price, rooms}; chatter ("which street?",
+// "17,000?") has at most one. That combination is the reliable discriminator.
 import { parseListing } from "./parser";
 
-// Anchors that mark the likely START of a listing (Hebrew + English).
-const ANCHOR = /(להשכרה|להשכיר|למכירה|למסירה|for rent|for sale|לשכירות)/gi;
-
 /**
- * Split a big text blob into candidate listing chunks — one per rent/sale anchor,
- * windowed to grab the surrounding details (a little before for a leading city,
- * up to ~700 chars after for price/rooms/features), stopping at the next anchor.
+ * Break a harvested text blob into candidate segments. A Facebook apartment post
+ * is usually one line (the caption) but can span a few; we consider each line on
+ * its own AND each line merged with the next two, so multi-line posts (city on
+ * one line, price on another) are still captured. Candidates are filtered later
+ * by signal count, so extra merged segments are harmless.
  */
 export function splitIntoListings(text: string): string[] {
-  const norm = text.replace(/\r/g, "").replace(/[ \t ]+/g, " ");
-  const anchors: number[] = [];
-  const re = new RegExp(ANCHOR.source, "gi");
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(norm)) !== null) anchors.push(m.index);
-  if (anchors.length === 0) return [];
-
+  const lines = text
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
   const out: string[] = [];
-  for (let i = 0; i < anchors.length; i++) {
-    const start = Math.max(0, anchors[i] - 50); // a little before → catches a city named first
-    const hardEnd = anchors[i] + 700;
-    const end = i + 1 < anchors.length ? Math.min(anchors[i + 1], hardEnd) : Math.min(norm.length, hardEnd);
-    const chunk = norm.slice(start, end).trim();
-    if (chunk.length >= 25) out.push(chunk);
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].length >= 10) out.push(lines[i]); // the line alone
+    if (i + 1 < lines.length) out.push(lines.slice(i, i + 2).join(" ")); // + next
+    if (i + 2 < lines.length) out.push(lines.slice(i, i + 3).join(" ")); // + next two
   }
   return out;
 }
 
 /**
- * Candidate listing chunks worth ingesting — only those the parser can extract a
- * real apartment signal from (price OR rooms OR a known city). Deduped by a
- * normalized signature so the same listing appearing in several scroll snapshots
- * collapses to one. This filters out pure chatter that happens to sit near an anchor.
+ * The real listings: segments carrying at least TWO of {city, price, rooms},
+ * deduped by that parsed signature (so a listing captured as line-alone and as
+ * line-merged collapses to one).
  */
 export function listingCandidates(text: string): string[] {
   const seen = new Set<string>();
   const out: string[] = [];
-  for (const chunk of splitIntoListings(text)) {
-    const p = parseListing(chunk);
-    if (p.price == null && p.rooms == null && p.city == null) continue;
-    const sig = `${p.city ?? ""}|${p.price ?? ""}|${p.rooms ?? ""}|${chunk.slice(0, 40).replace(/\s+/g, "")}`;
+  for (const seg of splitIntoListings(text)) {
+    const p = parseListing(seg);
+    const signals = (p.city != null ? 1 : 0) + (p.price != null ? 1 : 0) + (p.rooms != null ? 1 : 0);
+    if (signals < 2) continue;
+    const sig = `${p.city ?? "?"}|${p.price ?? "?"}|${p.rooms ?? "?"}`;
     if (seen.has(sig)) continue;
     seen.add(sig);
-    out.push(chunk);
+    out.push(seg);
   }
   return out;
 }
