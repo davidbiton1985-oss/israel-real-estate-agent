@@ -1,0 +1,44 @@
+name: RE-Agent 24/7 watcher
+
+# Runs the email/Facebook poll every ~5 minutes on GitHub's servers, so alerts
+# reach WhatsApp even when your Mac is off. (GitHub's scheduler can lag under
+# load; ~5–20 min is normal.) You can also trigger a run by hand from the
+# Actions tab (workflow_dispatch).
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+# If one run is still going when the next is due, skip the new one rather than
+# overlap (avoids two pollers racing on the same inbox).
+concurrency:
+  group: re-agent-watcher
+  cancel-in-progress: false
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - run: npx prisma generate
+      - name: Poll sources and alert
+        run: npm run ingest:email
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          IMAP_HOST: ${{ secrets.IMAP_HOST }}
+          IMAP_PORT: ${{ secrets.IMAP_PORT }}
+          IMAP_SECURE: ${{ secrets.IMAP_SECURE }}
+          IMAP_USER: ${{ secrets.IMAP_USER }}
+          IMAP_PASS: ${{ secrets.IMAP_PASS }}
+          IMAP_FOLDER: ${{ secrets.IMAP_FOLDER }}
+          EMAIL_ALLOWED_SENDERS: ${{ secrets.EMAIL_ALLOWED_SENDERS }}
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          TWILIO_WHATSAPP_FROM: ${{ secrets.TWILIO_WHATSAPP_FROM }}
+          ALERT_WHATSAPP_TO: ${{ secrets.ALERT_WHATSAPP_TO }}

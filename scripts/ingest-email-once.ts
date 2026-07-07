@@ -16,4 +16,9 @@ import { prisma } from "../src/lib/db";
   }
   console.log(`Leftover listings scanned: ${s.scannedLeftovers} · alerts sent this run: ${s.alertsSent}`);
   await prisma.$disconnect();
-})();
+  // Exit explicitly so a lingering IMAP/DB socket can't keep the CI run hanging.
+  process.exit(s.emailConfigured && !s.emailOk ? 1 : 0);
+})().catch((e) => {
+  console.error("Poll crashed:", e instanceof Error ? e.message : e);
+  process.exit(1);
+});
