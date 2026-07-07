@@ -131,13 +131,16 @@ export function extractListingFromPost(
   if (NOT_AN_OFFER.test(clean)) return null; // roommate / wanted / land / investment
 
   const p = parseListing(clean);
-  if (p.price == null || p.rooms == null) return null; // need both hard facts
+  // Facebook-only rule: ROOMS is required; PRICE is OPTIONAL — many real FB posts
+  // omit the price, and we'd rather surface a right-city/right-rooms apartment and
+  // ask the price than miss it. (Yad2 uses a different path and is unaffected.)
+  if (p.rooms == null) return null;
 
   // Deal type: explicit sale word, "מיליון", OR a large PARSED price (rent is
   // monthly = thousands; a parsed price ≥ 50,000 means sale). We use the parsed
   // price — not a raw digit scan — so phone numbers don't trip it.
   let dealType: "RENT" | "SALE" | null;
-  if (/למכירה|נמכרת/.test(clean) || /מיליון|million/i.test(clean) || p.price >= 50000) {
+  if (/למכירה|נמכרת/.test(clean) || /מיליון|million/i.test(clean) || (p.price != null && p.price >= 50000)) {
     dealType = "SALE";
   } else if (/להשכרה|להשכיר|שכירות|לחודש|לחו['׳]/.test(clean)) {
     dealType = "RENT";

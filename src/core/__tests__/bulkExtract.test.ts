@@ -123,3 +123,17 @@ describe("extractListingFromPost — one post, correct deal type, reject non-off
     expect(p.price).toBe(8200);
   });
 });
+
+describe("Facebook: price optional (rooms required)", () => {
+  const ctx = { city: "Kiryat Ono" as string | null, dealType: "RENT" as "RENT" | "SALE" | null };
+  it("KEEPS a no-price post that has rooms (+ city)", () => {
+    const c = extractListingFromPost("דירת 4 חדרים משופצת בקריית אונו, מרפסת, חניה, כניסה מיידית 050-1234567", ctx);
+    expect(c).not.toBeNull();
+    const p = parseListing(c!.text);
+    expect(p.rooms).toBe(4);
+    expect(p.price).toBeNull();
+  });
+  it("still REJECTS a post with no rooms", () => {
+    expect(extractListingFromPost("דירה יפה בקריית אונו, מרפסת וחניה", ctx)).toBeNull();
+  });
+});
