@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { listingCandidatesDetailed, listingCandidates, groupContext, extractListingFromPost } from "../bulkExtract";
+import { listingCandidatesDetailed, listingCandidates, groupContext, extractListingFromPost, isNotAnOffer } from "../bulkExtract";
 import { parseListing } from "../parser";
 import { scoreListing } from "../matching";
 import type { Listing, Profile } from "@prisma/client";
@@ -121,6 +121,42 @@ describe("extractListingFromPost — one post, correct deal type, reject non-off
     expect(p.city).toBe("Kiryat Ono");
     expect(p.rooms).toBe(3);
     expect(p.price).toBe(8200);
+  });
+});
+
+describe("rejects 'looking for' (wanted) posts on the FEED/BULK path too", () => {
+  // The exact false-alert shape: a city-specific rental group whose TITLE says
+  // "for rent", with a post from someone SEARCHING (מחפשת) — must yield nothing.
+  const WANTED = [
+    "דירות להשכרה בהרצליה בלבד", // group title → Herzliya + RENT (inherited by posts)
+    "Public group",
+    "67.4K members",
+    "Sara Bi",
+    "מחפשת דירת 3 חדרים בהרצליה והאזור באזור 4,500 ₪", // a SEARCHER, not an offer
+    "Like",
+    "Comment",
+  ].join("\n");
+
+  it("a wanted post with rooms+budget yields NO listing (was the false WhatsApp alert)", () => {
+    expect(listingCandidates(WANTED).length).toBe(0);
+  });
+
+  it("keeps a real offer but drops the wanted post in the same feed", () => {
+    const blob = WANTED + "\n" + ['דירת 3 חדרים משופצת, מרפסת, חניה, 5,500 ש"ח, כניסה מיידית', "052-1234567"].join("\n");
+    const cands = listingCandidatesDetailed(blob);
+    expect(cands.length).toBe(1);
+    expect(cands[0].text).not.toContain("מחפשת");
+    expect(parseListing(cands[0].text).price).toBe(5500);
+  });
+
+  it("isNotAnOffer catches varied 'looking for' phrasings without rejecting real offers", () => {
+    expect(isNotAnOffer("מחפשת דירת 3 חדרים בהרצליה")).toBe(true);
+    expect(isNotAnOffer("מחפש/ת דירה בהרצליה")).toBe(true);
+    expect(isNotAnOffer("זוג צעיר מחפשים דירת 3 חדרים")).toBe(true);
+    expect(isNotAnOffer("מעוניינת לשכור דירה")).toBe(true);
+    // "מעוניין להשכיר" is a landlord OFFERING — must NOT be treated as wanted
+    expect(isNotAnOffer("בעל דירה מעוניין להשכיר דירת 3 חדרים")).toBe(false);
+    expect(isNotAnOffer('דירת 4 חדרים להשכרה, משופצת, 6,000 ש"ח')).toBe(false);
   });
 });
 

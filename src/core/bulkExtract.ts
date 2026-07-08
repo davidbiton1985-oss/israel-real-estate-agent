@@ -89,6 +89,7 @@ export function listingCandidatesDetailed(
   const seen = new Set<string>();
   const out: Candidate[] = [];
   for (const seg of splitIntoListings(text)) {
+    if (isNotAnOffer(seg)) continue; // skip wanted/roommate/land/investment windows
     const p = parseListing(seg);
     if (p.price == null || p.rooms == null) continue; // need both in-post facts
     const city = p.city ?? ctx.city;
@@ -110,9 +111,34 @@ export function listingCandidates(text: string): string[] {
   return listingCandidatesDetailed(text).map((c) => c.text);
 }
 
-// Posts that are NOT an apartment offer we care about — reject outright.
-const NOT_AN_OFFER =
-  /שותף|שותפה|שותפים|שותפות|roommate|מחפש(?:ת|ים|ות)?\s*(?:דירה|דירת|שותף|לשכור|יחיד)|דרוש(?:ה|ים|ות)?\s*דיר|מעוניינ|מגרש|קרקע(?:\s|,|\.|$)|השקעה|נחלה|למסירה/i;
+// Posts that are NOT an apartment offer we care about — someone LOOKING for a
+// place, a roommate wanted, or land/investment. Rejected outright on BOTH the
+// per-post AND the feed/bulk extraction paths (a city-specific group's title
+// says "for rent", so a wanted post there inherits RENT and would otherwise
+// masquerade as a real listing).
+const NOT_AN_OFFER = new RegExp(
+  [
+    // roommate wanted
+    "שותף", "שותפה", "שותפים", "שותפות", "roommate",
+    // "looking for" a place: מחפש/מחפשת/מחפשים (+ optional "/ת"), then within a few
+    // chars a housing noun. Catches מחפשת דירת…, מחפש/ת דירה, מחפשים יחידה, מחפש לשכור.
+    "מחפש(?:ים|ות|ת)?(?:\\s*\\/\\s*ת)?[^\\n]{0,12}?(?:דיר|יחיד|סאבלט|סבלט|בית|לשכור|להשכיר|לגור|שכיר)",
+    // "wanted/needed" a place
+    "דרוש(?:ה|ים|ות)?[^\\n]{0,12}?(?:דיר|יחיד|בית)",
+    // "interested in renting" / "want to rent" — but NOT מעוניין להשכיר (that is an OFFER)
+    "מעוניינ(?:ת|ים|ות)?[^\\n]{0,10}?(?:לשכור|בדיר|לגור)",
+    "רוצ(?:ה|ים|ות)?[^\\n]{0,10}?לשכור",
+    "זקוק(?:ה|ים)?[^\\n]{0,10}?דיר",
+    // land / investment / handover — not a rental apartment offer
+    "מגרש", "קרקע(?:\\s|,|\\.|$)", "השקעה", "נחלה", "למסירה",
+  ].join("|"),
+  "i"
+);
+
+/** True when the text is a wanted/roommate/land/investment post, not an apartment OFFER. */
+export function isNotAnOffer(text: string): boolean {
+  return NOT_AN_OFFER.test(text);
+}
 
 /**
  * Extract ONE listing from a SINGLE Facebook post (posts-mode). Parses the whole
@@ -128,7 +154,7 @@ export function extractListingFromPost(
 ): Candidate | null {
   const clean = contentLines(rawText).join("  ");
   if (clean.length < 15) return null;
-  if (NOT_AN_OFFER.test(clean)) return null; // roommate / wanted / land / investment
+  if (isNotAnOffer(clean)) return null; // roommate / wanted / land / investment
 
   const p = parseListing(clean);
   // Facebook-only rule: ROOMS is required; PRICE is OPTIONAL — many real FB posts

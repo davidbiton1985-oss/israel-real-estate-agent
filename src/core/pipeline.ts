@@ -208,7 +208,7 @@ export async function matchListing(listing: Listing): Promise<MatchSummary> {
         ? buildPriceDropMessage(profile, listing, match.lastAlertedPrice!, listing.price!)
         : action === "MATERIAL_CHANGE"
           ? buildMaterialChangeMessage(profile, listing, match.lastAlertedSnapshot, currentSnapshot)
-          : buildAlertMessage(profile, listing, result);
+          : buildAlertMessage(listing);
 
     const pendingAlert = await prisma.alert.create({
       data: { matchId: match.id, kind: "MATCH_ALERT", channel: "pending", status: "SENDING", reason: action, message },

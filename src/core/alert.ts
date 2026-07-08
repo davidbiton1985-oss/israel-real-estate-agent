@@ -2,12 +2,30 @@
 // Also hosts the pure alert-lifecycle decision (decideAlertAction) so it is unit-testable
 // without touching Prisma.
 import type { Listing, Profile } from "@prisma/client";
-import type { MatchResult } from "./matching";
+import { CITIES } from "./parser";
 
-function fmt(v: boolean | null | undefined): string {
-  if (v === true) return "Yes";
-  if (v === false) return "No";
-  return "Unknown";
+// Alerts go out in HEBREW — the user wants the ORIGINAL Hebrew Facebook post,
+// not an English parse. We prepend only a compact one-line Hebrew summary.
+const BROKER_HE: Record<string, string> = { PRIVATE: "פרטי", BROKER: "מתיווך" };
+const SEP = "────────────";
+
+/** Canonical city ("Herzliya") → its Hebrew name ("הרצליה") for the summary line. */
+function hebrewCity(canonical: string | null): string | null {
+  if (!canonical) return null;
+  const entry = CITIES.find((c) => c.canonical === canonical);
+  return entry?.aliases.find((a) => /[א-ת]/.test(a)) ?? canonical;
+}
+
+/** Compact Hebrew summary line: city · rooms · price · broker (omitting unknowns). */
+function summaryLine(listing: Listing): string {
+  return [
+    hebrewCity(listing.city),
+    listing.rooms != null ? `${listing.rooms} חד'` : null,
+    listing.price != null ? `${listing.price.toLocaleString()} ₪` : "מחיר לא צוין",
+    BROKER_HE[listing.brokerStatus] ?? null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 const FB_SURFACE_LABELS: Record<string, string> = {
@@ -33,57 +51,54 @@ export function describeFbSource(listing: Listing): string | null {
   return parts.join(" ");
 }
 
-export function buildAlertMessage(profile: Profile, listing: Listing, result: MatchResult): string {
-  const feeLabel = listing.brokerFeeStatus === "NONE" ? "None" : listing.brokerFeeStatus === "EXISTS" ? "Exists" : "Unknown";
-  const brokerLabel = listing.brokerStatus === "PRIVATE" ? "Private" : listing.brokerStatus === "BROKER" ? "Broker" : "Unknown";
-  const fbSource = describeFbSource(listing);
+// The user's chosen alert shape: a one-line Hebrew summary, then the ORIGINAL
+// Hebrew post verbatim, then the direct link. No English, no field dump.
+export function buildAlertMessage(listing: Listing): string {
   return [
-    `🏠 New real-estate match: ${result.score}/100`,
-    `Profile: ${profile.name}`,
-    ...(fbSource ? [`Source: ${fbSource}`] : []),
-    `Type: ${listing.dealType === "SALE" ? "Sale" : "Rental"}`,
-    `Area: ${[listing.city, listing.neighborhood, listing.street].filter(Boolean).join(", ") || "Unknown"}`,
-    `Price: ${listing.price != null ? `₪${listing.price.toLocaleString()}` : "Unknown"}`,
-    `Rooms: ${listing.rooms ?? "Unknown"}`,
-    `Size: ${listing.sizeSqm != null ? `${listing.sizeSqm} sqm` : "Unknown"}`,
-    `Balcony: ${fmt(listing.balcony)}`,
-    `Parking: ${fmt(listing.parking)}`,
-    `Elevator: ${fmt(listing.elevator)}`,
-    `Broker: ${brokerLabel}`,
-    `Broker fee: ${feeLabel}`,
-    `Evidence: ${listing.brokerEvidence ?? "—"}`,
-    `Why matched: ${result.reasonsPositive.slice(0, 3).join("; ") || "—"}`,
-    `Missing info: ${result.missingFields.slice(0, 4).join(", ") || "none"}`,
-    `Red flags: ${result.redFlags.join("; ") || "none detected"}`,
-    `Recommended action: ${result.recommendedAction}`,
-    `Link: ${listing.url ?? "—"}`,
+    "🏠 דירה חדשה שמתאימה לך",
+    summaryLine(listing),
+    SEP,
+    (listing.rawText ?? "").trim(),
+    "",
+    `🔗 ${listing.url ?? "—"}`,
   ].join("\n");
 }
 
-export function buildPriceDropMessage(profile: Profile, listing: Listing, oldPrice: number, newPrice: number): string {
+export function buildPriceDropMessage(_profile: Profile, listing: Listing, oldPrice: number, newPrice: number): string {
   const diff = oldPrice - newPrice;
   const pct = oldPrice > 0 ? Math.round((diff / oldPrice) * 100) : 0;
   return [
-    `📉 Price drop detected`,
-    `Profile: ${profile.name}`,
-    `Area: ${[listing.city, listing.neighborhood, listing.street].filter(Boolean).join(", ") || "Unknown"}`,
-    `Old price: ₪${oldPrice.toLocaleString()}`,
-    `New price: ₪${newPrice.toLocaleString()}`,
-    `Difference: ₪${diff.toLocaleString()} (${pct}% off)`,
-    `Rooms: ${listing.rooms ?? "Unknown"} · Size: ${listing.sizeSqm != null ? `${listing.sizeSqm} sqm` : "Unknown"}`,
-    `Link: ${listing.url ?? "—"}`,
+    "📉 ירידת מחיר בדירה שכבר קיבלת",
+    summaryLine(listing),
+    `מחיר קודם: ${oldPrice.toLocaleString()} ₪`,
+    `מחיר חדש: ${newPrice.toLocaleString()} ₪`,
+    `הפרש: ${diff.toLocaleString()} ₪ (${pct}%-)`,
+    SEP,
+    (listing.rawText ?? "").trim(),
+    "",
+    `🔗 ${listing.url ?? "—"}`,
   ].join("\n");
 }
 
-function fmtVal(v: unknown): string {
-  if (v === true) return "Yes";
-  if (v === false) return "No";
-  if (v === null || v === undefined) return "Unknown";
+const FIELD_HE: Record<string, string> = {
+  rooms: "חדרים",
+  balcony: "מרפסת",
+  parking: "חניה",
+  brokerStatus: "סטטוס תיווך",
+};
+
+function fmtValHe(v: unknown): string {
+  if (v === true) return "כן";
+  if (v === false) return "לא";
+  if (v === null || v === undefined) return "לא ידוע";
+  if (v === "PRIVATE") return "פרטי";
+  if (v === "BROKER") return "מתיווך";
+  if (v === "UNKNOWN") return "לא ידוע";
   return String(v);
 }
 
 export function buildMaterialChangeMessage(
-  profile: Profile,
+  _profile: Profile,
   listing: Listing,
   prevSnapshotJson: string | null,
   currentSnapshotJson: string
@@ -102,14 +117,16 @@ export function buildMaterialChangeMessage(
   }
   const changes: string[] = [];
   for (const key of Object.keys(curr)) {
-    if (prev[key] !== curr[key]) changes.push(`${key}: ${fmtVal(prev[key])} → ${fmtVal(curr[key])}`);
+    if (prev[key] !== curr[key]) changes.push(`${FIELD_HE[key] ?? key}: ${fmtValHe(prev[key])} ← ${fmtValHe(curr[key])}`);
   }
   return [
-    `🔄 Listing details changed`,
-    `Profile: ${profile.name}`,
-    `Area: ${[listing.city, listing.neighborhood, listing.street].filter(Boolean).join(", ") || "Unknown"}`,
-    `Changes: ${changes.join("; ") || "details updated"}`,
-    `Link: ${listing.url ?? "—"}`,
+    "🔄 עדכון בפרטי דירה שכבר קיבלת",
+    summaryLine(listing),
+    `שינויים: ${changes.join("; ") || "הפרטים עודכנו"}`,
+    SEP,
+    (listing.rawText ?? "").trim(),
+    "",
+    `🔗 ${listing.url ?? "—"}`,
   ].join("\n");
 }
 

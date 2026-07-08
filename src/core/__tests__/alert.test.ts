@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { decideAlertAction, twilioConfigVars, sendAlert, type AlertDecisionInput } from "../alert";
+import { decideAlertAction, twilioConfigVars, sendAlert, buildAlertMessage, type AlertDecisionInput } from "../alert";
+import type { Listing } from "@prisma/client";
 
 const BASE: AlertDecisionInput = {
   scoreQualifies: true,
@@ -85,6 +86,34 @@ describe("decideAlertAction — alert lifecycle rules", () => {
       currentSnapshot: '{"rooms":3}',
     });
     expect(r).toBe("PRICE_DROP");
+  });
+});
+
+describe("buildAlertMessage — Hebrew: original post + link, not an English parse", () => {
+  const HEB_POST = 'להשכרה בהרצליה, 3 חדרים, משופצת, 5,500 ש"ח, ללא תיווך, מבעל הבית. 0501234567';
+  const listing = {
+    city: "Herzliya",
+    rooms: 3,
+    price: 5500,
+    brokerStatus: "PRIVATE",
+    rawText: HEB_POST,
+    url: "https://facebook.com/groups/x/posts/123",
+  } as unknown as Listing;
+
+  it("includes the verbatim Hebrew post and the direct link", () => {
+    const msg = buildAlertMessage(listing);
+    expect(msg).toContain(HEB_POST);
+    expect(msg).toContain("https://facebook.com/groups/x/posts/123");
+  });
+
+  it("uses a Hebrew summary line and drops the old English field dump", () => {
+    const msg = buildAlertMessage(listing);
+    expect(msg).toContain("הרצליה"); // city rendered in Hebrew
+    expect(msg).toContain("3 חד'");
+    expect(msg).toContain("5,500 ₪");
+    expect(msg).toContain("פרטי"); // "private" in Hebrew
+    expect(msg).not.toContain("New real-estate match");
+    expect(msg).not.toMatch(/Type:|Area:|Rooms:|Broker:|Recommended action:/);
   });
 });
 
