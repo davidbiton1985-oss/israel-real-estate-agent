@@ -206,7 +206,13 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
       {/* System health — one slim strip */}
       <Card className="grid grid-cols-2 divide-line max-lg:divide-y lg:grid-cols-4 lg:divide-x lg:divide-x-reverse">
         <SourceCell title="יד2" icon="building" state={freshness(yad2Health)} when={relTime(yad2Health?.lastSuccessAt)} note={yad2Health?.lastError} />
-        <SourceCell title="פייסבוק" icon="chat" state={freshness(fbHealth)} when={relTime(fbHealth?.lastSuccessAt)} note={fbHealth?.lastError} />
+        <SourceCell
+          title="פייסבוק"
+          icon="chat"
+          state={freshness(fbHealth)}
+          when={`${relTime(fbHealth?.lastSuccessAt)} · ${fbHealth?.lastItemsFound ?? 0} פוסטים`}
+          note={fbHealth?.lastError}
+        />
         <SourceCell
           title="אימייל"
           icon="envelope"
