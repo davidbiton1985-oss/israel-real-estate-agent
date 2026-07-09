@@ -49,6 +49,14 @@ export async function POST(req: NextRequest) {
   const url = (body.url ?? "").trim() || null;
   const title = (body.title ?? "").trim();
 
+  // ---- DIAG mode: the FB reader reports what it Sees on each post page ----
+  // Log-only — never ingested. Lets us debug extraction on the user's real
+  // logged-in pages without DevTools on their side.
+  if (body && typeof (body as Record<string, unknown>).diag === "object") {
+    console.log("[reader-diag]", JSON.stringify((body as Record<string, unknown>).diag));
+    return NextResponse.json({ ok: true, diag: true }, { headers: CORS_HEADERS });
+  }
+
   // ---- POSTS mode (automatic Facebook WITH per-post links) ----
   // The watcher sends each post's text paired with its own permalink; we extract
   // the listing from each post and tag it with THAT post's link — so the WhatsApp

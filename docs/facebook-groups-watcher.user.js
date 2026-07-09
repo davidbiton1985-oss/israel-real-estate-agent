@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RE-Agent Facebook Notification Reader
 // @namespace    israel-real-estate-agent
-// @version      12.2
+// @version      12.3
 // @description  Notification-driven reader: one designated tab checks facebook.com/notifications every few minutes; every "posted in group" notification links to the post's own page, which the tab then opens and reads IN FULL — parsed, scored, WhatsApp'd by your local RE-Agent (localhost:3000). Runs only in your own logged-in browser session — no scraping server, no login/CAPTCHA bypass. Your other Facebook tabs are untouched (the reader runs only in the tab you start with #re-agent).
 // @match        https://www.facebook.com/*
 // @grant        GM_xmlhttpRequest
@@ -138,14 +138,19 @@
   var NOTIF_URL = "https://www.facebook.com/notifications";
   var lastFound = ""; // shown in the idle badge so "+0" scans are visible
 
-  function goNext() {
+  // `msg` (e.g. "✓ sent 480 chars") stays on the badge during the pacing pause
+  // so progress is actually visible — the old code overwrote it instantly.
+  function goNext(msg) {
     var q = loadQueue();
     if (q.length > 0) {
-      setBadge("reading post 1/" + q.length + "…");
-      setTimeout(function () { location.href = q[0].url; }, 2500 + Math.random() * 2000); // gentle pacing
+      setBadge((msg ? msg + " · " : "") + q.length + " left in queue");
+      setTimeout(function () {
+        setBadge("opening post (" + q.length + " left)…");
+        location.href = q[0].url;
+      }, 2500 + Math.random() * 2000); // gentle pacing
     } else {
       var d = nextDelayMs();
-      setBadge("idle" + (lastFound ? " · last scan: " + lastFound : "") + " · next check in ~" + Math.round(d / 60000) + "m · " + new Date().toLocaleTimeString());
+      setBadge((msg ? msg + " · " : "") + "idle" + (lastFound ? " · last scan: " + lastFound : "") + " · next check in ~" + Math.round(d / 60000) + "m");
       setTimeout(function () { location.href = NOTIF_URL; }, d);
     }
   }
@@ -238,33 +243,79 @@
     });
   }
 
-  function finishItem(item) {
+  function finishItem(item, msg) {
     markSeen(item.seenKey || item.url);
     var q = loadQueue();
     q = q.filter(function (it) { return it.url !== item.url; });
     saveQueue(q);
-    goNext();
+    goNext(msg);
+  }
+
+  // Best available post text on the CURRENT page, in order of reliability:
+  //   1. FB's post-message containers (data-ad-preview / data-ad-comet-preview
+  //      ="message") — the long-standing hook for the post body itself.
+  //   2. Articles inside a dialog (permalinks often open as a modal over the
+  //      group feed — the modal holds the right post, the feed behind doesn't).
+  //   3. The LARGEST outermost article (never blindly the first).
+  function bestPostText() {
+    var hooks = document.querySelectorAll('[data-ad-preview="message"], [data-ad-comet-preview="message"]');
+    var best = "";
+    var via = "none";
+    for (var i = 0; i < hooks.length; i++) {
+      var t = (hooks[i].innerText || "").trim();
+      if (t.length > best.length) { best = t; via = "message-hook"; }
+    }
+    if (best.length >= 25) return { text: best, via: via, hooks: hooks.length };
+
+    var dialog = document.querySelector('[role="dialog"]');
+    var scopes = dialog ? [dialog, document] : [document];
+    for (var s = 0; s < scopes.length; s++) {
+      var arts = scopes[s].querySelectorAll('[role="article"]');
+      var outer = Array.prototype.filter.call(arts, function (a) {
+        return !(a.parentElement && a.parentElement.closest('[role="article"]'));
+      });
+      for (var j = 0; j < outer.length; j++) {
+        var tx = postOwnText(outer[j]);
+        if (tx.length > best.length) { best = tx; via = s === 0 && dialog ? "dialog-article" : "article"; }
+      }
+      if (best.length >= 25) break;
+    }
+    return { text: best, via: via, hooks: hooks.length };
+  }
+
+  function sendDiag(item, info) {
+    postToApp({ diag: Object.assign({ queued: item.url, here: location.href.split("?")[0].slice(0, 120) }, info) }, function () {});
   }
 
   function handlePostPage(item) {
     var waited = 0;
-    setBadge("reading post…");
+    setBadge("reading… (" + loadQueue().length + " in queue)");
     var timer = setInterval(function () {
       waited += STEP_MS;
-      var arts = outermostArticles();
-      var main = arts.length ? arts[0] : null;
-      var ready = main && postOwnText(main).length > 40;
+      // nudge lazy content + expand truncation while we wait (below-fold text)
+      if (waited === STEP_MS * 3 || waited === STEP_MS * 7) {
+        try { window.scrollBy(0, 700); } catch {}
+        expandSeeMore();
+      }
+      var probe = bestPostText();
+      var ready = probe.text.length >= 25;
       if (!ready && waited < POST_WAIT_MS) return;
       clearInterval(timer);
-      if (!ready) { setBadge("post did not render — skipping"); finishItem(item); return; }
+      if (!ready) {
+        sendDiag(item, { ready: false, via: probe.via, len: probe.text.length, hooks: probe.hooks, arts: outermostArticles().length });
+        setBadge("post did not render — skipping");
+        finishItem(item, "✗ unreadable");
+        return;
+      }
       expandSeeMore();
       setTimeout(function () {
-        var text = postOwnText(outermostArticles()[0]).slice(0, 3000);
+        var probe2 = bestPostText();
+        var text = (probe2.text.length >= probe.text.length ? probe2.text : probe.text).slice(0, 3000);
+        sendDiag(item, { ready: true, via: probe2.via, len: text.length, hooks: probe2.hooks, arts: outermostArticles().length });
         postToApp(
           { posts: [{ text: text, url: item.url }], groupName: item.group || (document.title || ""), url: item.url },
           function (d) {
-            setBadge(d && d.ok ? "✓ read " + text.length + " chars · listings:" + d.listings + " · alerts:" + d.alertsSent : "send failed — will not retry");
-            finishItem(item);
+            finishItem(item, d && d.ok ? "✓ sent " + text.length + " chars" : "✗ send failed");
           }
         );
       }, 1500); // let "see more" expansion settle
@@ -318,19 +369,20 @@
   } else if (/facebook\.com\/notifications/.test(here)) {
     handleNotificationsPage();
   } else if (q0.length > 0) {
-    // Landed somewhere unexpected while work is pending (redirect we don't
-    // recognize). Retry the queue head up to 2 times, then skip it — a single
-    // odd post must never stall the whole queue.
+    // Landed on an unrecognized URL while work is pending — we navigated to the
+    // queue head and Facebook redirected us here (photo viewer, vanity URL…),
+    // so whatever is on THIS page is most likely the head's content. Try to
+    // read it in place; cap attempts so one odd post never stalls the queue.
     var head = q0[0];
     head.tries = (head.tries || 0) + 1;
-    if (head.tries > 2) {
+    saveQueue(q0);
+    if (head.tries > 3) {
       setBadge("skipping unreachable post…");
-      saveQueue(q0);
-      finishItem(head);
+      finishItem(head, "✗ skipped");
+    } else if (head.kind === "post") {
+      handlePostPage(head);
     } else {
-      saveQueue(q0);
-      setBadge("retrying post (" + head.tries + "/2)…");
-      setTimeout(function () { location.href = head.url; }, 3000);
+      handleGroupSweep(head);
     }
   } else {
     // Reader tab woke up somewhere unexpected with nothing to do — go home.
