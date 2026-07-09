@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RE-Agent Facebook Notification Reader
 // @namespace    israel-real-estate-agent
-// @version      12.3
+// @version      12.4
 // @description  Notification-driven reader: one designated tab checks facebook.com/notifications every few minutes; every "posted in group" notification links to the post's own page, which the tab then opens and reads IN FULL — parsed, scored, WhatsApp'd by your local RE-Agent (localhost:3000). Runs only in your own logged-in browser session — no scraping server, no login/CAPTCHA bypass. Your other Facebook tabs are untouched (the reader runs only in the tab you start with #re-agent).
 // @match        https://www.facebook.com/*
 // @grant        GM_xmlhttpRequest
@@ -25,12 +25,13 @@
 (function () {
   "use strict";
 
+  var VERSION = "12.4";
   var APP = "http://localhost:3000/api/capture";
   var SEEN_KEY = "reAgentSeenFbPosts_v12"; // localStorage: post URLs already ingested
   var SEEN_MAX = 1200;
   var QUEUE_KEY = "reAgentQueue_v12"; // sessionStorage (per-tab): pending items
   var READER_KEY = "reAgentReader_v12"; // sessionStorage: this tab is the reader
-  var POST_WAIT_MS = 12000; // max wait for a post page to render
+  var POST_WAIT_MS = 20000; // max wait — FB streams post text in progressively
   var STEP_MS = 900; // render poll interval
 
   // ---- reader-tab designation (per-tab; survives navigation) ---------------
@@ -45,7 +46,7 @@
   badge.style.cssText =
     "position:fixed;bottom:10px;right:10px;z-index:2147483647;background:#4f46e5;color:#fff;" +
     "font:12px/1.4 -apple-system,Arial;padding:6px 10px;border-radius:8px;opacity:.9;direction:ltr;";
-  function setBadge(m) { badge.textContent = "RE-Agent v12: " + m; }
+  function setBadge(m) { badge.textContent = "RE-Agent v" + VERSION + ": " + m; }
   setBadge("starting…");
 
   var capBtn = document.createElement("button");
@@ -302,7 +303,20 @@
       if (!ready && waited < POST_WAIT_MS) return;
       clearInterval(timer);
       if (!ready) {
-        sendDiag(item, { ready: false, via: probe.via, len: probe.text.length, hooks: probe.hooks, arts: outermostArticles().length });
+        // Partial text = the page was still streaming in (seen live: a post cut
+        // off at "🏡 למכירה – 4.5" after 12s). One fresh reload usually
+        // completes it; only skip after the retry also fails.
+        var canRetry = probe.text.length > 0 && !(item.readTries && item.readTries > 0);
+        sendDiag(item, { ready: false, retry: canRetry, via: probe.via, len: probe.text.length, sample: probe.text.slice(0, 40), hooks: probe.hooks, arts: outermostArticles().length });
+        if (canRetry) {
+          item.readTries = 1;
+          var q2 = loadQueue();
+          for (var qi = 0; qi < q2.length; qi++) if (q2[qi].url === item.url) q2[qi].readTries = 1;
+          saveQueue(q2);
+          setBadge("slow render — reloading for retry…");
+          setTimeout(function () { location.reload(); }, 2000);
+          return;
+        }
         setBadge("post did not render — skipping");
         finishItem(item, "✗ unreadable");
         return;
