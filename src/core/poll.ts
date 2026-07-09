@@ -89,7 +89,13 @@ export async function pollSources(): Promise<PollSummary> {
       }
     }
     await recordHealth("EMAIL", poll.ok, poll.error, poll.itemsFound, summary.newListings - summary.newFacebookListings);
-    await recordHealth("FACEBOOK", poll.ok, poll.error, summary.facebookItems, summary.newFacebookListings);
+    // Facebook deprecated per-post notification emails, so this poll virtually
+    // never carries FB items — only touch the FACEBOOK row when it actually
+    // does, otherwise the empty email poll overwrites the browser reader's
+    // per-scan numbers and the dashboard counter lies.
+    if (summary.facebookItems > 0) {
+      await recordHealth("FACEBOOK", poll.ok, poll.error, summary.facebookItems, summary.newFacebookListings);
+    }
   } else {
     // Not configured is a setup state, not an error — don't accumulate error counts.
     // Facebook monitoring rides the same IMAP inbox, so both rows reflect it.
