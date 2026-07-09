@@ -1,6 +1,6 @@
 import type { Profile } from "@prisma/client";
 import { saveProfile } from "@/app/actions";
-import { Button } from "@/components/ui/Button";
+import SubmitButton from "@/components/ui/SubmitButton";
 import { Field, Input, Select, Checkbox, FormSection } from "@/components/ui/Field";
 import { BROKER_PREF_HE, FEATURE_HE } from "@/lib/labels";
 
@@ -131,10 +131,10 @@ export default function ProfileForm({ profile }: { profile?: Profile }) {
 
       <FormSection legend="התראות">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="סף התראת וואטסאפ" hint="ציון 0–100; התאמה בציון הזה ומעלה שולחת הודעה">
+          <Field label="סף התראת וואטסאפ 📱" hint="דירה בציון הזה ומעלה → הודעה מיידית לנייד">
             <Input name="whatsappThreshold" type="number" min={0} max={100} defaultValue={profile?.whatsappThreshold ?? 80} />
           </Field>
-          <Field label="סף תצוגה בדשבורד" hint="ציון 0–100; מתחתיו ההתאמה לא מוצגת">
+          <Field label="סף תצוגה בדשבורד" hint="מתחת לציון הזה ההתאמה לא מוצגת כלל">
             <Input name="dashboardThreshold" type="number" min={0} max={100} defaultValue={profile?.dashboardThreshold ?? 60} />
           </Field>
         </div>
@@ -148,7 +148,9 @@ export default function ProfileForm({ profile }: { profile?: Profile }) {
         </div>
       </FormSection>
 
-      <Button icon="check">{profile ? "שמור שינויים" : "צור פרופיל"}</Button>
+      <SubmitButton icon="check" pendingText="שומר…">
+        {profile ? "שמור שינויים" : "צור פרופיל"}
+      </SubmitButton>
     </form>
   );
 }

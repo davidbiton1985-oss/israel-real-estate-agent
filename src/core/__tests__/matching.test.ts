@@ -105,7 +105,7 @@ describe("brokerage matching rules", () => {
       makeListing('להשכרה בגני תקווה דירת 4 חדרים, מרפסת, חניה, מעלית. 7,000 ש"ח')
     );
     expect(r.status).toBe("possible_match");
-    expect(r.missingFields).toContain("broker status unknown");
+    expect(r.missingFields).toContain("סטטוס תיווך");
   });
 
   it("private_preferred + broker listing → penalty, not reject", () => {
@@ -137,7 +137,7 @@ describe("price rules", () => {
     // 7,700 ≤ 7,500 * 1.05 = 7,875
     const r = scoreListing(makeProfile(), makeListing(STRONG_TEXT.replace("7,200", "7,700")));
     expect(r.status).toBe("possible_match");
-    expect(r.reasonsNegative.join(" ")).toContain("slightly over budget");
+    expect(r.reasonsNegative.join(" ")).toContain("מעט מעל התקציב");
   });
 
   it("known price clearly below priceMin → rejected (a range is a hard filter)", () => {
@@ -147,7 +147,7 @@ describe("price rules", () => {
       makeListing('להשכרה בגני תקווה דירת 4 חדרים, מרפסת, חניה, מעלית. 4,500 ש"ח')
     );
     expect(r.status).toBe("rejected");
-    expect(r.reasonsNegative.join(" ")).toContain("below minimum");
+    expect(r.reasonsNegative.join(" ")).toContain("מתחת למינימום");
   });
 
   it("no priceMin set → cheap listing is not rejected on price", () => {
@@ -164,7 +164,7 @@ describe("not-a-listing guard (Facebook group chatter)", () => {
   it("post with no city/price/rooms/size → rejected, not a possible match", () => {
     const r = scoreListing(makeProfile(), makeListing("ההורים של הילדים בגנים לא תושבים? מישהו יודע?"));
     expect(r.status).toBe("rejected");
-    expect(r.reasonsNegative.join(" ")).toContain("not a listing");
+    expect(r.reasonsNegative.join(" ")).toContain("כנראה לא מודעה");
   });
 
   it("post with even one real signal (a target city) is NOT rejected by the guard", () => {
@@ -181,7 +181,7 @@ describe("rooms rules", () => {
       makeListing('להשכרה בקרית אונו דירת 3 חדרים, מרפסת, חניה, מעלית. 7,000 ש"ח')
     );
     expect(r.status).toBe("rejected");
-    expect(r.reasonsNegative.join(" ")).toContain("outside target");
+    expect(r.reasonsNegative.join(" ")).toContain("מחוץ לטווח");
   });
 
   it("rooms within ±0.5 tolerance → still scores, not rejected (3.5 for a 4–5 search)", () => {
@@ -219,7 +219,7 @@ describe("location rules", () => {
   it("missing city → possible at best, with missing field", () => {
     const r = scoreListing(makeProfile(), makeListing('להשכרה! דירת 4 חדרים, מרפסת שמש, חניה, מעלית, ללא תיווך. 7,000 ש"ח'));
     expect(r.status).toBe("possible_match");
-    expect(r.missingFields).toContain("city/location");
+    expect(r.missingFields).toContain("עיר/מיקום");
   });
 });
 
@@ -233,7 +233,7 @@ describe("required feature rules", () => {
   it("required balcony unknown → possible_match with missing field", () => {
     const r = scoreListing(makeProfile(), makeListing('להשכרה בגני תקווה 4 חדרים, חניה, מעלית. ללא תיווך. 7,000 ש"ח'));
     expect(r.status).toBe("possible_match");
-    expect(r.missingFields).toContain("balcony");
+    expect(r.missingFields).toContain("מרפסת");
   });
 });
 
@@ -253,13 +253,13 @@ describe("full realistic Hebrew listing", () => {
     const r = scoreListing(makeProfile(), listing);
     expect(r.status).toBe("strong_match");
     expect(r.score).toBeGreaterThanOrEqual(80);
-    expect(r.recommendedAction).toContain("Call");
+    expect(r.recommendedAction).toContain("התקשר עכשיו");
   });
 
   it("duplicate listing is capped at possible and flagged", () => {
     const r = scoreListing(makeProfile(), makeListing(STRONG_TEXT, { isDuplicateOf: "other-id" }));
     expect(r.status).toBe("possible_match");
-    expect(r.redFlags.join(" ")).toContain("duplicate");
+    expect(r.redFlags.join(" ")).toContain("כפילות");
   });
 });
 
@@ -286,30 +286,30 @@ describe("entry-date matching", () => {
 
   it("profile with no entryBy → entry date has no effect on reasons", () => {
     const r = scoreListing(makeProfile({ entryBy: null }), makeListing(BASE + " כניסה מיידית."));
-    expect(r.reasonsPositive.join(" ")).not.toContain("Entry date");
-    expect(r.missingFields).not.toContain("entry date");
+    expect(r.reasonsPositive.join(" ")).not.toContain("תאריך כניסה");
+    expect(r.missingFields).not.toContain("תאריך כניסה");
   });
 
   it("listing says מיידי + profile has entryBy → compatible", () => {
     const r = scoreListing(makeProfile({ entryBy: "2026-09-01" }), makeListing(BASE + " כניסה מיידית."));
-    expect(r.reasonsPositive.join(" ")).toContain("Entry date looks compatible (immediate/flexible)");
+    expect(r.reasonsPositive.join(" ")).toContain("תאריך כניסה מתאים (מיידי/גמיש)");
   });
 
   it("listing entry date at/before profile's entryBy → compatible", () => {
     const r = scoreListing(makeProfile({ entryBy: "2026-09-01" }), makeListing(BASE + " כניסה ב-1.9.2026."));
-    expect(r.reasonsPositive.join(" ")).toContain("Entry date looks compatible");
+    expect(r.reasonsPositive.join(" ")).toContain("תאריך כניסה מתאים");
   });
 
   it("listing entry date clearly later than profile's entryBy → penalty + capped, never rejected outright", () => {
     const r = scoreListing(makeProfile({ entryBy: "2026-09-01" }), makeListing(BASE + " כניסה ב-1.12.2026."));
-    expect(r.reasonsNegative.join(" ")).toContain("Entry date may be too late");
+    expect(r.reasonsNegative.join(" ")).toContain("תאריך הכניסה אולי מאוחר מדי");
     expect(r.status).not.toBe("strong_match");
     expect(r.status).not.toBe("rejected"); // soft penalty only, not a hard reject
   });
 
   it("listing has no entry-date info at all + profile has entryBy → missing field, not a rejection", () => {
     const r = scoreListing(makeProfile({ entryBy: "2026-09-01" }), makeListing(BASE));
-    expect(r.missingFields).toContain("entry date");
+    expect(r.missingFields).toContain("תאריך כניסה");
     expect(r.status).not.toBe("rejected");
   });
 });

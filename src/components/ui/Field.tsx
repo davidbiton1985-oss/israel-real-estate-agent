@@ -51,7 +51,7 @@ export function Checkbox({
   );
 }
 
-/** Card-styled fieldset with a Hebrew legend, for grouping form sections. */
+/** Card-styled form section with a proper header row (not a floating legend). */
 export function FormSection({
   legend,
   children,
@@ -60,9 +60,11 @@ export function FormSection({
   children: React.ReactNode;
 }) {
   return (
-    <fieldset className="rounded-xl2 border border-line bg-card p-5 shadow-card">
-      <legend className="px-2 font-display text-base font-semibold">{legend}</legend>
-      <div className="mt-1">{children}</div>
+    <fieldset className="rounded-xl2 border border-line bg-card shadow-card">
+      <div className="border-b border-line px-5 py-3">
+        <span className="font-display text-base font-semibold">{legend}</span>
+      </div>
+      <div className="p-5">{children}</div>
     </fieldset>
   );
 }

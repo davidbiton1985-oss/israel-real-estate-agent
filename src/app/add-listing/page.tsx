@@ -1,8 +1,11 @@
+import type { Metadata } from "next";
 import { addListing } from "@/app/actions";
-import { Button } from "@/components/ui/Button";
+import SubmitButton from "@/components/ui/SubmitButton";
 import { Card } from "@/components/ui/Card";
 import { Field, Input, Select, Textarea } from "@/components/ui/Field";
 import Icon from "@/components/ui/Icon";
+
+export const metadata: Metadata = { title: "הוספה ידנית" };
 
 export default function AddListingPage({ searchParams }: { searchParams: { urlSaved?: string; yad2Id?: string } }) {
   return (
@@ -45,7 +48,7 @@ export default function AddListingPage({ searchParams }: { searchParams: { urlSa
               placeholder={'להשכרה בגני תקווה! דירת 4 חדרים, 100 מ"ר, מרפסת שמש, קומה 2 עם מעלית, ללא תיווך. 7,200 ש"ח. כניסה מיידית.'}
             />
           </Field>
-          <Button icon="spark">נתח, נקד והתאם</Button>
+          <SubmitButton icon="spark" pendingText="מנתח…">נתח, נקד והתאם</SubmitButton>
         </form>
       </Card>
 

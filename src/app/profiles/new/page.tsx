@@ -1,4 +1,7 @@
+import type { Metadata } from "next";
 import ProfileForm from "@/components/ProfileForm";
+
+export const metadata: Metadata = { title: "פרופיל חדש" };
 
 export default function NewProfilePage() {
   return (

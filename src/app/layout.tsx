@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Heebo, Frank_Ruhl_Libre } from "next/font/google";
 import "./globals.css";
 import ThemeToggle from "@/components/ui/ThemeToggle";
+import NavLinks from "@/components/ui/NavLinks";
 import Icon from "@/components/ui/Icon";
 
 const heebo = Heebo({
@@ -19,20 +20,13 @@ const frankRuhl = Frank_Ruhl_Libre({
 });
 
 export const metadata: Metadata = {
-  title: "סוכן הנדל״ן",
+  title: { template: "%s · סוכן הנדל״ן", default: "סוכן הנדל״ן" },
   description: "סוכן חיפוש דירות אישי — סורק, מנקד ושולח התראות וואטסאפ",
 };
 
 // Applies the stored theme before first paint so there's no flash; with no
 // stored choice, the OS preference rules via the media-query token block.
 const THEME_SCRIPT = `(function(){try{var t=localStorage.getItem("re-theme");if(t==="dark"||t==="light"){document.documentElement.dataset.theme=t}}catch(e){}})()`;
-
-const NAV = [
-  { href: "/", label: "דשבורד", icon: "home" as const },
-  { href: "/matches", label: "התאמות", icon: "spark" as const },
-  { href: "/profiles/new", label: "פרופיל חדש", icon: "plus" as const },
-  { href: "/add-listing", label: "הוספה ידנית", icon: "pencil" as const },
-];
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -47,18 +41,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <Icon name="home" size={22} />
               <span className="font-display text-lg font-bold text-ink">סוכן הנדל״ן</span>
             </Link>
-            <nav className="flex items-center gap-1 text-sm">
-              {NAV.map((item) => (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-muted transition-colors hover:bg-card2 hover:text-ink"
-                >
-                  <Icon name={item.icon} size={15} />
-                  {item.label}
-                </Link>
-              ))}
-            </nav>
+            <NavLinks />
             <div className="ms-auto">
               <ThemeToggle />
             </div>
