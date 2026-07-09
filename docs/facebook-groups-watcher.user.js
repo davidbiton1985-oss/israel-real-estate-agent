@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RE-Agent Facebook Notification Reader
 // @namespace    israel-real-estate-agent
-// @version      12.1
+// @version      12.2
 // @description  Notification-driven reader: one designated tab checks facebook.com/notifications every few minutes; every "posted in group" notification links to the post's own page, which the tab then opens and reads IN FULL — parsed, scored, WhatsApp'd by your local RE-Agent (localhost:3000). Runs only in your own logged-in browser session — no scraping server, no login/CAPTCHA bypass. Your other Facebook tabs are untouched (the reader runs only in the tab you start with #re-agent).
 // @match        https://www.facebook.com/*
 // @grant        GM_xmlhttpRequest
@@ -292,12 +292,23 @@
   }
 
   // ---- router ----------------------------------------------------------------
+  // Match queue items by POST ID, never by URL prefix: Facebook rewrites the
+  // address on arrival (numeric group ID → vanity name, posts/ ↔ permalink/),
+  // so prefix comparison breaks and loops. The post ID survives every rewrite.
+  function postIdOf(url) {
+    var m = (url || "").match(/\/(?:posts|permalink)\/([A-Za-z0-9]+)/);
+    if (m) return m[1];
+    var s = (url || "").match(/[?&]story_fbid=([A-Za-z0-9]+)/);
+    return s ? s[1] : null;
+  }
+
   var here = location.href.split("#")[0];
   var q0 = loadQueue();
+  var hereId = postIdOf(here);
   var current = null;
   for (var i = 0; i < q0.length; i++) {
-    // match by canonical prefix — FB may append params on arrival
-    if (here.indexOf(q0[i].url.split("?")[0]) === 0 || q0[i].url.indexOf(here.split("?")[0]) === 0) { current = q0[i]; break; }
+    if (q0[i].kind === "post" && hereId && postIdOf(q0[i].url) === hereId) { current = q0[i]; break; }
+    if (q0[i].kind === "group" && here.indexOf(q0[i].url.split("?")[0]) === 0) { current = q0[i]; break; }
   }
 
   if (current && current.kind === "post") {
@@ -306,8 +317,23 @@
     handleGroupSweep(current);
   } else if (/facebook\.com\/notifications/.test(here)) {
     handleNotificationsPage();
+  } else if (q0.length > 0) {
+    // Landed somewhere unexpected while work is pending (redirect we don't
+    // recognize). Retry the queue head up to 2 times, then skip it — a single
+    // odd post must never stall the whole queue.
+    var head = q0[0];
+    head.tries = (head.tries || 0) + 1;
+    if (head.tries > 2) {
+      setBadge("skipping unreachable post…");
+      saveQueue(q0);
+      finishItem(head);
+    } else {
+      saveQueue(q0);
+      setBadge("retrying post (" + head.tries + "/2)…");
+      setTimeout(function () { location.href = head.url; }, 3000);
+    }
   } else {
-    // Reader tab woke up somewhere unexpected (redirect etc.) — go home.
+    // Reader tab woke up somewhere unexpected with nothing to do — go home.
     setBadge("returning to notifications…");
     setTimeout(function () { location.href = NOTIF_URL; }, 4000);
   }
