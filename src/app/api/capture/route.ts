@@ -79,13 +79,17 @@ export async function POST(req: NextRequest) {
         console.error("[capture/posts] ingest failed:", e instanceof Error ? e.message : e);
       }
     }
-    if (ingested > 0) {
-      await prisma.sourceHealth.upsert({
-        where: { source: "FACEBOOK" },
-        create: { source: "FACEBOOK", lastCheckAt: new Date(), lastSuccessAt: new Date(), lastItemsFound: body.posts.length, lastNewListings: newCount, totalIngested: newCount },
-        update: { enabled: true, lastCheckAt: new Date(), lastSuccessAt: new Date(), lastError: null, consecutiveErrors: 0, lastItemsFound: body.posts.length, lastNewListings: newCount, totalIngested: { increment: newCount } },
-      });
-    }
+    // Record EVERY watcher delivery — an empty scan ("checked, nothing to
+    // ingest") is still a successful check. Gating this on ingested>0 made a
+    // healthy-but-quiet watcher indistinguishable from a dead one.
+    await prisma.sourceHealth.upsert({
+      where: { source: "FACEBOOK" },
+      create: { source: "FACEBOOK", lastCheckAt: new Date(), lastSuccessAt: new Date(), lastItemsFound: body.posts.length, lastNewListings: newCount, totalIngested: newCount },
+      update: { enabled: true, lastCheckAt: new Date(), lastSuccessAt: new Date(), lastError: null, consecutiveErrors: 0, lastItemsFound: body.posts.length, lastNewListings: newCount, totalIngested: { increment: newCount } },
+    });
+    console.log(
+      `[capture/posts] group="${body.groupName ?? ""}" posts=${body.posts.length} listings=${ingested} new=${newCount} alerts=${alertsSent}`
+    );
     return NextResponse.json(
       { ok: true, posts: body.posts.length, listings: ingested, new: newCount, alertsSent, topScore: top?.score ?? null, topStatus: top?.status ?? null, topProfile: top?.profile ?? null },
       { headers: CORS_HEADERS }
@@ -116,13 +120,13 @@ export async function POST(req: NextRequest) {
         console.error("[capture/bulk] ingest failed:", e instanceof Error ? e.message : e);
       }
     }
-    if (candidates.length > 0) {
-      await prisma.sourceHealth.upsert({
-        where: { source: "FACEBOOK" },
-        create: { source: "FACEBOOK", lastCheckAt: new Date(), lastSuccessAt: new Date(), lastItemsFound: candidates.length, lastNewListings: newCount, totalIngested: newCount },
-        update: { enabled: true, lastCheckAt: new Date(), lastSuccessAt: new Date(), lastError: null, consecutiveErrors: 0, lastItemsFound: candidates.length, lastNewListings: newCount, totalIngested: { increment: newCount } },
-      });
-    }
+    // Same as posts-mode: record every delivery, even a 0-candidate scan.
+    await prisma.sourceHealth.upsert({
+      where: { source: "FACEBOOK" },
+      create: { source: "FACEBOOK", lastCheckAt: new Date(), lastSuccessAt: new Date(), lastItemsFound: candidates.length, lastNewListings: newCount, totalIngested: newCount },
+      update: { enabled: true, lastCheckAt: new Date(), lastSuccessAt: new Date(), lastError: null, consecutiveErrors: 0, lastItemsFound: candidates.length, lastNewListings: newCount, totalIngested: { increment: newCount } },
+    });
+    console.log(`[capture/bulk] candidates=${candidates.length} listings=${ingested} new=${newCount} alerts=${alertsSent}`);
     return NextResponse.json(
       { ok: true, bulk: true, candidates: candidates.length, ingested, new: newCount, alertsSent, topScore: top?.score ?? null, topStatus: top?.status ?? null, topProfile: top?.profile ?? null },
       { headers: CORS_HEADERS }
