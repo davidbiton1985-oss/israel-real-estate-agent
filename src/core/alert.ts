@@ -232,7 +232,7 @@ export type AlertAction = "NEW_MATCH" | "PRICE_DROP" | "MATERIAL_CHANGE" | "SUPP
 export interface AlertDecisionInput {
   scoreQualifies: boolean; // score >= profile.whatsappThreshold
   isDuplicate: boolean; // listing.isDuplicateOf != null
-  alreadyAlertedBefore: boolean; // match.lastAlertedPrice != null
+  alreadyAlertedBefore: boolean; // match.alerted — NOT lastAlertedPrice!=null (null price would re-alert forever)
   lastAlertedPrice: number | null;
   currentPrice: number | null;
   priceDropReAlert: boolean; // profile setting; also gates material-change re-alert

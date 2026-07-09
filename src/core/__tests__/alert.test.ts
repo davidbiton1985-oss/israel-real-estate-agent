@@ -31,6 +31,17 @@ describe("decideAlertAction — alert lifecycle rules", () => {
     expect(r).toBe("SUPPRESSED");
   });
 
+  it("PRICE-LESS listing already alerted → SUPPRESSED (regression: re-alerted 200×/post when the pipeline derived 'already alerted' from lastAlertedPrice != null)", () => {
+    const r = decideAlertAction({
+      ...BASE,
+      alreadyAlertedBefore: true, // must come from match.alerted, not lastAlertedPrice
+      lastAlertedPrice: null,
+      currentPrice: null,
+      lastAlertedSnapshot: "{}",
+    });
+    expect(r).toBe("SUPPRESSED");
+  });
+
   it("lower price than last alert → PRICE_DROP", () => {
     const r = decideAlertAction({
       ...BASE,

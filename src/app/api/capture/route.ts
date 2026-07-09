@@ -14,7 +14,7 @@
 // localhost server even though CORS itself allows it.
 import { NextRequest, NextResponse } from "next/server";
 import { ingestAndMatch } from "@/core/pipeline";
-import { classifyCaptureSource } from "@/core/capture";
+import { classifyCaptureSource, looksLikeMergedYad2Cards } from "@/core/capture";
 import { classifyFbUrl } from "@/core/connectors/facebook";
 import { listingCandidates, groupContext, extractListingFromPost } from "@/core/bulkExtract";
 import { prisma } from "@/lib/db";
@@ -137,6 +137,15 @@ export async function POST(req: NextRequest) {
   }
 
   const { source, meta, healthSource } = classifyCaptureSource(url, title);
+
+  // Guard against tab-watcher < v1.1 sending the whole results grid as one
+  // "listing": its fields and URL would belong to different apartments.
+  if (source === "YAD2" && looksLikeMergedYad2Cards(text)) {
+    return NextResponse.json(
+      { ok: false, error: "Capture contains multiple Yad2 listings merged together — update the Yad2 tab-watcher userscript to v1.1 (docs/yad2-tab-watcher.user.js)." },
+      { status: 422, headers: CORS_HEADERS }
+    );
+  }
 
   const rawText = title && !text.includes(title) ? `${title}\n${text}` : text;
   const result = await ingestAndMatch(rawText, source, url, meta);

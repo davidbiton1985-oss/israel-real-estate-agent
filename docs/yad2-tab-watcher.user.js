@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RE-Agent Yad2 Tab Watcher
 // @namespace    israel-real-estate-agent
-// @version      1.0
+// @version      1.1
 // @description  Watches YOUR open Yad2 search tab: every few minutes it re-checks the results and sends new listings to your local Israel Real Estate Agent (localhost:3000), which scores them and WhatsApps you strong matches. Runs only in your own browser session — no CAPTCHA bypass, no fake fingerprints, no login automation. If Yad2 ever shows a verification page, solve it yourself like normal and the watcher resumes.
 // @match        https://www.yad2.co.il/realestate/*
 // @grant        none
@@ -13,7 +13,9 @@
   var APP = "http://localhost:3000/api/capture";
   var CHECK_EVERY_MS = 5 * 60 * 1000; // 5 minutes
   var JITTER_MS = 60 * 1000; // +0..60s random, so refreshes aren't robotic-regular
-  var SEEN_KEY = "reAgentSeenYad2Ids";
+  // v2 key: v1.1 fixed per-card capture, so previously mis-captured listings must
+  // be re-sent once with correct text↔URL pairing. Rotating the key does that.
+  var SEEN_KEY = "reAgentSeenYad2Ids_v2";
   var SEEN_MAX = 800;
 
   // --- tiny status badge (bottom-right) ------------------------------------
@@ -35,20 +37,34 @@
   function loadSeen() {
     try {
       return JSON.parse(localStorage.getItem(SEEN_KEY) || "[]");
-    } catch (e) {
+    } catch {
       return [];
     }
   }
   function saveSeen(arr) {
     try {
       localStorage.setItem(SEEN_KEY, JSON.stringify(arr.slice(-SEEN_MAX)));
-    } catch (e) {}
+    } catch {}
   }
 
   // --- collect listing cards from the page ---------------------------------
   // Deliberately generic: find links to /item/<id> (the stable part of Yad2's
   // URL structure) and take the surrounding card's visible text. The app's
   // Hebrew parser does the real field extraction, so DOM redesigns rarely matter.
+
+  // Distinct Yad2 item ids linked inside `el` (dedupes the image+title links that
+  // both point at the same listing). Used to detect when a container bundles more
+  // than one apartment.
+  function itemIdsIn(el) {
+    var out = {};
+    var as = el.querySelectorAll('a[href*="/item/"]');
+    for (var j = 0; j < as.length; j++) {
+      var mm = (as[j].href || "").match(/\/item\/([A-Za-z0-9]+)/);
+      if (mm) out[mm[1]] = 1;
+    }
+    return Object.keys(out);
+  }
+
   function collectCards() {
     var anchors = document.querySelectorAll('a[href*="/item/"]');
     var found = {};
@@ -59,14 +75,17 @@
       if (!m) continue;
       var id = m[1];
       if (found[id]) continue;
-      // climb to a container with enough text to parse (price/rooms/city live there)
+      // Climb to the SINGLE card: the largest ancestor that still references only
+      // THIS item id. Stop before an ancestor that also links a different /item/ —
+      // the old "first ancestor over 60 chars" rule grabbed the whole results grid,
+      // merging many apartments into one record with a mismatched URL.
       var node = a;
-      var text = "";
-      for (var up = 0; up < 6 && node; up++) {
-        text = (node.innerText || "").replace(/\s+\n/g, "\n").trim();
-        if (text.length > 60) break;
-        node = node.parentElement;
+      for (var up = 0; up < 8 && node.parentElement; up++) {
+        var parent = node.parentElement;
+        if (itemIdsIn(parent).length > 1) break; // parent holds another listing → stop
+        node = parent;
       }
+      var text = (node.innerText || "").replace(/\s+\n/g, "\n").trim();
       if (text.length >= 25) found[id] = { id: id, url: href, text: text.slice(0, 1200) };
     }
     return Object.keys(found).map(function (k) {

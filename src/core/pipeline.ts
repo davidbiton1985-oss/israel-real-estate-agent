@@ -176,7 +176,10 @@ export async function matchListing(listing: Listing): Promise<MatchSummary> {
     const action = decideAlertAction({
       scoreQualifies: result.score >= profile.whatsappThreshold,
       isDuplicate: Boolean(listing.isDuplicateOf),
-      alreadyAlertedBefore: match.lastAlertedPrice != null,
+      // MUST be the boolean flag — NOT `lastAlertedPrice != null`: a price-less
+      // listing keeps lastAlertedPrice null after alerting, which re-fired the
+      // same "new match" WhatsApp on every watcher cycle (seen: 200×/post).
+      alreadyAlertedBefore: match.alerted,
       lastAlertedPrice: match.lastAlertedPrice,
       currentPrice: listing.price,
       priceDropReAlert: profile.priceDropReAlert,
