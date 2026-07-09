@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RE-Agent Facebook Groups Watcher
 // @namespace    israel-real-estate-agent
-// @version      11.0
+// @version      11.1
 // @description  Watches YOUR combined Facebook groups feed (facebook.com/groups/feed) in your own logged-in browser, and sends new posts to your local Israel Real Estate Agent (localhost:3000) — parsed, scored, WhatsApp'd. One tab covers all your groups. Runs only in your own session — no scraping server, no login/CAPTCHA bypass, no account automation. Facebook's page is messy, so this is best-effort and may need tuning.
 // @match        https://www.facebook.com/groups/*
 // @grant        GM_xmlhttpRequest
@@ -26,7 +26,7 @@
         timeout: 15000,
         onload: function (res) {
           var d = null;
-          try { d = JSON.parse(res.responseText); } catch (e) {}
+          try { d = JSON.parse(res.responseText); } catch {}
           onDone(d, d ? null : "HTTP" + res.status);
         },
         onerror: function (res) { onDone(null, "neterr" + (res && res.status ? res.status : "")); },
@@ -39,8 +39,6 @@
 
   var CHECK_EVERY_MS = 5 * 60 * 1000;
   var JITTER_MS = 60 * 1000;
-  var SEEN_KEY = "reAgentSeenFbPosts4";
-  var SEEN_MAX = 1000;
   var SCROLL_STEPS = 25;   // how many viewport-steps to scroll through the feed
   var STEP_DELAY_MS = 1800; // pause per step so posts + "See more" render before we read
 
@@ -50,7 +48,7 @@
     "position:fixed;bottom:10px;right:10px;z-index:2147483647;background:#4f46e5;color:#fff;" +
     "font:12px/1.4 -apple-system,Arial;padding:6px 10px;border-radius:8px;opacity:.9;direction:ltr;";
   badge.textContent = "RE-Agent FB: starting…";
-  function setBadge(m) { badge.textContent = "RE-Agent FBv11: " + m; }
+  function setBadge(m) { badge.textContent = "RE-Agent FBv11.1: " + m; }
   // Manual "capture selected post" button — the reliable path. Facebook makes
   // posts and comments look identical to code, so auto-reading grabs comments;
   // but YOU can see which is a real apartment post. Select its text, click this.
@@ -74,24 +72,12 @@
   function addBadge() { if (document.body) { document.body.appendChild(badge); document.body.appendChild(capBtn); } }
   if (document.body) addBadge(); else window.addEventListener("DOMContentLoaded", addBadge);
 
-  // --- seen memory ---------------------------------------------------------
-  function loadSeen() { try { return JSON.parse(localStorage.getItem(SEEN_KEY) || "[]"); } catch (e) { return []; } }
-  function saveSeen(a) { try { localStorage.setItem(SEEN_KEY, JSON.stringify(a.slice(-SEEN_MAX))); } catch (e) {} }
-
-  // cheap stable hash of a string → dedup key
+  // cheap stable hash of a string → dedup key (per-scan only; the SERVER is the
+  // source of truth for dedup/suppression across scans, via listing fingerprints)
   function hash(s) {
     var h = 0, i, c;
     for (i = 0; i < s.length; i++) { c = s.charCodeAt(i); h = ((h << 5) - h + c) | 0; }
     return "h" + h;
-  }
-
-  // Facebook UI chrome to strip (Hebrew + English), matched as whole lines.
-  var UI_LINE = /^(like|comment|share|see more|all reactions|follow|join|write a comment|active|top contributor|see translation|לייק|אהבתי|תגובה|תגובות|שיתוף|שתף|הצג עוד|הצג את התרגום|כל התגובות|הצטרף|עקוב|כתוב תגובה|פעיל|כתוב\/כתבי תגובה|\d+[wdhms]|·|)$/i;
-
-  function cleanPostText(raw) {
-    return raw.split("\n").map(function (l) { return l.trim(); })
-      .filter(function (l) { return l.length > 0 && !UI_LINE.test(l); })
-      .join("\n").slice(0, 2000);
   }
 
   // Try to find a real post permalink inside an article element.
@@ -104,20 +90,28 @@
     return null;
   }
 
-  function collectPosts() {
-    // Only OUTERMOST articles = real posts. Nested articles are comments — skip them.
+  // Only OUTERMOST articles are real posts — nested [role=article] are COMMENTS.
+  function outermostArticles() {
     var all = document.querySelectorAll('[role="article"]');
-    var articles = Array.prototype.filter.call(all, function (a) {
+    return Array.prototype.filter.call(all, function (a) {
       return !(a.parentElement && a.parentElement.closest('[role="article"]'));
     });
-    var out = [];
-    articles.forEach(function (a) {
-      var txt = cleanPostText(a.innerText || "");
-      // A real listing post has substance; skip reaction-only / tiny fragments.
-      if (txt.length < 40) return;
-      out.push({ text: txt, url: findPermalink(a) || location.href, key: hash(txt.slice(0, 140)) });
-    });
-    return out;
+  }
+
+  // A post's innerText INCLUDES its visible comments (they live inside the post
+  // article). Hide the nested comment articles, read the post's own text with
+  // layout-aware innerText, then restore — otherwise a commenter's "7 אלף שקל
+  // לדירת 3 חדרים??" becomes a fake listing or pollutes the post's parsed fields.
+  function postOwnText(article) {
+    var nested = article.querySelectorAll('[role="article"]');
+    var saved = [];
+    for (var i = 0; i < nested.length; i++) {
+      saved.push(nested[i].style.display);
+      nested[i].style.display = "none";
+    }
+    var txt = (article.innerText || "").trim();
+    for (var j = 0; j < nested.length; j++) nested[j].style.display = saved[j];
+    return txt;
   }
 
   // Click every "See more" / "הצג עוד" so long posts (where the price/rooms
@@ -127,7 +121,7 @@
     nodes.forEach(function (n) {
       var t = (n.innerText || "").trim();
       if (t === "See more" || t === "הצג עוד" || t === "ראה עוד") {
-        try { n.click(); } catch (e) {}
+        try { n.click(); } catch {}
       }
     });
   }
@@ -144,9 +138,12 @@
   function countPosts() { var n = 0; for (var k in posts) if (posts.hasOwnProperty(k)) n++; return n; }
   function harvestPosts() {
     expandSeeMore();
-    var arts = document.querySelectorAll('[role="article"]');
+    // Outermost articles only (comments are nested articles), and each post's
+    // OWN text (comments hidden while reading) — comments must never become
+    // "listings" nor leak prices/rooms into the post they sit under.
+    var arts = outermostArticles();
     for (var i = 0; i < arts.length; i++) {
-      var txt = (arts[i].innerText || "").trim();
+      var txt = postOwnText(arts[i]);
       if (txt.length < 40) continue;
       var key = hash(txt.slice(0, 160));
       if (posts[key]) continue;
