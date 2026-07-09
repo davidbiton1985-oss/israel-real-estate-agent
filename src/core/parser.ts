@@ -186,10 +186,14 @@ function extractPrice(text: string): number | null {
   const patterns = [
     /₪\s?([\d,]+(?:\.\d{3})*)/,
     /([\d,]{3,}(?:\.\d{3})*)\s?₪/,
-    /([\d,]{3,})\s?ש"?ח/, // ש"ח / שח (norm already unified ״→")
+    // ש"ח in every real-world spelling: ש"ח, שח, ש''ח (double apostrophe —
+    // very common), ש׳׳ח (double geresh; norm unified ׳→'). A missed price
+    // let a below-minimum apartment slip past the hard price filter.
+    /([\d,]{3,})\s?ש["']{0,2}ח/,
     /nis\s?([\d,]+)/i,
     /מחיר[:\s]+([\d,]+)/,
     /שכירות[:\s]+([\d,]+)/,
+    /שכ["']?ד\s*:?\s*([\d,]+)/, // שכ"ד: 6,700 / שכד 6700
     /price[:\s]+([\d,]+)/i,
   ];
   for (const re of patterns) {

@@ -77,8 +77,19 @@ describe("price extraction", () => {
     ["2.45 מיליון", 2450000],
     ['2,450,000 ש"ח', 2450000],
     ["5500 שח", 5500],
+    // ש"ח typed as two apostrophes / two gershes — a real FB post in this form
+    // slipped past the min-price filter because the price parsed as null
+    ["6700 ש''ח", 6700],
+    ["6700 ש׳׳ח", 6700],
+    ['שכ"ד: 7,200', 7200],
+    ["שכד 6800", 6800],
   ])("%s → %d", (text, expected) => {
     expect(parseListing(text).price).toBe(expected);
+  });
+
+  it("the real below-minimum FB post now parses its price (regression)", () => {
+    const real = `להשכרה האוסף של אפרת דירת 4 חדרים מקסימה בקרית אונו . 6700 ש''ח שכ"ד`;
+    expect(parseListing(real).price).toBe(6700);
   });
 
   it("no price → null", () => {
