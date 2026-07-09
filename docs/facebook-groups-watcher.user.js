@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RE-Agent Facebook Notification Reader
 // @namespace    israel-real-estate-agent
-// @version      12.0
+// @version      12.1
 // @description  Notification-driven reader: one designated tab checks facebook.com/notifications every few minutes; every "posted in group" notification links to the post's own page, which the tab then opens and reads IN FULL — parsed, scored, WhatsApp'd by your local RE-Agent (localhost:3000). Runs only in your own logged-in browser session — no scraping server, no login/CAPTCHA bypass. Your other Facebook tabs are untouched (the reader runs only in the tab you start with #re-agent).
 // @match        https://www.facebook.com/*
 // @grant        GM_xmlhttpRequest
@@ -117,6 +117,16 @@
     var m = (href || "").match(/https:\/\/www\.facebook\.com\/groups\/[^/?#]+/);
     return m ? m[0] + "/" : null;
   }
+  // "group_activity" notifications batch the new posts as
+  //   /groups/<gid>/?multi_permalinks=<id1>,<id2>,…  (verified real shape) —
+  // Facebook hands us the exact new-post IDs; build each post's permalink.
+  function permalinksFromMulti(href) {
+    var g = (href || "").match(/https:\/\/www\.facebook\.com\/groups\/([^/?#]+)\//);
+    var mp = (href || "").match(/[?&]multi_permalinks=([^&#]+)/);
+    if (!g || !mp) return [];
+    var ids = decodeURIComponent(mp[1]).split(",").filter(function (id) { return /^[A-Za-z0-9]+$/.test(id); });
+    return ids.map(function (id) { return "https://www.facebook.com/groups/" + g[1] + "/posts/" + id + "/"; });
+  }
 
   // ---- cadence: 5 min daytime, 30 min overnight (+jitter) -------------------
   function nextDelayMs() {
@@ -126,6 +136,7 @@
   }
 
   var NOTIF_URL = "https://www.facebook.com/notifications";
+  var lastFound = ""; // shown in the idle badge so "+0" scans are visible
 
   function goNext() {
     var q = loadQueue();
@@ -134,7 +145,7 @@
       setTimeout(function () { location.href = q[0].url; }, 2500 + Math.random() * 2000); // gentle pacing
     } else {
       var d = nextDelayMs();
-      setBadge("idle · next check in ~" + Math.round(d / 60000) + "m · " + new Date().toLocaleTimeString());
+      setBadge("idle" + (lastFound ? " · last scan: " + lastFound : "") + " · next check in ~" + Math.round(d / 60000) + "m · " + new Date().toLocaleTimeString());
       setTimeout(function () { location.href = NOTIF_URL; }, d);
     }
   }
@@ -163,19 +174,27 @@
       q.forEach(function (it) { queued[it.url] = 1; });
       var anchors = document.querySelectorAll('a[href*="/groups/"]');
       var foundPosts = 0, foundGroups = 0;
+      function enqueuePost(url, groupName) {
+        if (seen.indexOf(url) !== -1 || queued[url]) return;
+        q.push({ url: url, group: groupName, kind: "post" });
+        queued[url] = 1;
+        foundPosts++;
+      }
       for (var i = 0; i < anchors.length; i++) {
-        var post = canonPostUrl(anchors[i].href);
-        if (post) {
-          if (seen.indexOf(post) === -1 && !queued[post]) {
-            q.push({ url: post, group: groupNameFromEntry(anchors[i]), kind: "post" });
-            queued[post] = 1;
-            foundPosts++;
-          }
+        var entryGroup = groupNameFromEntry(anchors[i]);
+        // 1) group_activity batch: multi_permalinks carries every new post ID
+        var multi = permalinksFromMulti(anchors[i].href);
+        if (multi.length > 0) {
+          for (var k = 0; k < multi.length; k++) enqueuePost(multi[k], entryGroup);
           continue;
         }
-        // Batched notification ("X ו־3 נוספים פרסמו") links to the group itself —
-        // fall back to reading the group's newest posts.
-        var entryGroup = groupNameFromEntry(anchors[i]);
+        // 2) direct post/permalink link
+        var post = canonPostUrl(anchors[i].href);
+        if (post) {
+          enqueuePost(post, entryGroup);
+          continue;
+        }
+        // 3) plain group link with "posted" wording — chronological sweep fallback
         var grp = canonGroupUrl(anchors[i].href);
         if (grp && entryGroup && /פרסמ|posted/.test((anchors[i].closest("div") || anchors[i]).innerText || "")) {
           var chrono = grp + "?sorting_setting=CHRONOLOGICAL";
@@ -188,7 +207,8 @@
         }
       }
       saveQueue(q);
-      setBadge("notifications: +" + foundPosts + " new post(s)" + (foundGroups ? ", +" + foundGroups + " group sweep(s)" : ""));
+      lastFound = "+" + foundPosts + " post(s)" + (foundGroups ? " +" + foundGroups + " sweep(s)" : "");
+      setBadge("notifications: " + lastFound);
       goNext();
     }, 6000);
   }
