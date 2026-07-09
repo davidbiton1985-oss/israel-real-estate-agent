@@ -3,16 +3,80 @@ import { prisma } from "@/lib/db";
 import { runScanAction, sendTestAlertAction, deleteProfile } from "./actions";
 import { twilioConfigVars } from "@/core/alert";
 import { emailConfigVars } from "@/core/connectors/email";
+import { Card, SectionTitle } from "@/components/ui/Card";
+import { Button, ButtonLink } from "@/components/ui/Button";
+import Badge from "@/components/ui/Badge";
+import StatTile from "@/components/ui/StatTile";
+import StatusDot, { type DotState } from "@/components/ui/StatusDot";
+import EmptyState from "@/components/ui/EmptyState";
+import Icon, { type IconName } from "@/components/ui/Icon";
+import { BROKER_PREF_HE, DEAL_HE } from "@/lib/labels";
+import { price, relTime, minutesSince } from "@/lib/format";
+import type { SourceHealth } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
-const BROKER_LABELS: Record<string, string> = {
-  any: "הכל",
-  private_only: "רק ללא תיווך",
-  broker_only: "רק בתיווך",
-  private_preferred_broker_allowed_if_strong_match: "עדיף ללא תיווך, אבל תיווך מותר אם הנכס מתאים מאוד",
-  unknown_allowed: "לא משנה / גם לא ידוע",
+// Watchers deliver every ~5 minutes; under 12 counts as live, under 6h stale.
+function freshness(h: SourceHealth | null | undefined): DotState {
+  if (!h) return "off";
+  if (h.consecutiveErrors > 0) return "error";
+  const mins = minutesSince(h.lastSuccessAt);
+  if (mins == null) return "off";
+  if (mins < 12) return "live";
+  if (mins < 360) return "stale";
+  return "off";
+}
+
+const DOT_LABEL: Record<DotState, string> = {
+  live: "פעיל",
+  stale: "לא עדכני",
+  error: "שגיאה",
+  off: "לא מחובר",
 };
+
+function SourceCard({
+  title,
+  icon,
+  state,
+  lastSuccessAt,
+  lines,
+  error,
+}: {
+  title: string;
+  icon: IconName;
+  state: DotState;
+  lastSuccessAt?: Date | null;
+  lines: string[];
+  error?: string | null;
+}) {
+  return (
+    <Card className="p-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 font-medium">
+          <span className="text-muted">
+            <Icon name={icon} size={16} />
+          </span>
+          {title}
+        </div>
+        <div className="flex items-center gap-1.5 text-xs text-muted">
+          <StatusDot state={state} />
+          {DOT_LABEL[state]}
+        </div>
+      </div>
+      <div className="mt-2 text-xs text-muted">
+        בדיקה אחרונה: <b>{relTime(lastSuccessAt)}</b>
+      </div>
+      <div className="mt-1 space-y-0.5 text-xs text-faint">
+        {lines.map((l, i) => (
+          <div key={i} className="tnum">{l}</div>
+        ))}
+      </div>
+      {error && (
+        <div className="mt-2 rounded-lg bg-warn-soft px-2 py-1 text-xs text-warn">{error}</div>
+      )}
+    </Card>
+  );
+}
 
 export default async function Home({ searchParams }: { searchParams: { testAlert?: string } }) {
   const [profiles, listingCount, matchCount, pendingCount, latestTestAlert, emailHealth, fbHealth, fbListingCount, yad2Health, yad2ListingCount] = await Promise.all([
@@ -30,180 +94,190 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
   const twilio = twilioConfigVars();
   const email = emailConfigVars();
 
+  const whatsappState: DotState = !twilio.configured
+    ? "off"
+    : latestTestAlert?.status === "FAILED"
+      ? "error"
+      : "live";
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Dashboard</h1>
+    <div className="space-y-8">
+      {/* Header row: greeting + primary actions */}
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="font-display text-3xl font-bold">הדירה הבאה שלך</h1>
+          <p className="mt-1 text-sm text-muted">
+            המערכת סורקת יד2, פייסבוק ואימייל כל ~5 דקות ושולחת וואטסאפ על התאמות חזקות.
+          </p>
+        </div>
         <div className="flex gap-3">
           <form action={runScanAction}>
-            <button className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
-              ▶ Run scan now {pendingCount > 0 ? `(${pendingCount} pending)` : ""}
-            </button>
+            <Button icon="search">
+              סרוק עכשיו{pendingCount > 0 ? ` (${pendingCount} ממתינות)` : ""}
+            </Button>
           </form>
           <form action={sendTestAlertAction}>
-            <button className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
-              📱 Send test alert
-            </button>
+            <Button variant="secondary" icon="chat">
+              שלח התראת בדיקה
+            </Button>
           </form>
         </div>
-      </div>
-
-      <div className="bg-white rounded shadow p-4 text-sm space-y-2">
-        <div className="font-semibold">🤖 Automatic ingestion (email alerts)</div>
-        {email.configured ? (
-          <div className="text-green-700">
-            ✓ IMAP configured — the watcher ingests saved-search alert emails every scan.
-            Run <code>npm run scheduler</code> to keep the 5-minute watcher alive.
-          </div>
-        ) : (
-          <div className="text-amber-700">
-            ⚠ Not configured — no automatic discovery yet. Missing: <b>{email.missing.join(", ")}</b>.
-            Set up Yad2 saved-search email alerts + IMAP in <code>.env</code> (see README, ~5 minutes).
-          </div>
-        )}
-        {emailHealth && (
-          <div className="border-t pt-2 mt-2 grid grid-cols-2 gap-x-6 gap-y-0.5 text-xs text-slate-600">
-            <div>Last check: {emailHealth.lastCheckAt ? new Date(emailHealth.lastCheckAt).toLocaleString() : "never"}</div>
-            <div>Last success: {emailHealth.lastSuccessAt ? new Date(emailHealth.lastSuccessAt).toLocaleString() : "never"}</div>
-            <div>Last poll: {emailHealth.lastItemsFound} email(s), {emailHealth.lastNewListings} new listing(s)</div>
-            <div>Total ingested: {emailHealth.totalIngested} · consecutive errors: {emailHealth.consecutiveErrors}</div>
-            {emailHealth.lastError && (
-              <div className="col-span-2 text-amber-700">Last error: {emailHealth.lastError}</div>
-            )}
-          </div>
-        )}
-      </div>
-
-      <div className="bg-white rounded shadow p-4 text-sm space-y-2">
-        <div className="font-semibold">🏘 Yad2 monitoring (free — tab watcher)</div>
-        <div className="text-slate-600">
-          Yad2&apos;s own email alerts are a paid feature, so the free path is the <b>tab watcher</b>: keep your Yad2
-          search open in a pinned browser tab with the userscript installed (<code>docs/yad2-tab-watcher.user.js</code>) —
-          it re-checks the results every ~5 minutes in your own browser and sends new listings here automatically.
-          Setup steps in the README.
-        </div>
-        {yad2Health?.lastSuccessAt ? (
-          <div className="border-t pt-2 mt-2 grid grid-cols-2 gap-x-6 gap-y-0.5 text-xs text-slate-600">
-            <div className="text-green-700 col-span-2">✓ Tab watcher has delivered listings.</div>
-            <div>Last capture: {new Date(yad2Health.lastSuccessAt).toLocaleString()}</div>
-            <div>Total captured: {yad2Health.totalIngested}</div>
-            <div>Yad2 listings in system: {yad2ListingCount}</div>
-          </div>
-        ) : (
-          <div className="text-amber-700 text-xs">
-            ⚠ No tab-watcher captures yet — install the userscript and open your Yad2 search tab (README → “Yad2 for free”).
-          </div>
-        )}
-      </div>
-
-      <div className="bg-white rounded shadow p-4 text-sm space-y-2">
-        <div className="font-semibold">📘 Facebook monitoring</div>
-        {email.configured ? (
-          <div className="text-green-700">
-            ✓ Automatic path active — Facebook notification emails (group/page posts) are ingested from the same inbox
-            every scan. Subscribe to groups with &quot;All posts&quot; notifications (see README).
-          </div>
-        ) : (
-          <div className="text-amber-700">
-            ⚠ Automatic path needs IMAP — Facebook group/page notification emails ride the same inbox as Yad2 alerts.
-            Configure IMAP in <code>.env</code>, then enable per-group &quot;All posts&quot; notifications (see README).
-          </div>
-        )}
-        <div className="text-slate-600">
-          One-click capture is always available for any Facebook surface (public posts, profiles, broker pages, shares,
-          marketplace): select the post text and click the capture bookmarklet — see <code>docs/browser-helper.md</code>.
-        </div>
-        {(fbHealth || fbListingCount > 0) && (
-          <div className="border-t pt-2 mt-2 grid grid-cols-2 gap-x-6 gap-y-0.5 text-xs text-slate-600">
-            <div>Facebook listings in system: {fbListingCount}</div>
-            <div>Total auto/captured: {fbHealth?.totalIngested ?? 0}</div>
-            <div>Last check: {fbHealth?.lastCheckAt ? new Date(fbHealth.lastCheckAt).toLocaleString() : "never"}</div>
-            <div>Last poll: {fbHealth?.lastItemsFound ?? 0} FB email(s), {fbHealth?.lastNewListings ?? 0} new</div>
-            {fbHealth?.lastError && <div className="col-span-2 text-amber-700">Last error: {fbHealth.lastError}</div>}
-          </div>
-        )}
-      </div>
-
-      <div className="bg-white rounded shadow p-4 text-sm space-y-2">
-        <div className="font-semibold">WhatsApp (Twilio) status</div>
-        {twilio.configured ? (
-          <div className="text-green-700">✓ Configured — alerts will attempt real WhatsApp delivery.</div>
-        ) : (
-          <div className="text-amber-700">
-            ⚠ Not configured — alerts fall back to console. Missing: <b>{twilio.missing.join(", ")}</b>. See <code>.env.example</code>.
-          </div>
-        )}
-        {latestTestAlert && (
-          <div className="border-t pt-2 mt-2">
-            <div className="text-slate-500">Last test alert ({new Date(latestTestAlert.createdAt).toLocaleString()}):</div>
-            <div className="flex items-center gap-2 mt-1">
-              <span
-                className={`text-xs px-2 py-0.5 rounded ${
-                  latestTestAlert.status === "SENT" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-                }`}
-              >
-                {latestTestAlert.status}
-              </span>
-              <span className="text-xs px-2 py-0.5 rounded bg-slate-100">via {latestTestAlert.channel}</span>
-            </div>
-            {latestTestAlert.error && <div className="text-xs text-amber-700 mt-1">{latestTestAlert.error}</div>}
-          </div>
-        )}
       </div>
 
       {searchParams.testAlert && (
-        <div className="bg-blue-100 border border-blue-300 rounded p-3 text-sm">
-          Test alert attempted — see the WhatsApp status panel above for the result.
+        <div className="flex items-center gap-2 rounded-xl2 border border-line bg-accent-soft px-4 py-3 text-sm text-accent">
+          <Icon name="bell" size={16} />
+          התראת בדיקה נשלחה — בדוק את סטטוס הוואטסאפ בכרטיס למטה.
         </div>
       )}
 
-      <div className="grid grid-cols-3 gap-4">
-        <div className="bg-white rounded shadow p-4"><div className="text-3xl font-bold">{profiles.length}</div><div className="text-slate-500">Search profiles</div></div>
-        <div className="bg-white rounded shadow p-4"><div className="text-3xl font-bold">{listingCount}</div><div className="text-slate-500">Listings</div></div>
-        <div className="bg-white rounded shadow p-4"><div className="text-3xl font-bold">{matchCount}</div><div className="text-slate-500">Strong/possible matches</div></div>
+      {/* Stat tiles */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <StatTile value={listingCount} label="דירות במערכת" icon="building" />
+        <StatTile value={matchCount} label="התאמות חזקות ואפשריות" icon="spark" />
+        <StatTile value={profiles.length} label="פרופילי חיפוש" icon="search" />
+        <StatTile
+          value={pendingCount}
+          label="ממתינות לסריקה"
+          icon="clock"
+          hint={pendingCount > 0 ? "לחץ ״סרוק עכשיו״ לעיבוד" : undefined}
+        />
       </div>
 
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-xl font-semibold">Search Profiles</h2>
-          <Link href="/profiles/new" className="text-blue-600 hover:underline">+ New profile</Link>
+      {/* Source health */}
+      <section>
+        <SectionTitle>מקורות מידע</SectionTitle>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <SourceCard
+            title="יד2"
+            icon="building"
+            state={freshness(yad2Health)}
+            lastSuccessAt={yad2Health?.lastSuccessAt}
+            lines={[
+              `${yad2ListingCount} דירות מיד2 במערכת`,
+              `${yad2Health?.totalIngested ?? 0} נקלטו סה״כ`,
+            ]}
+            error={yad2Health?.lastError}
+          />
+          <SourceCard
+            title="פייסבוק"
+            icon="chat"
+            state={freshness(fbHealth)}
+            lastSuccessAt={fbHealth?.lastSuccessAt}
+            lines={[
+              `${fbListingCount} דירות מפייסבוק במערכת`,
+              `סריקה אחרונה: ${fbHealth?.lastItemsFound ?? 0} פוסטים → ${fbHealth?.lastNewListings ?? 0} חדשות`,
+            ]}
+            error={fbHealth?.lastError}
+          />
+          <SourceCard
+            title="אימייל"
+            icon="envelope"
+            state={email.configured ? freshness(emailHealth) : "off"}
+            lastSuccessAt={emailHealth?.lastSuccessAt}
+            lines={
+              email.configured
+                ? [
+                    `סריקה אחרונה: ${emailHealth?.lastItemsFound ?? 0} מיילים → ${emailHealth?.lastNewListings ?? 0} חדשות`,
+                    `${emailHealth?.totalIngested ?? 0} נקלטו סה״כ`,
+                  ]
+                : [`לא מוגדר — חסר: ${email.missing.join(", ")}`]
+            }
+            error={emailHealth?.lastError}
+          />
+          <SourceCard
+            title="וואטסאפ"
+            icon="bell"
+            state={whatsappState}
+            lastSuccessAt={latestTestAlert?.sentAt ?? latestTestAlert?.createdAt}
+            lines={
+              twilio.configured
+                ? [
+                    latestTestAlert
+                      ? `בדיקה אחרונה: ${latestTestAlert.status === "SENT" ? "נשלחה ✓" : "נכשלה ✗"} (${latestTestAlert.channel})`
+                      : "טרם נשלחה התראת בדיקה",
+                  ]
+                : [`לא מוגדר — חסר: ${twilio.missing.join(", ")}`]
+            }
+            error={latestTestAlert?.error}
+          />
         </div>
-        {profiles.length === 0 && <p className="text-slate-500">No profiles yet. Create one, or run <code>npm run db:seed</code> for a demo.</p>}
-        <div className="space-y-3">
-          {profiles.map((p) => (
-            <div key={p.id} className="bg-white rounded shadow p-4 flex items-start justify-between">
-              <div>
-                <div className="font-semibold">
-                  {p.name}{" "}
-                  <span className={`text-xs px-2 py-0.5 rounded ${p.dealType === "RENT" ? "bg-blue-100 text-blue-800" : "bg-purple-100 text-purple-800"}`}>
-                    {p.dealType}
-                  </span>{" "}
-                  {!p.active && <span className="text-xs px-2 py-0.5 rounded bg-slate-200">inactive</span>}
+      </section>
+
+      {/* Search profiles */}
+      <section>
+        <SectionTitle
+          action={
+            <ButtonLink href="/profiles/new" variant="secondary" size="sm" icon="plus">
+              פרופיל חדש
+            </ButtonLink>
+          }
+        >
+          פרופילי חיפוש
+        </SectionTitle>
+
+        {profiles.length === 0 ? (
+          <EmptyState
+            icon="search"
+            title="עדיין אין פרופיל חיפוש"
+            action={
+              <ButtonLink href="/profiles/new" variant="primary" icon="plus">
+                צור פרופיל ראשון
+              </ButtonLink>
+            }
+          >
+            פרופיל מגדיר מה אתה מחפש — ערים, תקציב, חדרים — והמערכת מתריעה רק על מה שמתאים.
+          </EmptyState>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            {profiles.map((p) => (
+              <Card key={p.id} className="p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-display text-lg font-semibold">{p.name}</span>
+                      <Badge tone={p.dealType === "RENT" ? "accent" : "neutral"}>
+                        {DEAL_HE[p.dealType] ?? p.dealType}
+                      </Badge>
+                      {!p.active && <Badge tone="neutral">לא פעיל</Badge>}
+                    </div>
+                    <div className="tnum mt-2 text-sm text-muted">
+                      {p.cities} · עד {price(p.priceMax)}
+                      {p.roomsMin ? ` · ${p.roomsMin}+ חדרים` : ""}
+                      {p.sizeMinSqm ? ` · ${p.sizeMinSqm}+ מ״ר` : ""}
+                    </div>
+                    <div className="mt-1 text-sm text-muted">
+                      תיווך: <b className="text-ink">{BROKER_PREF_HE[p.brokerStatusPref] ?? p.brokerStatusPref}</b>
+                    </div>
+                    <div className="tnum mt-2 text-xs text-faint">
+                      וואטסאפ מציון {p.whatsappThreshold} · דשבורד מציון {p.dashboardThreshold} ·{" "}
+                      {p.priceDropReAlert ? "התראה חוזרת בירידת מחיר" : "התראה אחת בלבד"}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <Link
+                      href={`/profiles/${p.id}`}
+                      className="rounded-lg p-2 text-muted transition-colors hover:bg-card2 hover:text-ink"
+                      title="עריכה"
+                    >
+                      <Icon name="pencil" size={16} />
+                    </Link>
+                    <form action={deleteProfile}>
+                      <input type="hidden" name="id" value={p.id} />
+                      <button
+                        className="rounded-lg p-2 text-muted transition-colors hover:bg-crit-soft hover:text-crit"
+                        title="מחיקה"
+                      >
+                        <Icon name="trash" size={16} />
+                      </button>
+                    </form>
+                  </div>
                 </div>
-                <div className="text-sm text-slate-600 mt-1">
-                  {p.cities} · up to ₪{p.priceMax.toLocaleString()}
-                  {p.roomsMin ? ` · ${p.roomsMin}+ rooms` : ""}
-                  {p.sizeMinSqm ? ` · ${p.sizeMinSqm}+ sqm` : ""}
-                </div>
-                <div className="text-sm mt-1" dir="rtl">
-                  תיווך: <b>{BROKER_LABELS[p.brokerStatusPref] ?? p.brokerStatusPref}</b>
-                </div>
-                <div className="text-xs text-slate-400 mt-1">
-                  WhatsApp alert ≥ {p.whatsappThreshold} · dashboard ≥ {p.dashboardThreshold} ·{" "}
-                  {p.priceDropReAlert ? "re-alerts on price drop/changes" : "one alert only (no re-alerts)"}
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <Link href={`/profiles/${p.id}`} className="text-blue-600 hover:underline text-sm">Edit</Link>
-                <form action={deleteProfile}>
-                  <input type="hidden" name="id" value={p.id} />
-                  <button className="text-red-500 hover:underline text-sm">Delete</button>
-                </form>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

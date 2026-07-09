@@ -1,6 +1,30 @@
 import { prisma } from "@/lib/db";
 import { saveListingNotes } from "@/app/actions";
 import type { Listing } from "@prisma/client";
+import { Card } from "@/components/ui/Card";
+import { Button, ButtonLink } from "@/components/ui/Button";
+import Badge from "@/components/ui/Badge";
+import ScoreBadge from "@/components/ui/ScoreBadge";
+import Sparkline from "@/components/ui/Sparkline";
+import Collapse from "@/components/ui/Collapse";
+import EmptyState from "@/components/ui/EmptyState";
+import Icon from "@/components/ui/Icon";
+import { Select, Input, inputCls } from "@/components/ui/Field";
+import {
+  SOURCE_HE,
+  STATUS_HE,
+  STATUS_TONE,
+  DEAL_HE,
+  BROKER_HE,
+  FEE_HE,
+  CONFIDENCE_HE,
+  FB_SURFACE_HE,
+  OUTCOME_HE,
+  ALERT_REASON_HE,
+  ALERT_STATUS_HE,
+  ALERT_STATUS_TONE,
+} from "@/lib/labels";
+import { price, dateTime } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -11,9 +35,9 @@ function fmtDebug(v: unknown): string {
   return String(v);
 }
 
-/** Plain-text dump of every parsed field, for real-world QA. Not styled — debug only. */
+/** Plain-text dump of every parsed field, for real-world QA. Debug only. */
 function debugFieldsText(l: Listing): string {
-  const dedupType = l.fingerprint.split(":")[0]; // "yad2" | "url" | "content"
+  const dedupType = l.fingerprint.split(":")[0];
   const lines = [
     `source=${l.source}  url=${l.url ?? "—"}`,
     ...(l.source === "FACEBOOK"
@@ -21,7 +45,7 @@ function debugFieldsText(l: Listing): string {
       : []),
     `yad2ListingId=${fmtDebug(l.yad2ListingId)}`,
     `fingerprint=${l.fingerprint}  (dedup key type: ${dedupType})`,
-    `isDuplicateOf=${fmtDebug(l.isDuplicateOf)}${l.isDuplicateOf ? " (fuzzy text match — see docs/browser-helper.md / README)" : ""}`,
+    `isDuplicateOf=${fmtDebug(l.isDuplicateOf)}`,
     ``,
     `dealType=${fmtDebug(l.dealType)}  propertyType=${fmtDebug(l.propertyType)}`,
     `city=${fmtDebug(l.city)}  neighborhood=${fmtDebug(l.neighborhood)}  street=${fmtDebug(l.street)}`,
@@ -42,20 +66,6 @@ function debugFieldsText(l: Listing): string {
   return lines.join("\n");
 }
 
-const STATUS_STYLES: Record<string, string> = {
-  strong_match: "bg-green-100 text-green-800 border-green-300",
-  possible_match: "bg-yellow-100 text-yellow-800 border-yellow-300",
-  weak_match: "bg-slate-100 text-slate-600 border-slate-300",
-  rejected: "bg-red-50 text-red-700 border-red-200",
-};
-
-const RECOMMENDED_ACTION_STYLES: Record<string, string> = {
-  strong_match: "bg-green-50 text-green-900 border-green-200",
-  possible_match: "bg-amber-50 text-amber-900 border-amber-200",
-  weak_match: "bg-slate-50 text-slate-600 border-slate-200",
-  rejected: "bg-slate-50 text-slate-500 border-slate-200",
-};
-
 function parseArr(s: string): string[] {
   try {
     const v = JSON.parse(s);
@@ -74,20 +84,12 @@ function parsePriceHistory(s: string): { amount: number; seenAt: string }[] {
   }
 }
 
-const OUTCOME_MESSAGES: Record<string, string> = {
-  new: "✓ New listing added.",
-  price_drop: "📉 Price drop detected on an existing listing — alert queued/sent.",
-  material_change: "🔄 Listing details changed since the last alert — alert queued/sent.",
-  suppressed: "Existing listing updated — no new alert (nothing alert-worthy changed since last time). Duplicate/repeat suppressed.",
-  updated: "Existing listing updated (re-parsed and re-scored).",
-};
-
-const ALERT_STATUS_STYLES: Record<string, string> = {
-  SENT: "bg-green-100 text-green-800",
-  SENDING: "bg-blue-100 text-blue-800",
-  QUEUED: "bg-blue-100 text-blue-800",
-  FAILED: "bg-red-100 text-red-800",
-  SUPPRESSED: "bg-slate-200 text-slate-600",
+// Recommended-action strip: status color follows match status.
+const ACTION_STRIP: Record<string, string> = {
+  strong_match: "bg-good-soft text-good",
+  possible_match: "bg-warn-soft text-warn",
+  weak_match: "bg-card2 text-muted",
+  rejected: "bg-card2 text-faint",
 };
 
 interface MatchesSearchParams {
@@ -124,88 +126,107 @@ export default async function MatchesPage({ searchParams }: { searchParams: Matc
     return true;
   });
 
-  const selectCls = "border border-slate-300 rounded px-2 py-1.5 text-sm";
-
   return (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-bold">Matches</h1>
+    <div className="space-y-5">
+      <div className="flex items-end justify-between">
+        <h1 className="font-display text-3xl font-bold">התאמות</h1>
+        <span className="tnum text-sm text-muted">
+          מציג {matches.length} מתוך {allMatches.length}
+        </span>
+      </div>
+
       {searchParams.scanned && (
-        <div className="bg-blue-100 border border-blue-300 rounded p-3 text-sm">
-          Scan complete — processed {searchParams.scanned} pending listing(s), {searchParams.alertsSent ?? 0} alert(s) sent.
+        <div className="flex items-center gap-2 rounded-xl2 border border-line bg-accent-soft px-4 py-3 text-sm text-accent">
+          <Icon name="check" size={16} />
+          הסריקה הושלמה — עובדו {searchParams.scanned} מודעות, נשלחו {searchParams.alertsSent ?? 0} התראות.
         </div>
       )}
       {searchParams.outcome && (
-        <div className="bg-blue-100 border border-blue-300 rounded p-3 text-sm">
-          {OUTCOME_MESSAGES[searchParams.outcome] ?? "Listing processed."}
+        <div className="flex items-center gap-2 rounded-xl2 border border-line bg-accent-soft px-4 py-3 text-sm text-accent">
+          <Icon name="check" size={16} />
+          {OUTCOME_HE[searchParams.outcome] ?? "המודעה עובדה."}
         </div>
       )}
 
-      <form method="GET" className="bg-white rounded shadow p-3 flex flex-wrap items-end gap-3 text-sm">
-        <label className="flex flex-col gap-1">
-          <span className="text-xs text-slate-500">Profile</span>
-          <select name="profile" defaultValue={searchParams.profile ?? ""} className={selectCls}>
-            <option value="">All</option>
-            {profiles.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-xs text-slate-500">Status</span>
-          <select name="status" defaultValue={searchParams.status ?? ""} className={selectCls}>
-            <option value="">All</option>
-            <option value="strong_match">Strong</option>
-            <option value="possible_match">Possible</option>
-            <option value="weak_match">Weak</option>
-            <option value="rejected">Rejected</option>
-          </select>
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-xs text-slate-500">Source</span>
-          <select name="source" defaultValue={searchParams.source ?? ""} className={selectCls}>
-            <option value="">All</option>
-            <option value="YAD2">Yad2</option>
-            <option value="FACEBOOK">Facebook</option>
-            <option value="WHATSAPP">WhatsApp</option>
-            <option value="MANUAL">Manual</option>
-            <option value="URL">URL</option>
-            <option value="DEMO">Demo</option>
-          </select>
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-xs text-slate-500">Broker</span>
-          <select name="broker" defaultValue={searchParams.broker ?? ""} className={selectCls}>
-            <option value="">All</option>
-            <option value="PRIVATE">Private</option>
-            <option value="BROKER">Broker</option>
-            <option value="UNKNOWN">Unknown</option>
-          </select>
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-xs text-slate-500">Alert type</span>
-          <select name="alertReason" defaultValue={searchParams.alertReason ?? ""} className={selectCls}>
-            <option value="">All</option>
-            <option value="NEW_MATCH">New match</option>
-            <option value="PRICE_DROP">Price drop</option>
-            <option value="MATERIAL_CHANGE">Material change</option>
-          </select>
-        </label>
-        <label className="flex flex-col gap-1">
-          <span className="text-xs text-slate-500">Min score</span>
-          <input name="minScore" type="number" min={0} max={100} defaultValue={searchParams.minScore ?? ""} className={selectCls + " w-20"} />
-        </label>
-        <label className="flex items-center gap-1.5 pb-1.5">
-          <input type="checkbox" name="hasRedFlags" value="1" defaultChecked={searchParams.hasRedFlags === "1"} />
-          <span className="text-xs text-slate-500">🚩 Has red flags</span>
-        </label>
-        <button type="submit" className="bg-slate-700 text-white px-3 py-1.5 rounded text-sm">Filter</button>
-        <a href="/matches" className="text-xs text-blue-600 hover:underline">Clear</a>
-        <span className="text-xs text-slate-400 ml-auto">{matches.length} of {allMatches.length} shown</span>
-      </form>
+      {/* Filter bar — GET form, same param names as before */}
+      <Card className="p-4">
+        <form method="GET" className="flex flex-wrap items-end gap-3 text-sm">
+          <label className="flex flex-col gap-1">
+            <span className="text-xs text-muted">פרופיל</span>
+            <Select name="profile" defaultValue={searchParams.profile ?? ""} className="w-auto min-w-28">
+              <option value="">הכל</option>
+              {profiles.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </Select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-xs text-muted">סטטוס</span>
+            <Select name="status" defaultValue={searchParams.status ?? ""} className="w-auto min-w-28">
+              <option value="">הכל</option>
+              <option value="strong_match">חזקה</option>
+              <option value="possible_match">אפשרית</option>
+              <option value="weak_match">חלשה</option>
+              <option value="rejected">נדחו</option>
+            </Select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-xs text-muted">מקור</span>
+            <Select name="source" defaultValue={searchParams.source ?? ""} className="w-auto min-w-28">
+              <option value="">הכל</option>
+              <option value="YAD2">יד2</option>
+              <option value="FACEBOOK">פייסבוק</option>
+              <option value="WHATSAPP">וואטסאפ</option>
+              <option value="MANUAL">ידני</option>
+              <option value="URL">קישור</option>
+              <option value="DEMO">דמו</option>
+            </Select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-xs text-muted">תיווך</span>
+            <Select name="broker" defaultValue={searchParams.broker ?? ""} className="w-auto min-w-28">
+              <option value="">הכל</option>
+              <option value="PRIVATE">פרטי</option>
+              <option value="BROKER">מתיווך</option>
+              <option value="UNKNOWN">לא ידוע</option>
+            </Select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-xs text-muted">סוג התראה</span>
+            <Select name="alertReason" defaultValue={searchParams.alertReason ?? ""} className="w-auto min-w-28">
+              <option value="">הכל</option>
+              <option value="NEW_MATCH">התאמה חדשה</option>
+              <option value="PRICE_DROP">ירידת מחיר</option>
+              <option value="MATERIAL_CHANGE">שינוי בפרטים</option>
+            </Select>
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-xs text-muted">ציון מינימלי</span>
+            <Input name="minScore" type="number" min={0} max={100} defaultValue={searchParams.minScore ?? ""} className="w-20" />
+          </label>
+          <label className="flex items-center gap-1.5 pb-2 text-xs text-muted">
+            <input type="checkbox" name="hasRedFlags" value="1" defaultChecked={searchParams.hasRedFlags === "1"} className="h-4 w-4 accent-[var(--accent)]" />
+            רק עם דגלים אדומים
+          </label>
+          <div className="flex items-center gap-2 pb-0.5">
+            <Button size="sm" icon="filter">
+              סנן
+            </Button>
+            <a href="/matches" className="text-xs text-muted underline-offset-2 hover:text-ink hover:underline">
+              נקה
+            </a>
+          </div>
+        </form>
+      </Card>
 
       {matches.length === 0 && (
-        <p className="text-slate-500">No matches match these filters. Try clearing filters, adding a listing, or running a scan.</p>
+        <EmptyState icon="search" title="אין התאמות בסינון הזה">
+          נסה לנקות את הסינון, להוסיף מודעה ידנית, או להריץ סריקה מהדשבורד.
+        </EmptyState>
       )}
+
       <div className="space-y-4">
         {matches.map((m) => {
           const pos = parseArr(m.reasonsPositive);
@@ -213,135 +234,214 @@ export default async function MatchesPage({ searchParams }: { searchParams: Matc
           const missing = parseArr(m.missingFields);
           const flags = parseArr(m.redFlags);
           const l = m.listing;
-          const priceHistory = parsePriceHistory(l.priceHistory);
+          const history = parsePriceHistory(l.priceHistory);
+          const sparkValues = l.price != null ? [...history.map((h) => h.amount), l.price] : history.map((h) => h.amount);
           const latestAlert = m.alerts[0];
           return (
-            <div key={m.id} className={`rounded border shadow-sm p-4 bg-white`}>
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-2xl font-bold">{m.score}/100</span>
-                    <span className={`text-xs px-2 py-1 rounded border ${STATUS_STYLES[m.status] ?? ""}`}>{m.status}</span>
-                    <span className="text-xs px-2 py-1 rounded bg-slate-100">{l.source}</span>
+            <Card key={m.id} className="p-5">
+              {/* Top row: score ring · badges · open-listing */}
+              <div className="flex items-start gap-4">
+                <ScoreBadge score={m.score} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Badge tone={STATUS_TONE[m.status] ?? "neutral"}>{STATUS_HE[m.status] ?? m.status}</Badge>
+                    <Badge tone="neutral">{SOURCE_HE[l.source] ?? l.source}</Badge>
                     {l.source === "FACEBOOK" && l.fbSurface && (
-                      <span className="text-xs px-2 py-1 rounded bg-indigo-100 text-indigo-800">
-                        FB {l.fbSurface.toLowerCase().replace("_", " ")}
+                      <Badge tone="neutral">
+                        {FB_SURFACE_HE[l.fbSurface] ?? l.fbSurface}
                         {l.fbSourceName ? `: ${l.fbSourceName}` : ""}
-                        {l.fbAuthor ? ` · ${l.fbAuthor}` : ""}
-                      </span>
+                      </Badge>
                     )}
-                    {l.isDuplicateOf && <span className="text-xs px-2 py-1 rounded bg-orange-100 text-orange-800">duplicate</span>}
-                    {l.qaNotes && <span className="text-xs px-2 py-1 rounded bg-pink-100 text-pink-800">📝 has QA notes</span>}
+                    {l.isDuplicateOf && (
+                      <Badge tone="warn" icon="flag">
+                        כפילות
+                      </Badge>
+                    )}
                     {latestAlert && (
-                      <span className={`text-xs px-2 py-1 rounded ${ALERT_STATUS_STYLES[latestAlert.status] ?? "bg-slate-100"}`}>
-                        {latestAlert.status} via {latestAlert.channel}
-                        {latestAlert.reason ? ` (${latestAlert.reason})` : ""}
+                      <Badge tone={ALERT_STATUS_TONE[latestAlert.status] ?? "neutral"} icon="bell">
+                        התראה {ALERT_STATUS_HE[latestAlert.status] ?? latestAlert.status}
+                        {latestAlert.reason && ALERT_REASON_HE[latestAlert.reason]
+                          ? ` · ${ALERT_REASON_HE[latestAlert.reason]}`
+                          : ""}
+                      </Badge>
+                    )}
+                  </div>
+
+                  {/* Key facts */}
+                  <div className="mt-3 flex flex-wrap items-baseline gap-x-5 gap-y-1">
+                    <span className="tnum font-display text-2xl font-bold">
+                      {l.price != null ? price(l.price) : "מחיר לא צוין"}
+                    </span>
+                    <span className="flex items-center gap-1.5 text-sm text-muted">
+                      <Icon name="pin" size={14} />
+                      {[l.city, l.neighborhood, l.street].filter(Boolean).join(", ") || "מיקום לא ידוע"}
+                    </span>
+                    {l.rooms != null && (
+                      <span className="tnum flex items-center gap-1.5 text-sm text-muted">
+                        <Icon name="grid" size={14} />
+                        {l.rooms} חדרים
                       </span>
                     )}
+                    {l.sizeSqm != null && (
+                      <span className="tnum flex items-center gap-1.5 text-sm text-muted">
+                        <Icon name="expand" size={14} />
+                        {l.sizeSqm} מ״ר
+                      </span>
+                    )}
+                    <span className="text-sm text-muted">{l.dealType ? DEAL_HE[l.dealType] : "סוג עסקה לא ידוע"}</span>
                   </div>
-                  {latestAlert && (latestAlert.sentAt || latestAlert.error) && (
-                    <div className="text-xs text-slate-400 mt-0.5">
-                      {latestAlert.sentAt && <>Sent {new Date(latestAlert.sentAt).toLocaleString()}</>}
-                      {latestAlert.error && <span className="text-amber-700"> · {latestAlert.error}</span>}
+
+                  <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted">
+                    <span>
+                      פרופיל: <b className="text-ink">{m.profile.name}</b>
+                    </span>
+                    <span>
+                      תיווך:{" "}
+                      <b className={l.brokerStatus === "PRIVATE" ? "text-good" : l.brokerStatus === "BROKER" ? "text-accent" : "text-muted"}>
+                        {BROKER_HE[l.brokerStatus]}
+                      </b>{" "}
+                      · {FEE_HE[l.brokerFeeStatus]}
+                      {l.brokerStatus !== "UNKNOWN" && (
+                        <span className="text-xs text-faint"> ({CONFIDENCE_HE[l.brokerConfidence]})</span>
+                      )}
+                    </span>
+                    {l.brokerEvidence && <span className="text-xs text-faint">״{l.brokerEvidence}״</span>}
+                  </div>
+
+                  {history.length > 0 && sparkValues.length >= 2 && (
+                    <div className="mt-2 flex items-center gap-2 text-xs text-faint">
+                      <Sparkline values={sparkValues} />
+                      <span className="tnum" dir="ltr">
+                        {sparkValues.map((v) => v.toLocaleString("en-US")).join(" → ")} ₪
+                      </span>
                     </div>
                   )}
-                  <div className="text-sm text-slate-600 mt-1">
-                    Profile: <b>{m.profile.name}</b>
-                  </div>
-                  <div className="text-sm mt-1">
-                    {l.dealType === "SALE" ? "Sale" : l.dealType === "RENT" ? "Rental" : "Type unknown"} ·{" "}
-                    {l.city ?? "city?"} · {l.price != null ? `₪${l.price.toLocaleString()}` : "price?"} ·{" "}
-                    {l.rooms != null ? `${l.rooms} rooms` : "rooms?"} · {l.sizeSqm != null ? `${l.sizeSqm} sqm` : "sqm?"}
-                  </div>
-                  <div className="text-sm mt-1">
-                    Broker:{" "}
-                    <b className={l.brokerStatus === "PRIVATE" ? "text-green-700" : l.brokerStatus === "BROKER" ? "text-purple-700" : "text-slate-500"}>
-                      {l.brokerStatus === "PRIVATE" ? "Private" : l.brokerStatus === "BROKER" ? "Broker" : "Unknown"}
-                    </b>
-                    {" · Fee: "}
-                    <b>{l.brokerFeeStatus === "NONE" ? "None" : l.brokerFeeStatus === "EXISTS" ? "Exists" : "Unknown"}</b>
-                    {l.brokerEvidence && (
-                      <span className="text-slate-500"> · Evidence: <span dir="rtl">&quot;{l.brokerEvidence}&quot;</span></span>
-                    )}
-                    {l.brokerStatus !== "UNKNOWN" && (
-                      <span className="text-xs text-slate-400"> ({l.brokerConfidence} confidence)</span>
-                    )}
-                  </div>
-                  {priceHistory.length > 0 && (
-                    <div className="text-xs text-slate-400 mt-1">
-                      Price history: {priceHistory.map((h) => `₪${h.amount.toLocaleString()}`).join(" → ")}
-                      {l.price != null ? ` → ₪${l.price.toLocaleString()} (current)` : ""}
-                    </div>
+
+                  {latestAlert?.sentAt && (
+                    <div className="tnum mt-1 text-xs text-faint">נשלחה {dateTime(latestAlert.sentAt)}</div>
                   )}
+                  {latestAlert?.error && <div className="mt-1 text-xs text-warn">{latestAlert.error}</div>}
                 </div>
+
                 {l.url && (
-                  <a href={l.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-sm shrink-0">
-                    Open listing ↗
-                  </a>
+                  <div className="shrink-0">
+                    <ButtonLink href={l.url} external variant="secondary" size="sm" icon="external">
+                      פתח מודעה
+                    </ButtonLink>
+                  </div>
                 )}
               </div>
 
-              <div className={`mt-3 rounded p-3 text-sm font-medium border ${RECOMMENDED_ACTION_STYLES[m.status] ?? ""}`}>
-                👉 {m.recommendedAction}
+              {/* Recommended action */}
+              <div className={`mt-4 flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium ${ACTION_STRIP[m.status] ?? "bg-card2 text-muted"}`}>
+                <Icon name="spark" size={15} />
+                {m.recommendedAction}
               </div>
 
-              <div className="grid grid-cols-2 gap-4 mt-3 text-sm">
-                <div>
-                  {pos.length > 0 && (
-                    <div>
-                      <div className="font-medium text-green-700">Why it matched</div>
-                      <ul className="list-disc list-inside text-slate-700">{pos.map((r, i) => <li key={i}>{r}</li>)}</ul>
-                    </div>
-                  )}
-                  {neg.length > 0 && (
-                    <div className="mt-2">
-                      <div className="font-medium text-red-700">Concerns</div>
-                      <ul className="list-disc list-inside text-slate-700">{neg.map((r, i) => <li key={i}>{r}</li>)}</ul>
-                    </div>
-                  )}
+              {/* Reasons — two columns */}
+              {(pos.length > 0 || neg.length > 0 || missing.length > 0 || flags.length > 0) && (
+                <div className="mt-4 grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
+                  <div className="space-y-3">
+                    {pos.length > 0 && (
+                      <div>
+                        <div className="mb-1 flex items-center gap-1.5 font-medium text-good">
+                          <Icon name="check" size={14} />
+                          למה זה התאים
+                        </div>
+                        <ul className="space-y-0.5 text-muted">
+                          {pos.map((r, i) => (
+                            <li key={i} className="flex gap-2">
+                              <span className="text-faint">·</span>
+                              {r}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {neg.length > 0 && (
+                      <div>
+                        <div className="mb-1 flex items-center gap-1.5 font-medium text-crit">
+                          <Icon name="x" size={14} />
+                          נקודות חולשה
+                        </div>
+                        <ul className="space-y-0.5 text-muted">
+                          {neg.map((r, i) => (
+                            <li key={i} className="flex gap-2">
+                              <span className="text-faint">·</span>
+                              {r}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-3">
+                    {missing.length > 0 && (
+                      <div>
+                        <div className="mb-1 flex items-center gap-1.5 font-medium text-muted">
+                          <Icon name="search" size={14} />
+                          מידע חסר — לברר בשיחה
+                        </div>
+                        <ul className="space-y-0.5 text-muted">
+                          {missing.map((r, i) => (
+                            <li key={i} className="flex gap-2">
+                              <span className="text-faint">·</span>
+                              {r}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {flags.length > 0 && (
+                      <div>
+                        <div className="mb-1 flex items-center gap-1.5 font-medium text-warn">
+                          <Icon name="flag" size={14} />
+                          דגלים אדומים
+                        </div>
+                        <ul className="space-y-0.5 text-muted">
+                          {flags.map((r, i) => (
+                            <li key={i} className="flex gap-2">
+                              <span className="text-faint">·</span>
+                              {r}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div>
-                  {missing.length > 0 && (
-                    <div>
-                      <div className="font-medium text-slate-700">Missing info</div>
-                      <ul className="list-disc list-inside text-slate-600">{missing.map((r, i) => <li key={i}>{r}</li>)}</ul>
-                    </div>
-                  )}
-                  {flags.length > 0 && (
-                    <div className="mt-2">
-                      <div className="font-medium text-orange-700">🚩 Red flags</div>
-                      <ul className="list-disc list-inside text-slate-700">{flags.map((r, i) => <li key={i}>{r}</li>)}</ul>
-                    </div>
-                  )}
-                </div>
+              )}
+
+              {/* Quiet details */}
+              <div className="mt-4 space-y-2">
+                <Collapse summary="הפוסט המקורי">
+                  <pre dir="auto" className="whitespace-pre-wrap text-xs text-muted">
+                    {l.rawText}
+                  </pre>
+                </Collapse>
+                <Collapse summary="🔍 שדות מפוענחים (בדיקת איכות)">
+                  <pre dir="ltr" className="tnum whitespace-pre-wrap text-start font-mono text-xs text-muted">
+                    {debugFieldsText(l)}
+                  </pre>
+                </Collapse>
+                <Collapse summary={`📝 הערות QA ${l.qaNotes ? "" : "(אין)"}`} defaultOpen={Boolean(l.qaNotes)}>
+                  <form action={saveListingNotes} className="flex items-start gap-2">
+                    <input type="hidden" name="listingId" value={l.id} />
+                    <textarea
+                      name="qaNotes"
+                      dir="auto"
+                      rows={2}
+                      defaultValue={l.qaNotes ?? ""}
+                      placeholder="למשל: המחיר פוענח לא נכון · העיר לא זוהתה · לא אמור להיות כפילות"
+                      className={`${inputCls} flex-1 text-xs`}
+                    />
+                    <Button size="sm" variant="secondary">
+                      שמור
+                    </Button>
+                  </form>
+                </Collapse>
               </div>
-
-              <details className="mt-2 text-xs text-slate-500">
-                <summary className="cursor-pointer">Raw listing text</summary>
-                <pre dir="auto" className="whitespace-pre-wrap mt-1 bg-slate-50 p-2 rounded">{l.rawText}</pre>
-              </details>
-
-              <details className="mt-2 text-xs text-slate-500">
-                <summary className="cursor-pointer">🔍 Debug: parsed fields (for real-world QA)</summary>
-                <pre className="whitespace-pre-wrap mt-1 bg-slate-50 p-2 rounded font-mono">{debugFieldsText(l)}</pre>
-              </details>
-
-              <details className="mt-2 text-xs text-slate-500" open={Boolean(l.qaNotes)}>
-                <summary className="cursor-pointer">📝 QA notes {l.qaNotes ? "" : "(none)"}</summary>
-                <form action={saveListingNotes} className="mt-1 flex gap-2 items-start">
-                  <input type="hidden" name="listingId" value={l.id} />
-                  <textarea
-                    name="qaNotes"
-                    dir="auto"
-                    rows={2}
-                    defaultValue={l.qaNotes ?? ""}
-                    placeholder='e.g. "price parsed wrong", "broker status wrong", "city missed", "should not be duplicate"'
-                    className="flex-1 border border-slate-300 rounded px-2 py-1 text-xs"
-                  />
-                  <button type="submit" className="bg-slate-700 text-white px-2 py-1 rounded text-xs shrink-0">Save</button>
-                </form>
-              </details>
-            </div>
+            </Card>
           );
         })}
       </div>

@@ -2,8 +2,13 @@ import ProfileForm from "@/components/ProfileForm";
 
 export default function NewProfilePage() {
   return (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-bold">New Search Profile</h1>
+    <div className="mx-auto max-w-3xl space-y-5">
+      <div>
+        <h1 className="font-display text-3xl font-bold">פרופיל חיפוש חדש</h1>
+        <p className="mt-1 text-sm text-muted">
+          הגדר מה אתה מחפש — המערכת תנקד כל מודעה מול הפרופיל ותתריע בוואטסאפ על התאמות חזקות.
+        </p>
+      </div>
       <ProfileForm />
     </div>
   );
