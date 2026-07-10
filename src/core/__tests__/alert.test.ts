@@ -76,6 +76,28 @@ describe("decideAlertAction — alert lifecycle rules", () => {
     expect(r).toBe("SUPPRESSED");
   });
 
+  it("known→unknown flip is extraction noise, NOT a material change (regression: 'חניה: כן ← לא ידוע' alerted)", () => {
+    const r = decideAlertAction({
+      ...BASE,
+      alreadyAlertedBefore: true,
+      lastAlertedPrice: 7000,
+      lastAlertedSnapshot: JSON.stringify({ rooms: 4, parking: true, balcony: null }),
+      currentSnapshot: JSON.stringify({ rooms: 4, parking: null, balcony: true }),
+    });
+    expect(r).toBe("SUPPRESSED");
+  });
+
+  it("value→different-value between two KNOWN values still fires MATERIAL_CHANGE", () => {
+    const r = decideAlertAction({
+      ...BASE,
+      alreadyAlertedBefore: true,
+      lastAlertedPrice: 7000,
+      lastAlertedSnapshot: JSON.stringify({ rooms: 4, parking: true }),
+      currentSnapshot: JSON.stringify({ rooms: 5, parking: true }),
+    });
+    expect(r).toBe("MATERIAL_CHANGE");
+  });
+
   it("material change (snapshot differs) with unchanged price → MATERIAL_CHANGE", () => {
     const r = decideAlertAction({
       ...BASE,

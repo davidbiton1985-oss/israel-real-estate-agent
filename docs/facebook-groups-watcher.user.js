@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RE-Agent Facebook Notification Reader
 // @namespace    israel-real-estate-agent
-// @version      12.5
+// @version      12.6
 // @description  Notification-driven reader: one designated tab checks facebook.com/notifications every few minutes; every "posted in group" notification links to the post's own page, which the tab then opens and reads IN FULL — parsed, scored, WhatsApp'd by your local RE-Agent (localhost:3000). Runs only in your own logged-in browser session — no scraping server, no login/CAPTCHA bypass. Your other Facebook tabs are untouched (the reader runs only in the tab you start with #re-agent).
 // @match        https://www.facebook.com/*
 // @grant        GM_xmlhttpRequest
@@ -25,7 +25,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "12.5";
+  var VERSION = "12.6";
   var APP = "http://localhost:3000/api/capture";
   var SEEN_KEY = "reAgentSeenFbPosts_v12"; // localStorage: post URLs already ingested
   var SEEN_MAX = 1200;
@@ -181,7 +181,11 @@
       var anchors = document.querySelectorAll('a[href*="/groups/"]');
       var foundPosts = 0, foundGroups = 0;
       function enqueuePost(url, groupName) {
-        if (seen.indexOf(url) !== -1 || queued[url]) return;
+        // Seen is keyed by POST ID — Facebook renders the same post under
+        // numeric-gid, vanity-slug and permalink URL forms; string keys let
+        // the same dead post re-queue forever (seen live: 10+ re-reads).
+        var pid = postIdOf(url);
+        if (!pid || seen.indexOf(pid) !== -1 || queued[url]) return;
         q.push({ url: url, group: groupName, kind: "post" });
         queued[url] = 1;
         foundPosts++;
@@ -247,7 +251,7 @@
   }
 
   function finishItem(item, msg) {
-    markSeen(item.seenKey || item.url);
+    markSeen(item.seenKey || postIdOf(item.url) || item.url);
     var q = loadQueue();
     q = q.filter(function (it) { return it.url !== item.url; });
     saveQueue(q);
@@ -325,9 +329,23 @@
       }
       expandSeeMore();
       setTimeout(function () {
+        // IDENTITY CHECK — the page must provably BE the queued post: its own
+        // ID must appear in the page's links (every real post page links to
+        // itself via the timestamp permalink). Deleted/unavailable posts render
+        // OTHER content (suggested posts), which we must never attribute to the
+        // queued URL — that cross-attribution sent a stranger's apartment under
+        // a "looking for" post's link.
+        var pid = postIdOf(item.url);
+        var identityOk = pid && document.querySelector('a[href*="' + pid + '"]') != null;
         var probe2 = bestPostText();
         var text = (probe2.text.length >= probe.text.length ? probe2.text : probe.text).slice(0, 3000);
-        sendDiag(item, { ready: true, via: probe2.via, len: text.length, hooks: probe2.hooks, arts: outermostArticles().length });
+        if (!identityOk) {
+          sendDiag(item, { ready: true, identity: false, via: probe2.via, len: text.length, sample: text.slice(0, 40) });
+          setBadge("post unavailable — skipping (foreign content)");
+          finishItem(item, "✗ unavailable");
+          return;
+        }
+        sendDiag(item, { ready: true, identity: true, via: probe2.via, len: text.length, hooks: probe2.hooks, arts: outermostArticles().length });
         postToApp(
           { posts: [{ text: text, url: item.url }], groupName: item.group || (document.title || ""), url: item.url },
           function (d) {
@@ -344,12 +362,13 @@
       var posts = [];
       outermostArticles().forEach(function (a) {
         var t = postOwnText(a);
-        if (t.length >= 40) {
-          var link = null;
-          var links = a.querySelectorAll('a[href*="/groups/"]');
-          for (var i = 0; i < links.length; i++) { link = canonPostUrl(links[i].href); if (link) break; }
-          posts.push({ text: t.slice(0, 3000), url: link || item.url });
-        }
+        if (t.length < 40) return;
+        var link = null;
+        var links = a.querySelectorAll('a[href*="/groups/"]');
+        for (var i = 0; i < links.length; i++) { link = canonPostUrl(links[i].href); if (link) break; }
+        // No own permalink → cannot attribute reliably → drop (attribution
+        // must never guess; a wrong link is worse than a missed capture).
+        if (link) posts.push({ text: t.slice(0, 3000), url: link });
       });
       if (posts.length === 0) { finishItem(item); return; }
       postToApp({ posts: posts, groupName: item.group || (document.title || ""), url: item.url }, function () {

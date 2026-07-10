@@ -81,11 +81,20 @@ export async function ingestListing(rawText: string, source: Source, url: string
   };
 
   if (!existing) {
+    // Exact-text backstop FIRST: the identical rawText under a different URL is
+    // always the same apartment (repost / cross-attribution) — price-less posts
+    // skipped the fuzzy check below and double-alerted.
+    let fuzzyDuplicateOf: string | null = null;
+    const exactText = await prisma.listing.findFirst({
+      where: { rawText, createdAt: { gte: new Date(Date.now() - 14 * 86_400_000) } },
+      orderBy: { createdAt: "desc" },
+    });
+    if (exactText) fuzzyDuplicateOf = exactText.id;
+
     // No exact fingerprint match. Fall back to fuzzy text similarity against
     // recent listings sharing city + a close price (and rooms, if known) —
     // catches reposts/reshares with no shared URL/Yad2 ID (Yad2→Facebook, FB reshares).
-    let fuzzyDuplicateOf: string | null = null;
-    if (parsed.city && parsed.price != null) {
+    if (!fuzzyDuplicateOf && parsed.city && parsed.price != null) {
       const candidates = await prisma.listing.findMany({
         where: {
           city: parsed.city,

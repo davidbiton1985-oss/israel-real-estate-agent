@@ -160,6 +160,24 @@ describe("rejects 'looking for' (wanted) posts on the FEED/BULK path too", () =>
   });
 });
 
+describe("sublets / temporary rentals are not offers", () => {
+  const ctx = { city: "Kiryat Ono" as string | null, dealType: "RENT" as "RENT" | "SALE" | null };
+  it.each([
+    "סאבלט דירת 3 חדרים במרכז קרית אונו לחודשיים",
+    "סבלט! 4 חדרים מרוהטת",
+    "השכרת משנה דירת 4 חדרים",
+    "להשכרה לספט׳ דירת פנטהאוס 5 חדרים עם 100 מ מרפסת", // real specimen (user: sublet)
+    "להשכרה ליולי-אוגוסט דירת 4 חדרים",
+    "להשכרה לחודש בלבד 3 חדרים",
+  ])("%s → filtered", (text) => {
+    expect(extractListingFromPost(text, ctx)).toBeNull();
+  });
+  it("a normal rental with a September ENTRY date is still an offer", () => {
+    const c = extractListingFromPost('להשכרה דירת 4 חדרים, כניסה בספטמבר, 8,000 ש"ח', ctx);
+    expect(c).not.toBeNull();
+  });
+});
+
 describe("letter-spaced Hebrew cannot evade detection", () => {
   const ctx = { city: "Kiryat Ono" as string | null, dealType: "RENT" as "RENT" | "SALE" | null };
   it("the real 'ל מ כ י ר ה' sale post is labeled SALE, not the group's RENT (regression: it WhatsApp-alerted as a rental)", () => {

@@ -241,6 +241,33 @@ export interface AlertDecisionInput {
 }
 
 /**
+ * A field counts as materially changed ONLY between two KNOWN values
+ * (4 rooms → 5 rooms). known↔unknown flips are extraction variance from
+ * re-reading the same post (a real alert fired on "חניה: כן ← לא ידוע" —
+ * the apartment didn't change, the read did) — never alert-worthy.
+ */
+export function materiallyChanged(prevJson: string | null, currJson: string): boolean {
+  let prev: Record<string, unknown> = {};
+  let curr: Record<string, unknown> = {};
+  try {
+    prev = prevJson ? JSON.parse(prevJson) : {};
+  } catch {
+    return false;
+  }
+  try {
+    curr = JSON.parse(currJson);
+  } catch {
+    return false;
+  }
+  for (const key of Object.keys(curr)) {
+    const p = prev[key];
+    const c = curr[key];
+    if (p != null && c != null && p !== c) return true;
+  }
+  return false;
+}
+
+/**
  * Decides what (if anything) to alert for a single (profile, listing) pair.
  * Priority when re-alerting: PRICE_DROP > MATERIAL_CHANGE > SUPPRESSED.
  */
@@ -257,7 +284,11 @@ export function decideAlertAction(input: AlertDecisionInput): AlertAction {
   ) {
     return "PRICE_DROP";
   }
-  if (input.priceDropReAlert && input.lastAlertedSnapshot != null && input.lastAlertedSnapshot !== input.currentSnapshot) {
+  if (
+    input.priceDropReAlert &&
+    input.lastAlertedSnapshot != null &&
+    materiallyChanged(input.lastAlertedSnapshot, input.currentSnapshot)
+  ) {
     return "MATERIAL_CHANGE";
   }
   return "SUPPRESSED";

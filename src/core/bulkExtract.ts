@@ -131,6 +131,11 @@ const NOT_AN_OFFER = new RegExp(
     "זקוק(?:ה|ים)?[^\\n]{0,10}?דיר",
     // land / investment / handover — not a rental apartment offer
     "מגרש", "קרקע(?:\\s|,|\\.|$)", "השקעה", "נחלה", "למסירה",
+    // sublets / temporary rentals — not a standard rental (user: reject)
+    "סאבלט", "סבלט", "סאב[- ]לט", "sublet", "השכרת משנה", "השכרה זמנית",
+    "לתקופה קצרה", "השכרה לתקופה",
+    // month-bounded offers ("להשכרה לספט׳", "להשכרה ליולי-אוגוסט") = sublet
+    "להשכרה\\s+ל(?:ינו|פבר|מרץ|אפר|מאי|יוני|יולי|אוג|ספט|אוק|נוב|דצמ|חודש)",
   ].join("|"),
   "i"
 );
