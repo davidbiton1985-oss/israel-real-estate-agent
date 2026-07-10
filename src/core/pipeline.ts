@@ -153,6 +153,7 @@ export interface MatchSummary {
 export async function matchListing(listing: Listing): Promise<MatchSummary> {
   const profiles = await prisma.profile.findMany({ where: { active: true } });
   const summary: MatchSummary = { matchesCreated: 0, alertsSent: 0, priceDropFired: false, materialChangeFired: false, suppressedCount: 0 };
+  let deliveryFailed = false; // any Twilio-attempted send that fell back to console
 
   for (const profile of profiles) {
     const result = scoreListing(profile, listing);
@@ -239,6 +240,8 @@ export async function matchListing(listing: Listing): Promise<MatchSummary> {
         where: { id: match.id },
         data: { alerted: true, alertChannel: sent.channel, lastAlertedPrice: listing.price, lastAlertedSnapshot: currentSnapshot },
       });
+    } else {
+      deliveryFailed = true;
     }
 
     if (sent.status === "SENT") summary.alertsSent++;
@@ -246,7 +249,10 @@ export async function matchListing(listing: Listing): Promise<MatchSummary> {
     if (action === "MATERIAL_CHANGE") summary.materialChangeFired = true;
   }
 
-  await prisma.listing.update({ where: { id: listing.id }, data: { scanned: true } });
+  // A failed delivery keeps the listing unscanned so EVERY scan pass (cloud
+  // cron leftovers + "Run scan now") retries it — the retry must not depend on
+  // a browser watcher happening to re-send the same listing.
+  await prisma.listing.update({ where: { id: listing.id }, data: { scanned: !deliveryFailed } });
   return summary;
 }
 

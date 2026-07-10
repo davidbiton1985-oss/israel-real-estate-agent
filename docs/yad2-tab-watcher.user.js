@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RE-Agent Yad2 Tab Watcher
 // @namespace    israel-real-estate-agent
-// @version      1.1
+// @version      1.2
 // @description  Watches YOUR open Yad2 search tab: every few minutes it re-checks the results and sends new listings to your local Israel Real Estate Agent (localhost:3000), which scores them and WhatsApps you strong matches. Runs only in your own browser session — no CAPTCHA bypass, no fake fingerprints, no login automation. If Yad2 ever shows a verification page, solve it yourself like normal and the watcher resumes.
 // @match        https://www.yad2.co.il/realestate/*
 // @grant        none
@@ -113,15 +113,13 @@
     setBadge("sending " + fresh.length + " new listing(s)…");
     var sent = 0;
     var alerts = 0;
+    var okIds = []; // mark seen ONLY what the server CONFIRMED — a failed send
+    // (server restarting/unreachable) must be retried next cycle, not lost.
     function next(idx) {
       if (idx >= fresh.length) {
-        seen = seen.concat(
-          fresh.map(function (c) {
-            return c.id;
-          })
-        );
+        seen = seen.concat(okIds);
         saveSeen(seen);
-        setBadge("sent " + sent + " new · " + alerts + " alert(s) 📱 · " + new Date().toLocaleTimeString());
+        setBadge("sent " + sent + "/" + fresh.length + " new · " + alerts + " alert(s) 📱 · " + new Date().toLocaleTimeString());
         return;
       }
       var c = fresh[idx];
@@ -136,11 +134,14 @@
         .then(function (d) {
           if (d && d.ok) {
             sent++;
+            okIds.push(c.id);
             if (d.alertsSent > 0) alerts++;
           }
+          // d.ok=false (e.g. merged-capture guard) also counts as handled:
+          if (d && d.ok === false) okIds.push(c.id);
         })
         .catch(function () {
-          setBadge("app not reachable — is `npm run dev` running?");
+          setBadge("app not reachable — will retry these next cycle");
         })
         .then(function () {
           setTimeout(function () {
