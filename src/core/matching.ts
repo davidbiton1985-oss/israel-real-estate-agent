@@ -183,9 +183,20 @@ export function scoreListing(profile: Profile, listing: Listing): MatchResult {
 
   // Location (20)
   if (listing.city == null) {
-    score += 8;
-    missing.push("עיר/מיקום");
-    capAtPossible = true; // unverified location can't be a strong match
+    // Yad2 captures store the page title in rawText; "מיקומים שנבחרו" is
+    // Yad2's title for a locations-FILTERED search — those results are in the
+    // user's chosen cities by construction, so an unparsed city line must not
+    // cap the score (a ₪8,600 in-budget 4-room was silenced at 79 this way).
+    // Region-wide pages (e.g. "מרכז והשרון") keep the strict cap: their
+    // city-less cards can be any town (a Tel Mond listing proved it).
+    if (listing.source === "YAD2" && listing.rawText.includes("מיקומים שנבחרו")) {
+      score += 14;
+      missing.push("עיר/מיקום");
+    } else {
+      score += 8;
+      missing.push("עיר/מיקום");
+      capAtPossible = true; // unverified location can't be a strong match
+    }
   } else {
     score += 20;
     pos.push(`עיר מבוקשת: ${listing.city}`);

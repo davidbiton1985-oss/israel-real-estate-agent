@@ -221,6 +221,23 @@ describe("location rules", () => {
     expect(r.status).toBe("possible_match");
     expect(r.missingFields).toContain("עיר/מיקום");
   });
+
+  it("missing city on a locations-FILTERED Yad2 capture → NOT capped", () => {
+    // Regression: a ₪8,600 in-budget 4-room was silenced at 79 because Yad2's
+    // card omitted the city line; the user's own search filters guarantee city.
+    const text = 'נדל"ן להשכרה במיקומים שנבחרו | אלפי מודעות חדשות בכל יום\nלהשכרה! דירת 4 חדרים, מרפסת שמש, חניה, מעלית, ללא תיווך. 8,600 ש"ח';
+    const r = scoreListing(makeProfile({ priceMax: 9500 }), makeListing(text, { source: "YAD2" }));
+    expect(r.status).toBe("strong_match");
+    expect(r.missingFields).toContain("עיר/מיקום");
+  });
+
+  it("missing city on a REGION-page Yad2 capture → still capped (can be any town)", () => {
+    // A Tel Mond listing from a "מרכז והשרון" region page must not become a
+    // strong match just because its town isn't in the parser's city list.
+    const text = 'נדל"ן להשכרה במרכז והשרון | אלפי מודעות חדשות בכל יום\nלהשכרה! דירת 4 חדרים, מרפסת שמש, חניה, מעלית, ללא תיווך. 8,600 ש"ח';
+    const r = scoreListing(makeProfile({ priceMax: 9500 }), makeListing(text, { source: "YAD2" }));
+    expect(r.status).toBe("possible_match");
+  });
 });
 
 // ---- feature rules -----------------------------------------------------------
