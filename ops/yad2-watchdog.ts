@@ -4,29 +4,28 @@
 // Mac is on but the tab hasn't delivered for 45+ minutes during waking hours,
 // send ONE WhatsApp nudge (deduped to once per 6h).
 import { readFileSync } from "fs";
-
-// Standalone tsx doesn't load .env into process.env — do it explicitly so
-// Twilio credentials are available outside the Next.js server. The launchd
-// job cd's to the repo root first, so the relative path is always right
-// (NOT __dirname — undefined under tsx's ESM transform, and the silent catch
-// masked exactly that on the first run).
-try {
-  const env = readFileSync(".env", "utf8");
-  for (const line of env.split("\n")) {
-    const m = line.match(/^\s*([A-Z_][A-Z0-9_]*)\s*=\s*"?([^"#]*)"?\s*$/);
-    if (m && !process.env[m[1]]) process.env[m[1]] = m[2].trim();
-  }
-} catch {
-  /* .env optional — server env may already carry the vars */
-}
-
 import { prisma } from "../src/lib/db";
 import { sendAlert } from "../src/core/alert";
+
+// Standalone tsx doesn't load .env into process.env — load it explicitly
+// before doing anything (the Next server loads .env natively; scripts don't).
+function loadEnv() {
+  try {
+    const env = readFileSync(".env", "utf8"); // launchd cd's to the repo root
+    for (const line of env.split("\n")) {
+      const m = line.match(/^\s*([A-Z_][A-Z0-9_]*)\s*=\s*"?([^"#]*)"?\s*$/);
+      if (m && !process.env[m[1]]) process.env[m[1]] = m[2].trim();
+    }
+  } catch {
+    /* .env optional — server env may already carry the vars */
+  }
+}
 
 const STALE_MINUTES = 45;
 const NUDGE_COOLDOWN_H = 6;
 
 async function main() {
+  loadEnv();
   const hour = new Date().getHours();
   if (hour < 8 || hour >= 24) return console.log("[watchdog] night — skipping");
 
