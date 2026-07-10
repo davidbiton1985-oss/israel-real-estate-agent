@@ -38,6 +38,7 @@ export async function POST(req: NextRequest) {
     bulk?: boolean;
     groupName?: string;
     posts?: { text?: string; url?: string }[];
+    heartbeat?: string;
   };
   try {
     body = await req.json();
@@ -48,6 +49,20 @@ export async function POST(req: NextRequest) {
   const text = (body.text ?? "").trim();
   const url = (body.url ?? "").trim() || null;
   const title = (body.title ?? "").trim();
+
+  // ---- HEARTBEAT: a watcher saying "alive, nothing new" -------------------
+  // Watchers only used to POST when they had listings, so a quiet market was
+  // indistinguishable from a dead tab and the watchdog cried wolf. Heartbeats
+  // refresh liveness without touching the listing counters.
+  if (typeof body.heartbeat === "string") {
+    const src = body.heartbeat === "FACEBOOK" ? "FACEBOOK" : "YAD2_BROWSER";
+    await prisma.sourceHealth.upsert({
+      where: { source: src },
+      create: { source: src, lastCheckAt: new Date(), lastSuccessAt: new Date() },
+      update: { enabled: true, lastCheckAt: new Date(), lastSuccessAt: new Date(), lastError: null, consecutiveErrors: 0 },
+    });
+    return NextResponse.json({ ok: true, heartbeat: src }, { headers: CORS_HEADERS });
+  }
 
   // ---- DIAG mode: the FB reader reports what it Sees on each post page ----
   // Log-only — never ingested. Lets us debug extraction on the user's real

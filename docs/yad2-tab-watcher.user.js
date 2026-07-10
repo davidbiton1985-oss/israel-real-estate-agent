@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RE-Agent Yad2 Tab Watcher
 // @namespace    israel-real-estate-agent
-// @version      1.2
+// @version      1.3
 // @description  Watches YOUR open Yad2 search tab: every few minutes it re-checks the results and sends new listings to your local Israel Real Estate Agent (localhost:3000), which scores them and WhatsApps you strong matches. Runs only in your own browser session — no CAPTCHA bypass, no fake fingerprints, no login automation. If Yad2 ever shows a verification page, solve it yourself like normal and the watcher resumes.
 // @match        https://www.yad2.co.il/realestate/*
 // @grant        none
@@ -94,19 +94,28 @@
   }
 
   // --- send new cards to the app -------------------------------------------
+  // "Alive, nothing new" — without this, a quiet market looks identical to a
+  // dead tab and the watchdog sends false WhatsApp nudges.
+  function heartbeat() {
+    try {
+      fetch(APP, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ heartbeat: "YAD2" }) });
+    } catch {}
+  }
+
   function processPage() {
     var cards = collectCards();
     if (cards.length === 0) {
       // Either still loading, or Yad2 is showing a verification/empty page.
       // We do nothing special — no bypassing. You'll see it when you check the tab.
       setBadge("no listings visible (loading or verification page?)");
-      return;
+      return; // NO heartbeat: an unreadable page is not a healthy watcher
     }
     var seen = loadSeen();
     var fresh = cards.filter(function (c) {
       return seen.indexOf(c.id) === -1;
     });
     if (fresh.length === 0) {
+      heartbeat();
       setBadge("watching · " + cards.length + " listings · nothing new " + new Date().toLocaleTimeString());
       return;
     }

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RE-Agent Facebook Notification Reader
 // @namespace    israel-real-estate-agent
-// @version      12.4
+// @version      12.5
 // @description  Notification-driven reader: one designated tab checks facebook.com/notifications every few minutes; every "posted in group" notification links to the post's own page, which the tab then opens and reads IN FULL — parsed, scored, WhatsApp'd by your local RE-Agent (localhost:3000). Runs only in your own logged-in browser session — no scraping server, no login/CAPTCHA bypass. Your other Facebook tabs are untouched (the reader runs only in the tab you start with #re-agent).
 // @match        https://www.facebook.com/*
 // @grant        GM_xmlhttpRequest
@@ -25,7 +25,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "12.4";
+  var VERSION = "12.5";
   var APP = "http://localhost:3000/api/capture";
   var SEEN_KEY = "reAgentSeenFbPosts_v12"; // localStorage: post URLs already ingested
   var SEEN_MAX = 1200;
@@ -213,6 +213,8 @@
         }
       }
       saveQueue(q);
+      // heartbeat: even a +0 scan proves the reader is alive (dashboard freshness)
+      postToApp({ heartbeat: "FACEBOOK" }, function () {});
       lastFound = "+" + foundPosts + " post(s)" + (foundGroups ? " +" + foundGroups + " sweep(s)" : "");
       setBadge("notifications: " + lastFound);
       goNext();
