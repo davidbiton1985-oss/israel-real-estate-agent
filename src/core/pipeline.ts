@@ -226,10 +226,20 @@ export async function matchListing(listing: Listing): Promise<MatchSummary> {
         sentAt: sent.status === "SENT" ? new Date() : null,
       },
     });
-    await prisma.match.update({
-      where: { id: match.id },
-      data: { alerted: true, alertChannel: sent.channel, lastAlertedPrice: listing.price, lastAlertedSnapshot: currentSnapshot },
-    });
+    // "Alerted" means REACHED THE USER. When Twilio was attempted but failed
+    // (e.g. the trial account's 50/day cap → console fallback), the match must
+    // stay un-alerted so the next scan retries — otherwise a real apartment
+    // found on a capped day is lost forever, not delayed. A console "send"
+    // WITHOUT a Twilio attempt (Twilio not configured) still counts as
+    // delivered — console IS the channel then, and re-alert loops must not
+    // return (the 200×-per-post flood).
+    const delivered = !(sent.twilioAttempted && sent.channel === "console");
+    if (delivered) {
+      await prisma.match.update({
+        where: { id: match.id },
+        data: { alerted: true, alertChannel: sent.channel, lastAlertedPrice: listing.price, lastAlertedSnapshot: currentSnapshot },
+      });
+    }
 
     if (sent.status === "SENT") summary.alertsSent++;
     if (action === "PRICE_DROP") summary.priceDropFired = true;
