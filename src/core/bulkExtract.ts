@@ -7,7 +7,7 @@
 // So we: strip noise, infer city + deal-type from the group header, and stitch
 // consecutive content lines into windows, keeping windows that carry a price and
 // a room count (the two facts a listing states in-text).
-import { parseListing, CITIES } from "./parser";
+import { parseListing, CITIES, collapseSpacedHebrew } from "./parser";
 
 // Lines that are watcher UI or Facebook page chrome — never listing content.
 const NOISE_LINE = new RegExp(
@@ -152,7 +152,9 @@ export function extractListingFromPost(
   rawText: string,
   ctx: { city: string | null; dealType: "RENT" | "SALE" | null }
 ): Candidate | null {
-  const clean = contentLines(rawText).join("  ");
+  // Collapse letter-spaced Hebrew FIRST ("ל מ כ י ר ה") so neither the sale
+  // detector nor the wanted-post filter can be styled around.
+  const clean = collapseSpacedHebrew(contentLines(rawText).join("  "));
   if (clean.length < 15) return null;
   if (isNotAnOffer(clean)) return null; // roommate / wanted / land / investment
 

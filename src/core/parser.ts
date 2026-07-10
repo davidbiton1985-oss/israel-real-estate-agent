@@ -261,9 +261,18 @@ function extractBool(text: string, positives: string[], negatives: string[]): bo
   return null;
 }
 
+/** Collapse letter-spaced Hebrew ("ל מ כ י ר ה" → "למכירה") — a styling trick
+ * that evaded the sale detector and let a sale post alert as a rental. Safe:
+ * Hebrew has no standalone single-letter words, so 3+ spaced singles are
+ * always one emphasized word. */
+export function collapseSpacedHebrew(s: string): string {
+  return s.replace(/(?:[א-ת][ \t]+){2,}[א-ת]/g, (m) => m.replace(/[ \t]+/g, ""));
+}
+
 function extractDealType(text: string): "RENT" | "SALE" | null {
-  if (/להשכרה|השכרה|שכירות|לשכירות|for rent|monthly rent/i.test(text)) return "RENT";
-  if (/למכירה|נמכרת|מכירה|for sale/i.test(text)) return "SALE";
+  const t = collapseSpacedHebrew(text);
+  if (/להשכרה|השכרה|שכירות|לשכירות|for rent|monthly rent/i.test(t)) return "RENT";
+  if (/למכירה|נמכרת|מכירה|for sale/i.test(t)) return "SALE";
   return null;
 }
 

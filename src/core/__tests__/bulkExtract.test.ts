@@ -160,6 +160,18 @@ describe("rejects 'looking for' (wanted) posts on the FEED/BULK path too", () =>
   });
 });
 
+describe("letter-spaced Hebrew cannot evade detection", () => {
+  const ctx = { city: "Kiryat Ono" as string | null, dealType: "RENT" as "RENT" | "SALE" | null };
+  it("the real 'ל מ כ י ר ה' sale post is labeled SALE, not the group's RENT (regression: it WhatsApp-alerted as a rental)", () => {
+    const real = "להשכרה ברחוב הזמיר המבוקש.\nבפרוייקט ״נופי רייספלד״ , קרית אונו.\nזו לא דירה רגילה זו דירה וואו\nל מ כ י ר ה :\nדירת 4 חדרים מוארת ומרווחת";
+    const c = extractListingFromPost(real, ctx)!;
+    expect(c.dealType).toBe("SALE");
+  });
+  it("letter-spaced מ ח פ ש ת cannot evade the wanted-post filter", () => {
+    expect(extractListingFromPost("מ ח פ ש ת דירת 3 חדרים בקרית אונו", ctx)).toBeNull();
+  });
+});
+
 describe("Facebook: price optional (rooms required)", () => {
   const ctx = { city: "Kiryat Ono" as string | null, dealType: "RENT" as "RENT" | "SALE" | null };
   it("KEEPS a no-price post that has rooms (+ city)", () => {
