@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  RE-Agent discovery scheduler (macOS LaunchAgent).
+
+  Keeps the 5-minute automatic-discovery watcher (npm run scheduler) alive:
+  email polling + leftover listing scans + WhatsApp alerts. Without it, only
+  browser-tab captures reach the pipeline (learned after a Mac restart left
+  the manually-run scheduler dead and 14 listings queued).
+
+  Install (one-time):
+    cp ops/com.david.re-agent-scheduler.plist ~/Library/LaunchAgents/
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.david.re-agent-scheduler.plist
+
+  Manage:
+    launchctl kickstart -k gui/$(id -u)/com.david.re-agent-scheduler   # restart now
+    launchctl bootout gui/$(id -u)/com.david.re-agent-scheduler        # stop + disable
+    tail -f ~/Library/Logs/re-agent-scheduler.log                      # logs
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.david.re-agent-scheduler</string>
+
+  <!-- zsh -lc loads the login PATH (homebrew node) before running npm -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>-lc</string>
+    <string>cd /Users/david/israel-real-estate-agent &amp;&amp; exec npm run scheduler</string>
+  </array>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <!-- restart automatically if the process dies -->
+  <key>KeepAlive</key>
+  <true/>
+
+  <!-- don't crash-loop faster than every 15s -->
+  <key>ThrottleInterval</key>
+  <integer>15</integer>
+
+  <key>StandardOutPath</key>
+  <string>/Users/david/Library/Logs/re-agent-scheduler.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/david/Library/Logs/re-agent-scheduler.log</string>
+</dict>
+</plist>
