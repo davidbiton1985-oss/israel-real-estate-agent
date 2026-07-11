@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { Listing, Profile } from "@prisma/client";
-import { scoreListing } from "../matching";
+import { scoreListing, neighborhoodRules, neighborhoodAllowed } from "../matching";
 import { parseListing } from "../parser";
 import { fingerprint } from "../dedup";
 
@@ -237,6 +237,40 @@ describe("location rules", () => {
     const text = 'נדל"ן להשכרה במרכז והשרון | אלפי מודעות חדשות בכל יום\nלהשכרה! דירת 4 חדרים, מרפסת שמש, חניה, מעלית, ללא תיווך. 8,600 ש"ח';
     const r = scoreListing(makeProfile({ priceMax: 9500 }), makeListing(text, { source: "YAD2" }));
     expect(r.status).toBe("possible_match");
+  });
+});
+
+describe("per-city neighborhood restrictions (e.g. only גליל ים within Herzliya)", () => {
+  const profile = () => makeProfile({ cities: "Ganei Tikva, Kiryat Ono, Herzliya", neighborhoods: "הרצליה: גליל ים", priceMax: 9500 });
+
+  it("Herzliya post IN Galil Yam (plain 'בגליל ים' text) → passes and is credited", () => {
+    const r = scoreListing(profile(), makeListing('להשכרה בהרצליה בגליל ים דירת 4 חדרים, מרפסת, 8,600 ש"ח'));
+    expect(r.status).not.toBe("rejected");
+    expect(r.reasonsPositive.join(" ")).toContain("גליל ים");
+  });
+
+  it("dash spelling 'גליל-ים' also matches", () => {
+    const r = scoreListing(profile(), makeListing('להשכרה בהרצליה בגליל-ים דירת 4 חדרים, מרפסת, 8,600 ש"ח'));
+    expect(r.status).not.toBe("rejected");
+  });
+
+  it("Herzliya post NOT in Galil Yam → rejected with the restriction named", () => {
+    const r = scoreListing(profile(), makeListing('להשכרה בהרצליה בנווה עמל דירת 4 חדרים, מרפסת, 8,600 ש"ח'));
+    expect(r.status).toBe("rejected");
+    expect(r.reasonsNegative.join(" ")).toContain("גליל ים");
+  });
+
+  it("unrestricted city (Ganei Tikva) is untouched by the Herzliya rule", () => {
+    const r = scoreListing(profile(), makeListing('להשכרה בגני תקווה דירת 4 חדרים, מרפסת, 8,600 ש"ח'));
+    expect(r.status).not.toBe("rejected");
+  });
+
+  it("rules parse city aliases: 'הרצליה: גליל ים' scopes canonical Herzliya", () => {
+    const rules = neighborhoodRules("הרצליה: גליל ים");
+    expect(rules.get("Herzliya")).toEqual(["גליל ים"]);
+    expect(neighborhoodAllowed(rules, "Herzliya", null, "דירה בגליל ים").allowed).toBe(true);
+    expect(neighborhoodAllowed(rules, "Herzliya", null, "דירה בהרצליה פיתוח").allowed).toBe(false);
+    expect(neighborhoodAllowed(rules, "Kiryat Ono", null, "דירה").allowed).toBe(true);
   });
 });
 

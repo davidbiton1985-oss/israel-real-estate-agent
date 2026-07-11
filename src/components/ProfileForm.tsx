@@ -43,8 +43,8 @@ export default function ProfileForm({ profile }: { profile?: Profile }) {
           <Field label="ערים" hint="מופרדות בפסיק">
             <Input name="cities" defaultValue={profile?.cities ?? ""} required placeholder="גני תקווה, קרית אונו" />
           </Field>
-          <Field label="שכונות" hint="לא חובה">
-            <Input name="neighborhoods" defaultValue={profile?.neighborhoods ?? ""} />
+          <Field label="הגבלת שכונות" hint='למשל "הרצליה: גליל ים" — רק שכונות אלו בעיר; ערים בלי רשומה פתוחות'>
+            <Input name="neighborhoods" defaultValue={profile?.neighborhoods ?? ""} placeholder="הרצליה: גליל ים" />
           </Field>
           <Field label="רחובות" hint="לא חובה">
             <Input name="streets" defaultValue={profile?.streets ?? ""} />

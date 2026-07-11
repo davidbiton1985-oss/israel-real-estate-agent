@@ -1,5 +1,6 @@
 // Deterministic, explainable 0–100 scoring of a Listing against a Profile.
 import type { Listing, Profile } from "@prisma/client";
+import { CITIES } from "./parser";
 
 export interface MatchResult {
   score: number;
@@ -15,6 +16,59 @@ type FeaturePref = "REQUIRED" | "PREFERRED" | "INDIFFERENT";
 
 function profileCities(profile: Profile): string[] {
   return profile.cities.split(",").map((c) => c.trim()).filter(Boolean);
+}
+
+// ---------------------------------------------------------------------------
+// Per-city neighborhood restrictions. Profile.neighborhoods entries of the
+// form "City: hood1 | hood2" restrict THAT city to those neighborhoods; cities
+// without an entry are unrestricted. City may be the canonical name or any
+// Hebrew alias ("הרצליה: גליל ים" == "Herzliya: גליל ים"). A hood matches via
+// the parsed neighborhood field OR anywhere in the post text (posts usually
+// say "בגליל ים", not "שכונת גליל ים", so text search is the reliable path).
+// ---------------------------------------------------------------------------
+function canonicalCity(name: string): string {
+  const lower = name.trim().toLowerCase();
+  for (const c of CITIES) {
+    if (c.canonical.toLowerCase() === lower || c.aliases.some((a) => a.toLowerCase() === lower)) return c.canonical;
+  }
+  return name.trim();
+}
+
+/** Map canonicalCity → allowed hoods, from "City: hood1 | hood2, City2: hood" entries. */
+export function neighborhoodRules(neighborhoods: string | null): Map<string, string[]> {
+  const rules = new Map<string, string[]>();
+  if (!neighborhoods) return rules;
+  for (const entry of neighborhoods.split(",")) {
+    const m = entry.match(/^\s*([^:]+):\s*(.+)$/);
+    if (!m) continue; // plain (city-less) entries are ignored — no guessing
+    const city = canonicalCity(m[1]);
+    const hoods = m[2].split("|").map((h) => h.trim()).filter(Boolean);
+    if (hoods.length) rules.set(city, [...(rules.get(city) ?? []), ...hoods]);
+  }
+  return rules;
+}
+
+/** Dash/whitespace-insensitive containment ("גליל-ים" matches "גליל ים"). */
+function containsLoose(haystack: string, needle: string): boolean {
+  const squash = (s: string) => s.replace(/[-\s]+/g, "");
+  return squash(haystack).includes(squash(needle));
+}
+
+export function neighborhoodAllowed(
+  rules: Map<string, string[]>,
+  city: string | null,
+  neighborhood: string | null,
+  rawText: string
+): { allowed: boolean; hood?: string; required?: string[] } {
+  if (!city) return { allowed: true }; // unknown city is handled by the location scoring
+  const hoods = rules.get(city);
+  if (!hoods || hoods.length === 0) return { allowed: true }; // city unrestricted
+  for (const h of hoods) {
+    if ((neighborhood && containsLoose(neighborhood, h)) || containsLoose(rawText, h)) {
+      return { allowed: true, hood: h };
+    }
+  }
+  return { allowed: false, required: hoods };
 }
 
 // ---------------------------------------------------------------------------
@@ -130,6 +184,14 @@ export function scoreListing(profile: Profile, listing: Listing): MatchResult {
   if (listing.city && cities.length > 0 && !cities.includes(listing.city)) {
     return reject(`העיר ${listing.city} לא ברשימת הערים שלך (${cities.join(", ")})`);
   }
+  // Neighborhood restriction (e.g. "Herzliya: גליל ים" — only Galil Yam within
+  // Herzliya; unrestricted cities pass untouched).
+  const hoodRules = neighborhoodRules(profile.neighborhoods);
+  const hoodCheck = neighborhoodAllowed(hoodRules, listing.city, listing.neighborhood, listing.rawText);
+  if (!hoodCheck.allowed) {
+    return reject(`ב${listing.city} אבל לא בשכונות שהגדרת (${hoodCheck.required!.join(", ")})`);
+  }
+  if (hoodCheck.hood) pos.push(`שכונה מבוקשת: ${hoodCheck.hood}`);
   // Known room count clearly outside the target range (beyond a ±0.5 tolerance)
   // is a hard filter — a 3-room won't alert when you asked for 4–5. A room count
   // within 0.5 of the range (e.g. 3.5 for a 4–5 search) still scores, penalized.
