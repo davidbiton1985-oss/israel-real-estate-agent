@@ -274,6 +274,29 @@ describe("per-city neighborhood restrictions (e.g. only גליל ים within Her
   });
 });
 
+describe("Glil Yam as its own Yad2 city (kibbutz, cityId 0346)", () => {
+  const profile = () =>
+    makeProfile({ cities: "Ganei Tikva, Kiryat Ono, Herzliya, Glil Yam", neighborhoods: "הרצליה: גליל ים", priceMax: 9500 });
+
+  it("Yad2-format kibbutz card ('גליל ים, גליל ים' — no הרצליה) clears the WhatsApp bar", () => {
+    const raw =
+      'נדל"ן להשכרה בשכונת גליל ים, גליל ים | אלפי מודעות חדשות בכל יום\n9,000 ₪\nגליל ים, גליל ים\nמחוז מרכז והשרון\n4 חדרים • קומה 2 • 95 מ"ר\nמרפסת שמש';
+    const r = scoreListing(profile(), makeListing(raw));
+    expect(r.status).not.toBe("rejected");
+    expect(r.score).toBeGreaterThanOrEqual(80);
+    expect(r.reasonsPositive.join(" ")).toContain("Glil Yam");
+  });
+
+  it("Yad2-format Herzliya-hood card still resolves to Herzliya and passes its hood rule", () => {
+    const raw =
+      'נדל"ן להשכרה בשכונת גליל ים, הרצליה | אלפי מודעות חדשות בכל יום\n9,000 ₪\nגליל ים, הרצליה\nמחוז מרכז והשרון\n4 חדרים • קומה 2 • 95 מ"ר\nמרפסת שמש';
+    const r = scoreListing(profile(), makeListing(raw));
+    expect(r.status).not.toBe("rejected");
+    expect(r.reasonsPositive.join(" ")).toContain("Herzliya");
+    expect(r.reasonsPositive.join(" ")).toContain("גליל ים");
+  });
+});
+
 // ---- feature rules -----------------------------------------------------------
 describe("required feature rules", () => {
   it("required balcony explicitly absent → rejected", () => {

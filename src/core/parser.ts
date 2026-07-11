@@ -52,6 +52,11 @@ export const CITIES: { canonical: string; aliases: string[] }[] = [
   { canonical: "Raanana", aliases: ["רעננה", "raanana", "ra'anana"] },
   { canonical: "Yehud-Monosson", aliases: ["יהוד מונוסון", "יהוד-מונוסון", "יהוד", "yehud"] },
   { canonical: "Or Yehuda", aliases: ["אור יהודה", "or yehuda"] },
+  // Yad2 treats kibbutz Glil Yam as its own city (cityId 0346), so its cards
+  // read "גליל ים, גליל ים" with no recognizable city. Kept LAST: cards from
+  // the Herzliya neighborhood (hoodId 991416) also contain "הרצליה", which
+  // must keep winning via the earlier Herzliya entry.
+  { canonical: "Glil Yam", aliases: ["גליל ים", "גליל-ים", "glil yam", "galil yam"] },
 ];
 
 // ---------------------------------------------------------------------------

@@ -162,6 +162,12 @@ describe("city / neighborhood / street / deal type", () => {
     expect(parseListing("להשכרה בגני תקווה").city).toBe("Ganei Tikva");
     expect(parseListing('דירה בפ"ת').city).toBe("Petah Tikva");
   });
+  it("kibbutz Glil Yam card (no other city word) → Glil Yam", () => {
+    expect(parseListing("להשכרה בשכונת גליל ים, גליל ים\n9,000 ₪\nגליל ים, גליל ים").city).toBe("Glil Yam");
+  });
+  it("Herzliya wins over Glil Yam when both appear ('גליל ים, הרצליה')", () => {
+    expect(parseListing("להשכרה בשכונת גליל ים, הרצליה דירת 4 חדרים").city).toBe("Herzliya");
+  });
   it("neighborhood via שכונת", () => {
     expect(parseListing("בשכונת גני יהודה, דירת 4 חדרים").neighborhood).toBe("גני יהודה");
   });
