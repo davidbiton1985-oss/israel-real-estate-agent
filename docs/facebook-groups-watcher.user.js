@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         RE-Agent Facebook Notification Reader
 // @namespace    israel-real-estate-agent
-// @version      12.6
-// @description  Notification-driven reader: one designated tab checks facebook.com/notifications every few minutes; every "posted in group" notification links to the post's own page, which the tab then opens and reads IN FULL — parsed, scored, WhatsApp'd by your local RE-Agent (localhost:3000). Runs only in your own logged-in browser session — no scraping server, no login/CAPTCHA bypass. Your other Facebook tabs are untouched (the reader runs only in the tab you start with #re-agent).
+// @version      12.7
+// @description  Notification-driven reader: one designated tab checks facebook.com/notifications every 7–12 min (randomized, slower overnight); every "posted in group" notification links to the post's own page, which the tab then opens and reads IN FULL — parsed, scored, WhatsApp'd by your local RE-Agent (localhost:3000). Runs only in your own logged-in browser session — no scraping server, no login/CAPTCHA bypass; if Facebook shows a checkpoint the reader BACKS OFF instead of hammering it. Your other Facebook tabs are untouched (the reader runs only in the tab you start with #re-agent).
 // @match        https://www.facebook.com/*
 // @grant        GM_xmlhttpRequest
 // @connect      localhost
@@ -19,16 +19,19 @@
 //      (verified: permalink pages carry the complete post without scrolling),
 //      expands "ראה עוד", extracts the post (comments excluded), and sends it
 //      to the app with the post's link. Then returns to notifications.
-//   4. Cadence: ~5 min (07:00–24:00), ~30 min overnight. The notification
-//      backlog persists — nothing is missed while the Mac sleeps.
+//   4. Cadence: 7–12 min daytime, 30–35 min overnight (randomized — no round,
+//      repeating beat). The notification backlog persists, so a longer gap
+//      never misses a post. On a Facebook checkpoint/login page the reader
+//      backs off (20→30 min) instead of the old 4-second bounce loop.
 
 (function () {
   "use strict";
 
-  var VERSION = "12.6";
+  var VERSION = "12.7";
   var APP = "http://localhost:3000/api/capture";
   var SEEN_KEY = "reAgentSeenFbPosts_v12"; // localStorage: post URLs already ingested
   var SEEN_MAX = 1200;
+  var BLOCK_KEY = "reAgentFbBlockStreak"; // localStorage: consecutive checkpoint hits
   var QUEUE_KEY = "reAgentQueue_v12"; // sessionStorage (per-tab): pending items
   var READER_KEY = "reAgentReader_v12"; // sessionStorage: this tab is the reader
   var POST_WAIT_MS = 20000; // max wait — FB streams post text in progressively
@@ -109,6 +112,35 @@
   function loadQueue() { try { return JSON.parse(sessionStorage.getItem(QUEUE_KEY) || "[]"); } catch { return []; } }
   function saveQueue(q) { try { sessionStorage.setItem(QUEUE_KEY, JSON.stringify(q)); } catch {} }
 
+  // ---- checkpoint handling --------------------------------------------------
+  // Facebook answers a session it distrusts with a checkpoint / login / "confirm
+  // it's you" page. The old code reacted two bad ways: the router bounced back
+  // to /notifications every 4s (a tight reload loop ON the challenge), and the
+  // notifications scan still sent a "FACEBOOK alive" heartbeat — falsely marking
+  // the reader healthy. Both are exactly what escalates a soft check to a block.
+  // We do NOT touch the challenge; we detect it, stop hammering, and nag you to
+  // solve it in the tab (streak persisted — the script re-runs on each nav).
+  // Deliberately conservative: a FALSE positive here silently drops coverage
+  // (a backoff = missed apartments), so we only trust unambiguous checkpoint
+  // signals — the /checkpoint|login|… URL Facebook redirects to, or an actual
+  // captcha widget. NOT a bare password field (present in unrelated FB DOM).
+  function looksBlocked() {
+    var u = location.href;
+    if (/\/(checkpoint|login|two_factor|recover|confirmemail)(\/|\?|$)/i.test(u)) return true;
+    if (document.querySelector('input[name="captcha_response"], iframe[src*="captcha"], iframe[title*="captcha" i]')) return true;
+    return false;
+  }
+  function getBlockStreak() { return Number(localStorage.getItem(BLOCK_KEY) || "0"); }
+  function setBlockStreak(n) { try { localStorage.setItem(BLOCK_KEY, String(n)); } catch {} }
+  function handleBlocked() {
+    var n = getBlockStreak() + 1;
+    setBlockStreak(n);
+    var wait = n >= 3 ? 30 * 60000 : 20 * 60000;
+    // No heartbeat: a blocked reader is NOT healthy — let its freshness go stale.
+    setBadge("⚠ Facebook checkpoint/login — solve it in THIS tab · retrying in " + Math.round(wait / 60000) + "m");
+    setTimeout(function () { location.href = NOTIF_URL; }, wait);
+  }
+
   // Canonical post URL: strip query/hash so ?notif_id=… variants dedupe.
   function canonPostUrl(href) {
     var m = (href || "").match(/https:\/\/www\.facebook\.com\/groups\/[^/]+\/(?:posts|permalink)\/[A-Za-z0-9]+/);
@@ -129,11 +161,14 @@
     return ids.map(function (id) { return "https://www.facebook.com/groups/" + g[1] + "/posts/" + id + "/"; });
   }
 
-  // ---- cadence: 5 min daytime, 30 min overnight (+jitter) -------------------
+  // ---- cadence: randomized 7–12 min daytime, 30–35 min overnight ------------
+  // No round, repeating beat (a fixed 5-min reload is a robotic signature).
+  // Nothing is missed by the longer gap: every post left a persistent
+  // notification, so the backlog is still there on the next scan.
   function nextDelayMs() {
     var h = new Date().getHours();
-    var base = h >= 7 ? 5 * 60000 : 30 * 60000;
-    return base + Math.floor(Math.random() * 60000);
+    if (h < 7) return 30 * 60000 + Math.floor(Math.random() * 5 * 60000); // 30–35m
+    return 7 * 60000 + Math.floor(Math.random() * 5 * 60000); // 7–12m
   }
 
   var NOTIF_URL = "https://www.facebook.com/notifications";
@@ -174,6 +209,9 @@
     setBadge("scanning notifications…");
     // Let the list render (initial load renders plenty of entries hidden or not).
     setTimeout(function () {
+      // A checkpoint can stream in AT the /notifications URL after load — don't
+      // scan or heartbeat a challenge page (that falsely reports "alive"); back off.
+      if (looksBlocked()) { handleBlocked(); return; }
       var seen = loadSeen();
       var q = loadQueue();
       var queued = {};
@@ -217,6 +255,7 @@
         }
       }
       saveQueue(q);
+      setBlockStreak(0); // reached the real notifications list → clear any block backoff
       // heartbeat: even a +0 scan proves the reader is alive (dashboard freshness)
       postToApp({ heartbeat: "FACEBOOK" }, function () {});
       lastFound = "+" + foundPosts + " post(s)" + (foundGroups ? " +" + foundGroups + " sweep(s)" : "");
@@ -397,7 +436,11 @@
     if (q0[i].kind === "group" && here.indexOf(q0[i].url.split("?")[0]) === 0) { current = q0[i]; break; }
   }
 
-  if (current && current.kind === "post") {
+  if (looksBlocked()) {
+    // Highest priority: a checkpoint/login can appear on ANY navigation (even
+    // mid-queue). Back off instead of bouncing or reading foreign content.
+    handleBlocked();
+  } else if (current && current.kind === "post") {
     handlePostPage(current);
   } else if (current && current.kind === "group") {
     handleGroupSweep(current);
