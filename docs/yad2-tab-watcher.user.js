@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         RE-Agent Yad2 Tab Watcher
 // @namespace    israel-real-estate-agent
-// @version      1.3
-// @description  Watches YOUR open Yad2 search tab: every few minutes it re-checks the results and sends new listings to your local Israel Real Estate Agent (localhost:3000), which scores them and WhatsApps you strong matches. Runs only in your own browser session — no CAPTCHA bypass, no fake fingerprints, no login automation. If Yad2 ever shows a verification page, solve it yourself like normal and the watcher resumes.
+// @version      1.4
+// @description  Watches YOUR open Yad2 search tab: every 7–10 min (randomized, slower overnight) it re-checks the results and sends new listings to your local Israel Real Estate Agent (localhost:3000), which scores them and WhatsApps you strong matches. Runs only in your own browser session — no CAPTCHA bypass, no fake fingerprints, no login automation. If Yad2 shows a verification page the watcher BACKS OFF and stops hammering it; solve it yourself like normal and it resumes.
 // @match        https://www.yad2.co.il/realestate/*
 // @grant        none
 // ==/UserScript==
@@ -11,8 +11,29 @@
   "use strict";
 
   var APP = "http://localhost:3000/api/capture";
-  var CHECK_EVERY_MS = 5 * 60 * 1000; // 5 minutes
-  var JITTER_MS = 60 * 1000; // +0..60s random, so refreshes aren't robotic-regular
+  // Polite, human-ish pacing. A fixed 5-min reload, 24/7, is BOTH a robotic
+  // signature and needless load — anti-bot systems (Yad2 runs PerimeterX) flag
+  // exactly that regularity. Each cycle now waits a fresh random gap in
+  // [MIN,MAX] — e.g. 7m05s, then 8m31s, then 9m48s — never a round, repeating
+  // number. This isn't evasion: a well-behaved client backs off and jitters;
+  // we still never touch the CAPTCHA itself.
+  var MIN_MS = 7 * 60 * 1000; // never refresh faster than every 7 min
+  var MAX_MS = 10 * 60 * 1000; // …nor slower than every 10 min when healthy
+  // When the page shows nothing readable — still loading, OR a "prove you're
+  // human" checkpoint — do NOT keep reloading on the normal cadence. A human
+  // stuck on a CAPTCHA doesn't refresh every few minutes, and reloading a
+  // challenge page is what escalates a soft check into a hard block (this is
+  // exactly how both tabs got wedged). Back off hard, then crawl.
+  var BACKOFF_MS = 20 * 60 * 1000; // 1st–2nd empty read: slow retry
+  var PAUSE_RETRY_MS = 30 * 60 * 1000; // after that: assume challenge, crawl + nag
+  var EMPTY_BEFORE_PAUSE = 3;
+  // Humans sleep. Reloads landing on the dot at 03:00 are an easy tell, and no
+  // rentals post overnight — so pace down (not off, so it self-heals) at night.
+  var QUIET_START_HOUR = 0;
+  var QUIET_END_HOUR = 7;
+  // Persisted because the userscript re-runs FROM SCRATCH on every reload — an
+  // in-memory counter would reset to 0 each cycle and never reach the pause.
+  var EMPTY_KEY = "reAgentYad2EmptyStreak";
   // v2 key: v1.1 fixed per-card capture, so previously mis-captured listings must
   // be re-sent once with correct text↔URL pairing. Rotating the key does that.
   var SEEN_KEY = "reAgentSeenYad2Ids_v2";
@@ -45,6 +66,49 @@
     try {
       localStorage.setItem(SEEN_KEY, JSON.stringify(arr.slice(-SEEN_MAX)));
     } catch {}
+  }
+
+  // --- consecutive empty/challenge reads (persisted across reloads) ----------
+  function getEmptyStreak() {
+    return Number(localStorage.getItem(EMPTY_KEY) || "0");
+  }
+  function setEmptyStreak(n) {
+    try {
+      localStorage.setItem(EMPTY_KEY, String(n));
+    } catch {}
+  }
+
+  // --- pacing: decide when (if at all) to reload next ------------------------
+  function randInterval() {
+    // continuous ms across [MIN_MS, MAX_MS] → 7m05s, 8m31s, 9m48s, …
+    return MIN_MS + Math.floor(Math.random() * (MAX_MS - MIN_MS + 1));
+  }
+  function inQuietHours() {
+    var h = new Date().getHours();
+    return h >= QUIET_START_HOUR && h < QUIET_END_HOUR;
+  }
+  function scheduleReload(ms) {
+    setTimeout(function () {
+      location.reload();
+    }, ms);
+  }
+  // Called once per page cycle. status "ok" = listings were readable; "empty" =
+  // nothing readable (loading or a verification checkpoint).
+  function planNext(status) {
+    if (status === "empty") {
+      var n = getEmptyStreak() + 1;
+      setEmptyStreak(n);
+      if (n >= EMPTY_BEFORE_PAUSE) {
+        setBadge("verification page? solve it in THIS tab — slow-retrying every " + Math.round(PAUSE_RETRY_MS / 60000) + "m");
+        scheduleReload(PAUSE_RETRY_MS);
+      } else {
+        setBadge("no listings (loading or verification?) — backing off " + Math.round(BACKOFF_MS / 60000) + "m");
+        scheduleReload(BACKOFF_MS);
+      }
+      return;
+    }
+    setEmptyStreak(0);
+    scheduleReload(inQuietHours() ? BACKOFF_MS : randInterval());
   }
 
   // --- collect listing cards from the page ---------------------------------
@@ -106,9 +170,10 @@
     var cards = collectCards();
     if (cards.length === 0) {
       // Either still loading, or Yad2 is showing a verification/empty page.
-      // We do nothing special — no bypassing. You'll see it when you check the tab.
-      setBadge("no listings visible (loading or verification page?)");
-      return; // NO heartbeat: an unreadable page is not a healthy watcher
+      // We do nothing special — no bypassing. planNext backs off instead of
+      // hammering, and after a few empty reads assumes a challenge and crawls.
+      planNext("empty"); // sets its own badge; NO heartbeat (unreadable ≠ healthy)
+      return;
     }
     var seen = loadSeen();
     var fresh = cards.filter(function (c) {
@@ -117,6 +182,7 @@
     if (fresh.length === 0) {
       heartbeat();
       setBadge("watching · " + cards.length + " listings · nothing new " + new Date().toLocaleTimeString());
+      planNext("ok");
       return;
     }
     setBadge("sending " + fresh.length + " new listing(s)…");
@@ -129,6 +195,7 @@
         seen = seen.concat(okIds);
         saveSeen(seen);
         setBadge("sent " + sent + "/" + fresh.length + " new · " + alerts + " alert(s) 📱 · " + new Date().toLocaleTimeString());
+        planNext("ok");
         return;
       }
       var c = fresh[idx];
@@ -162,10 +229,10 @@
   }
 
   // --- main loop -------------------------------------------------------------
-  // Wait for the page to render, process it, then reload after the interval
-  // (+ jitter). A reload fetches fresh results exactly like pressing ⌘R.
-  setTimeout(processPage, 6000); // let the SPA render listings first
-  setTimeout(function () {
-    location.reload();
-  }, CHECK_EVERY_MS + Math.floor(Math.random() * JITTER_MS));
+  // Wait for the SPA to render, process the page once, then let planNext()
+  // decide the next reload: a fresh random 7–10 min gap when healthy, a long
+  // back-off when the page looks blocked. There is deliberately NO unconditional
+  // reload timer here anymore — that was what kept reloading the verification
+  // page every 5 minutes and escalated the block.
+  setTimeout(processPage, 6000 + Math.floor(Math.random() * 3000)); // jittered render wait
 })();
