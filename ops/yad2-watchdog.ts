@@ -33,7 +33,10 @@ async function main() {
   const ageMin = h?.lastSuccessAt ? (Date.now() - h.lastSuccessAt.getTime()) / 60000 : Infinity;
   if (ageMin < STALE_MINUTES) return console.log(`[watchdog] yad2 healthy (${Math.round(ageMin)}m ago)`);
 
-  const lastNudge = await prisma.alert.findFirst({ where: { kind: "WATCHDOG" }, orderBy: { createdAt: "desc" } });
+  // Scope the cooldown to THIS source's reason — the parallel FB watchdog also
+  // writes kind:"WATCHDOG", and an unscoped query would let an FB nudge suppress
+  // a Yad2 nudge (and vice versa).
+  const lastNudge = await prisma.alert.findFirst({ where: { kind: "WATCHDOG", reason: "YAD2_STALE" }, orderBy: { createdAt: "desc" } });
   if (lastNudge && Date.now() - lastNudge.createdAt.getTime() < NUDGE_COOLDOWN_H * 3600_000) {
     return console.log("[watchdog] stale but already nudged recently");
   }
