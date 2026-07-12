@@ -2,7 +2,7 @@
 // @name         RE-Agent Facebook Notification Reader
 // @namespace    israel-real-estate-agent
 // @version      12.7
-// @description  Notification-driven reader: one designated tab checks facebook.com/notifications every 7–12 min (randomized, slower overnight); every "posted in group" notification links to the post's own page, which the tab then opens and reads IN FULL — parsed, scored, WhatsApp'd by your local RE-Agent (localhost:3000). Runs only in your own logged-in browser session — no scraping server, no login/CAPTCHA bypass; if Facebook shows a checkpoint the reader BACKS OFF instead of hammering it. Your other Facebook tabs are untouched (the reader runs only in the tab you start with #re-agent).
+// @description  Notification-driven reader: one designated tab checks facebook.com/notifications every 7–12 min (randomized, slower overnight); every "posted in group" notification links to the post's own page, which the tab then opens and reads IN FULL — parsed, scored, WhatsApp'd by your local RE-Agent (localhost:3000). v12.8 also sweeps one target group's chronological feed per cycle (round-robin) so posts Facebook never notified about are still caught. Runs only in your own logged-in browser session — no scraping server, no login/CAPTCHA bypass; if Facebook shows a checkpoint the reader BACKS OFF instead of hammering it. Your other Facebook tabs are untouched (the reader runs only in the tab you start with #re-agent).
 // @match        https://www.facebook.com/*
 // @grant        GM_xmlhttpRequest
 // @connect      localhost
@@ -23,11 +23,16 @@
 //      repeating beat). The notification backlog persists, so a longer gap
 //      never misses a post. On a Facebook checkpoint/login page the reader
 //      backs off (20→30 min) instead of the old 4-second bounce loop.
+//   5. Completeness net (v12.8): Facebook does not notify on every post (video
+//      posts especially get dropped even with "all posts" on), so each cycle
+//      ALSO sweeps ONE target group's chronological feed (round-robin) — every
+//      group is read ~hourly regardless of notifications. New posts found this
+//      way go through the same score→WhatsApp path; dedup avoids repeat alerts.
 
 (function () {
   "use strict";
 
-  var VERSION = "12.7";
+  var VERSION = "12.8";
   var APP = "http://localhost:3000/api/capture";
   var SEEN_KEY = "reAgentSeenFbPosts_v12"; // localStorage: post URLs already ingested
   var SEEN_MAX = 1200;
@@ -36,6 +41,22 @@
   var READER_KEY = "reAgentReader_v12"; // sessionStorage: this tab is the reader
   var POST_WAIT_MS = 20000; // max wait — FB streams post text in progressively
   var STEP_MS = 900; // render poll interval
+
+  // ---- proactive group sweep (completeness safety net) ---------------------
+  // Facebook does NOT reliably create a notification for every post — even with
+  // "all posts" on, video/reel posts especially get dropped, so a real listing
+  // slipped through unseen. Notifications alone are therefore not enough. Each
+  // notification cycle ALSO sweeps ONE target group's chronological feed
+  // (round-robin), so every group is read ~hourly regardless of notifications.
+  // One extra page per cycle keeps it gentle (same detection budget concern as
+  // the pacing). SWEEP_GROUP_IDS seeds the set; it self-extends with any group
+  // we actually process a post from (rememberGroup), so new groups need no edit.
+  var SWEEP_GROUP_IDS = [
+    "1663070923962851", "109422649649946", "565702984351725", "344940935888684",
+    "1464082440368419", "1008744309264610", "218147985406068",
+  ];
+  var SWEPT_KEY = "reAgentSweptGroups_v12"; // localStorage: groups discovered from posts
+  var SWEEP_IDX_KEY = "reAgentSweepIdx_v12"; // localStorage: round-robin cursor
 
   // ---- reader-tab designation (per-tab; survives navigation) ---------------
   if (location.hash.indexOf("re-agent") !== -1) {
@@ -111,6 +132,35 @@
   }
   function loadQueue() { try { return JSON.parse(sessionStorage.getItem(QUEUE_KEY) || "[]"); } catch { return []; } }
   function saveQueue(q) { try { sessionStorage.setItem(QUEUE_KEY, JSON.stringify(q)); } catch {} }
+
+  // ---- sweep target set (seed ∪ groups we've processed posts from) ----------
+  function groupIdOf(url) { var m = (url || "").match(/\/groups\/(\d+)/); return m ? m[1] : null; }
+  function knownGroups() {
+    var set = {};
+    SWEEP_GROUP_IDS.forEach(function (g) { set[g] = 1; });
+    try { JSON.parse(localStorage.getItem(SWEPT_KEY) || "[]").forEach(function (g) { set[g] = 1; }); } catch {}
+    return Object.keys(set);
+  }
+  function rememberGroup(gid) {
+    if (!gid) return;
+    try {
+      var arr = JSON.parse(localStorage.getItem(SWEPT_KEY) || "[]");
+      if (arr.indexOf(gid) === -1) { arr.push(gid); localStorage.setItem(SWEPT_KEY, JSON.stringify(arr.slice(-50))); }
+    } catch {}
+  }
+  // Enqueue the next group's chronological feed for a sweep (one per call, cycling).
+  function enqueueRoundRobinSweep(q, queued) {
+    if (new Date().getHours() < 7) return; // overnight: skip sweeps (no posts, less activity)
+    var groups = knownGroups();
+    if (groups.length === 0) return;
+    var idx = Number(localStorage.getItem(SWEEP_IDX_KEY) || "0") % groups.length;
+    var gid = groups[idx];
+    try { localStorage.setItem(SWEEP_IDX_KEY, String((idx + 1) % groups.length)); } catch {}
+    var chrono = "https://www.facebook.com/groups/" + gid + "/?sorting_setting=CHRONOLOGICAL";
+    if (queued[chrono]) return;
+    q.push({ url: chrono, group: "sweep " + gid, kind: "group" }); // no seenKey → runs every rotation
+    queued[chrono] = 1;
+  }
 
   // ---- checkpoint handling --------------------------------------------------
   // Facebook answers a session it distrusts with a checkpoint / login / "confirm
@@ -254,6 +304,9 @@
           }
         }
       }
+      // Completeness net: also queue ONE group's chronological feed this cycle,
+      // so posts Facebook never notified about are still caught (round-robin).
+      enqueueRoundRobinSweep(q, queued);
       saveQueue(q);
       setBlockStreak(0); // reached the real notifications list → clear any block backoff
       // heartbeat: even a +0 scan proves the reader is alive (dashboard freshness)
@@ -290,6 +343,7 @@
   }
 
   function finishItem(item, msg) {
+    rememberGroup(groupIdOf(item.url)); // self-extend the sweep set from real activity
     markSeen(item.seenKey || postIdOf(item.url) || item.url);
     var q = loadQueue();
     q = q.filter(function (it) { return it.url !== item.url; });
@@ -398,21 +452,32 @@
   function handleGroupSweep(item) {
     setBadge("group sweep: " + (item.group || ""));
     setTimeout(function () {
-      var posts = [];
-      outermostArticles().forEach(function (a) {
-        var t = postOwnText(a);
-        if (t.length < 40) return;
-        var link = null;
-        var links = a.querySelectorAll('a[href*="/groups/"]');
-        for (var i = 0; i < links.length; i++) { link = canonPostUrl(links[i].href); if (link) break; }
-        // No own permalink → cannot attribute reliably → drop (attribution
-        // must never guess; a wrong link is worse than a missed capture).
-        if (link) posts.push({ text: t.slice(0, 3000), url: link });
-      });
-      if (posts.length === 0) { finishItem(item); return; }
-      postToApp({ posts: posts, groupName: item.group || (document.title || ""), url: item.url }, function () {
-        finishItem(item);
-      });
+      // Nudge the feed so a few posts below the fold render before we read.
+      try { window.scrollBy(0, 1200); } catch {}
+      expandSeeMore();
+      setTimeout(function () {
+        var seen = loadSeen();
+        var posts = [];
+        outermostArticles().forEach(function (a) {
+          var t = postOwnText(a);
+          if (t.length < 40) return;
+          var link = null;
+          var links = a.querySelectorAll('a[href*="/groups/"]');
+          for (var i = 0; i < links.length; i++) { link = canonPostUrl(links[i].href); if (link) break; }
+          // No own permalink → cannot attribute reliably → drop (attribution
+          // must never guess; a wrong link is worse than a missed capture).
+          if (!link) return;
+          var pid = postIdOf(link);
+          if (pid && seen.indexOf(pid) !== -1) return; // already handled → skip (dedupe re-sends)
+          posts.push({ text: t.slice(0, 3000), url: link });
+        });
+        if (posts.length === 0) { finishItem(item); return; }
+        postToApp({ posts: posts, groupName: item.group || (document.title || ""), url: item.url }, function (d) {
+          // Mark seen only on confirmed ingest, so a failed send retries next sweep.
+          if (d && d.ok) posts.forEach(function (p) { var pid = postIdOf(p.url); if (pid) markSeen(pid); });
+          finishItem(item);
+        });
+      }, 1800); // let scrolled-in posts settle
     }, 8000); // initial render of a group page
   }
 
