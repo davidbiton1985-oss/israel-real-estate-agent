@@ -6,6 +6,7 @@ import { prisma } from "@/lib/db";
 import { ingestAndMatch, ingestListing, type Source } from "@/core/pipeline";
 import { pollSources } from "@/core/poll";
 import { sendAlert } from "@/core/alert";
+import { rescoreAll } from "@/core/rescore";
 
 const TEST_ALERT_MESSAGE = ["🏠 Real Estate Agent test alert", "If you received this, WhatsApp alerts are working."].join("\n");
 
@@ -52,6 +53,15 @@ export async function saveProfile(formData: FormData) {
     await prisma.profile.update({ where: { id }, data });
   } else {
     await prisma.profile.create({ data });
+  }
+  // Re-evaluate every already-captured listing against the new criteria, so a
+  // change surfaces previously-frozen matches instead of leaving them at their
+  // old verdict. No alerts here — anything newly qualifying reaches you via the
+  // batched review digest, so a criteria change can't fire a WhatsApp burst.
+  try {
+    await rescoreAll();
+  } catch (e) {
+    console.error("[saveProfile] rescore failed (profile still saved):", e);
   }
   revalidatePath("/");
   redirect("/");

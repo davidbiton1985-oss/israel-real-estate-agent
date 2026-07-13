@@ -42,9 +42,12 @@ async function queryMatches(profileId: string, minScore: number) {
   return prisma.match.findMany({
     where: {
       profileId,
-      status: "possible_match",
+      // possible_match = clamped below the alert bar; strong_match here only ever
+      // appears when a re-score newly qualified it (fresh strong matches are
+      // alerted instantly by the pipeline and excluded by alerted:false below).
+      status: { in: ["possible_match", "strong_match"] },
       score: { gte: minScore },
-      alerted: false, // never already WhatsApp'd as a strong match
+      alerted: false,
       alerts: { none: { kind: KIND } }, // not yet in a prior digest
     },
     orderBy: [{ score: "desc" }, { createdAt: "desc" }],
@@ -61,7 +64,7 @@ function buildMessage(matches: Awaited<ReturnType<typeof queryMatches>>): { text
     return l.url ? `${head}\n   ${l.url}` : head;
   });
   const more = matches.length - shown.length;
-  const header = `🔎 ${matches.length} דירות לבדיקה — עברו את כל הסינון הקשיח אבל לא הגיעו לסף התראה מלאה. שווה לעבור עליהן:`;
+  const header = `🔎 ${matches.length} דירות שמתאימות לקריטריונים שלך — שווה לעבור עליהן:`;
   const footer = more > 0 ? `\n\n… ועוד ${more} בלוח.` : "";
   return { text: `${header}\n\n${lines.join("\n\n")}${footer}`, included: shown.length };
 }
@@ -98,5 +101,11 @@ export async function runReviewDigest(opts: { dryRun?: boolean } = {}): Promise<
       sentAt: res.status === "SENT" ? new Date() : null,
     })),
   });
+  // A re-score-surfaced strong match has been shown here — mark it alerted so the
+  // fresh-ingest path never also sends it instantly (no double-notify).
+  const strongIds = shown.filter((m) => m.status === "strong_match").map((m) => m.id);
+  if (strongIds.length > 0) {
+    await prisma.match.updateMany({ where: { id: { in: strongIds } }, data: { alerted: true, alertChannel: res.channel } });
+  }
   return { pending: matches.length, included, sent: res.status === "SENT", channel: res.channel, message: text };
 }
