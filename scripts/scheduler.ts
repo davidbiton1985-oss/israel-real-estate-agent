@@ -5,6 +5,7 @@
 //   4. Records per-source health (shown on the dashboard)
 // Run with: npm run scheduler   (keep it running in a terminal / launchd)
 import { pollSources } from "../src/core/poll";
+import { pingHealthcheck } from "../src/core/systemStatus";
 import { prisma } from "../src/lib/db";
 
 const intervalMin = Number(process.env.SCAN_INTERVAL_MIN ?? "5");
@@ -20,6 +21,9 @@ async function tick() {
     console.log(
       `[watcher ${new Date().toISOString()}] ${emailPart} · leftovers scanned: ${s.scannedLeftovers} · alerts sent: ${s.alertsSent}`
     );
+    // Dead-man's switch: only ping AFTER a clean tick, so a wedged poll stops the
+    // pings and the external monitor (healthchecks.io) raises the alarm.
+    await pingHealthcheck();
   } catch (e) {
     console.error("[watcher] tick failed:", e);
   }

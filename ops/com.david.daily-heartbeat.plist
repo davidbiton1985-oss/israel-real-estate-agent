@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Daily heartbeat: one "I'm alive + last 24h" WhatsApp each morning (see
+  scripts/daily-heartbeat.ts). Its SILENCE is the alarm — if it doesn't arrive
+  by ~09:05, the whole box is likely dark (the one failure the stale-sensor
+  watchdogs cannot report, because they'd be dead too).
+
+  Install (preview:  npx tsx scripts/daily-heartbeat.ts --dry-run ):
+    cp ops/com.david.daily-heartbeat.plist ~/Library/LaunchAgents/
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.david.daily-heartbeat.plist
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.david.daily-heartbeat</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>-lc</string>
+    <string>cd /Users/david/israel-real-estate-agent &amp;&amp; npx tsx scripts/daily-heartbeat.ts</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict><key>Hour</key><integer>9</integer><key>Minute</key><integer>0</integer></dict>
+  <key>StandardOutPath</key>
+  <string>/Users/david/Library/Logs/re-agent-heartbeat.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/david/Library/Logs/re-agent-heartbeat.log</string>
+</dict>
+</plist>

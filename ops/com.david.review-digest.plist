@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Review digest: a few times a day, WhatsApp ONE batched message listing every
+  on-criteria "possible_match" that scored below the alert threshold (see
+  scripts/review-digest.ts + src/core/reviewDigest.ts). Fixes the "silent 79"
+  gap. Only sends when something is pending; each listing is surfaced once.
+
+  Install (after previewing with:  npx tsx scripts/review-digest.ts --dry-run ):
+    cp ops/com.david.review-digest.plist ~/Library/LaunchAgents/
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.david.review-digest.plist
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.david.review-digest</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>-lc</string>
+    <string>cd /Users/david/israel-real-estate-agent &amp;&amp; npx tsx scripts/review-digest.ts</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <array>
+    <dict><key>Hour</key><integer>8</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Hour</key><integer>12</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Hour</key><integer>15</integer><key>Minute</key><integer>30</integer></dict>
+    <dict><key>Hour</key><integer>19</integer><key>Minute</key><integer>0</integer></dict>
+    <dict><key>Hour</key><integer>21</integer><key>Minute</key><integer>30</integer></dict>
+  </array>
+  <key>StandardOutPath</key>
+  <string>/Users/david/Library/Logs/re-agent-review-digest.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/david/Library/Logs/re-agent-review-digest.log</string>
+</dict>
+</plist>
