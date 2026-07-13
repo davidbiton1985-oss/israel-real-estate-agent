@@ -8,26 +8,26 @@ Define your search criteria once. The watcher checks your sources **every 5 minu
 
 ## How it works (the automatic loop)
 
+Two **browser userscripts**, running in your own logged-in tabs, are the primary sensors. A local server parses, dedupes, scores, and WhatsApps you.
+
 ```
-Facebook group/page            ──► your email inbox ──► IMAP poll (every 5 min)
-  notification emails               (free portals like        │
-free portal alerts                   Madlan/Homeless too)     │
-  (Madlan, Homeless, …) ──────────►─┘                  parse → dedup → score
-                                                              │
-Yad2: pinned search tab              strong match ──► WhatsApp immediately
-  + tab-watcher userscript ──►       possible match ─► dashboard
-  /api/capture (every ~5 min)        repost/duplicate ► suppressed
-Facebook posts while browsing        price drop ─────► re-alert 📉
-  ──► one-click bookmarklet ──► /api/capture
+Yad2 pinned search tab ──┐
+  (yad2-tab-watcher)      │
+Facebook #re-agent tab ──┤   /api/capture      strong match ─────► WhatsApp now
+  (groups-watcher:        ├─► + IMAP poll  ──► parse→dedup→score ├─► possible/borderline ─► review digest (batched WhatsApp) + dashboard
+   notifications + sweep) │   (every ~5 min)                     ├─► duplicate/repost ────► suppressed
+free portal / capture ───┘                                       └─► price drop ─────────► re-alert 📉
 ```
 
 The free source stack (Yad2's own email alerts are a **paid** feature, so we don't use them):
 
-1. **Facebook groups/pages (free, zero-risk, primary)** — subscribe to relevant groups with **"All posts" notifications + email notifications**; Facebook's notification emails land in your inbox and the watcher ingests them every 5 minutes with group/author metadata.
-2. **Yad2 tab watcher (free)** — keep your Yad2 search open in a pinned browser tab with a small userscript installed; it re-checks the results every ~5 minutes *in your own browser* and posts new listings to the app. See **"Yad2 for free"** below, including the honest fine print.
-3. **Free competitor portals (free)** — Madlan / Homeless / Komo have historically offered free saved-search email alerts; point them at the same inbox. Many Yad2 listings cross-post there.
-4. **Anything you stumble on while browsing** — select text, click the **capture bookmarklet**, done (`docs/browser-helper.md`).
-5. **Strong matches hit your WhatsApp within one cycle.** Possible matches wait on the dashboard. Duplicates/reposts are suppressed. Price drops re-alert.
+1. **Yad2 tab watcher (free, first-party)** — your Yad2 search open in a pinned tab with a userscript; re-checks every 7–10 min (randomized) *in your own browser* and posts new listings. See **"Yad2 for free"**.
+2. **Facebook reader (free, first-party)** — one pinned `notifications#re-agent` tab with a userscript that reads your group notifications **and** sweeps each target group's chronological feed, so posts Facebook never notifies you about are still caught. See **"Facebook monitoring"**.
+3. **Realta free Telegram alerts (free redundancy)** — [realta.co.il](https://realta.co.il/) aggregates Yad2 + Madlan + Homeless + Komo + OnMap + Facebook and pushes free, immediate, per-match Telegram alerts. Run it as an independent second channel so no single sensor failure silently costs you a listing.
+4. **Free portal emails (supplementary)** — Homeless/Madlan saved-search emails into the IMAP inbox (thin for small cities; **Yad2 email is paid**, and Facebook per-post group emails have been discontinued).
+5. **One-click capture** — select text on any page, click the **capture bookmarklet** (`docs/browser-helper.md`).
+
+Strong matches hit WhatsApp within a cycle. **Possible/borderline matches are batched into a review digest** so nothing on-criteria is ever silently dropped. A **daily heartbeat + watchdogs + an external dead-man's switch** make any outage loud (see "Reliability & safety nets").
 
 ## Daily workflow
 
@@ -56,8 +56,9 @@ Use this when validating the app against **actual** Yad2/Facebook/WhatsApp listi
 ## Legal / safety stance
 
 - **The app does not perform unsafe scraping or bypass platform restrictions.** No CAPTCHA solving, no login-wall bypass, no rate-limit evasion, no stealth/fingerprint tricks, and nothing that risks your accounts.
-- **Automatic ingestion is supported through safe, user-authorized sources**: email alerts from the portals' own saved-search feature (the primary path today), plus — as they become practical — approved APIs, public feeds, and other compliant connectors. The portals push listings to *you* through their official channels; the app reads what you already legitimately receive.
-- Yad2 is a first-class source: its alert emails are recognized automatically (sender → `YAD2` source), and the Yad2 listing ID is extracted from the link for exact duplicate detection.
+- **Automatic ingestion runs through safe, user-authorized paths**: the primary sensors are userscripts reading **your own logged-in browser session** (doing what you'd do by hand — re-checking your own Yad2 search and your own Facebook notifications), plus free portal saved-search **email alerts** the portals push to *your* inbox. The app only reads what you already legitimately see; listing pages themselves are not crawled server-side.
+- When a source shows a verification/checkpoint page, the userscripts **back off and wait for you to solve it by hand** — they never bypass it.
+- The Yad2 listing ID is extracted from each link for exact duplicate detection.
 - Listing URLs are stored as references; listing pages themselves are not crawled.
 
 ## Setup
@@ -87,9 +88,9 @@ This is the main workflow. The portals' own saved-search alert emails become you
    IMAP_USER="your.alerts.inbox@gmail.com"
    IMAP_PASS="<the app password>"
    IMAP_FOLDER="INBOX"
-   EMAIL_ALLOWED_SENDERS="yad2,facebookmail"  # comma-separated From-header filters; empty = ingest all unseen mail
+   EMAIL_ALLOWED_SENDERS="homeless,madlan"  # comma-separated From-header filters; empty = ingest all unseen mail
    ```
-4. **Point free alert emails at that inbox:** Facebook notification emails (see "Facebook monitoring"), and free portal alerts — try **Madlan** (madlan.co.il) and **Homeless** (homeless.co.il) saved-search email alerts; add their sender domains to `EMAIL_ALLOWED_SENDERS` (e.g. `"yad2,facebookmail,madlan,homeless"`). *Yad2's own email alerts are paid — use the free tab watcher instead (next section).* Senders not matching `EMAIL_ALLOWED_SENDERS` are left unread for you.
+4. **Point free alert emails at that inbox:** free portal saved-search alerts — **Homeless** (homeless.co.il) and **Madlan** (madlan.co.il); add their sender domains to `EMAIL_ALLOWED_SENDERS`. Note the honest limits: *Yad2's own email alerts are **paid*** (use the free tab watcher + Realta instead), *Facebook per-post group emails have been **discontinued*** (use the reader userscript instead), and Homeless alerts tend to be a **daily digest** with several listings per email whose inventory is thin for small cities — so email is a supplementary source here, not the spine. Senders not matching `EMAIL_ALLOWED_SENDERS` are left unread for you.
 5. **Validate:** `npm run ingest:email` runs one poll and prints what it found. Then leave `npm run scheduler` running — the dashboard's **🤖 Automatic ingestion** panel shows last check, last success, items found, and errors.
 
 **How the mailbox is used:** the app reads **unseen** messages in the configured folder, ingests the ones from allowed senders, and marks them read. It never sends mail, never deletes anything, and the fingerprint dedup means a re-read email can't double-alert.
@@ -111,20 +112,21 @@ Yad2 charges for saved-search email alerts, and server-side scraping is off the 
 - It works **only while your browser is open** with that tab alive (your Mac is awake anyway for the watcher).
 - It's your real browser and your real session — **no CAPTCHA bypass, no fake fingerprints, no login automation**. If Yad2 ever shows a verification page, you solve it by hand like a normal person; the badge will say "no listings visible" until you do.
 - Auto-refreshing a page may conflict with Yad2's terms on automated access. It's the same behavior as you pressing ⌘R every 5 minutes, at human-plausible frequency with randomized timing, in your own logged-in browser — but you should know it's a gray zone and it's your call to run it. Disabling it takes one click in Tampermonkey.
-- One search URL per tab. Want rent in two areas covered? Either one search covering both cities (recommended — Yad2 supports multi-city search), or two pinned tabs.
+- One search URL per tab. Want rent in two areas covered? Either one search covering both cities (recommended — Yad2 supports multi-city search), or two pinned tabs. **Sort the search newest-first (מיון: לפי תאריך)** so the newest listings are always on page 1 — the watcher reads page 1 only.
+- **Auto-updates:** the script carries `@updateURL`/`@downloadURL` pointing at this repo, so once installed, Tampermonkey pulls new versions automatically — no re-paste.
 
 ## Facebook monitoring
 
-Facebook is a first-class source, covering **all** surfaces — not just groups — through two complementary paths:
+Facebook has **no complete, legitimate feed** — the Groups API was removed in 2024, there's no RSS, and per-post group notification emails have been discontinued (only membership/digest mail still arrives). The realistic free path is reading **your own logged-in session** with a userscript, in one pinned tab.
 
-### Path A — automatic (notification emails, every 5 minutes)
+### Path A — automatic reader (`facebook-groups-watcher.user.js`)
 
-Facebook emails you (from `facebookmail.com`) about activity you subscribed to. Those notification emails ride the **same IMAP inbox** as Yad2 alerts and are recognized automatically: the app extracts the post text, the **surface type** (group/page/shared/…), the **group/page name**, the **author**, and the **post permalink**, then runs the normal pipeline. Setup:
+Install it in Tampermonkey (same steps as the Yad2 script) and open **one** pinned tab at `https://www.facebook.com/notifications#re-agent` — the `#re-agent` marks that tab as the reader. Every 7–12 min (randomized, slower overnight) it:
 
-1. On Facebook (logged in as you, on the account that's in the groups): join the relevant apartment groups and follow relevant broker/real-estate pages.
-2. For each group: group page → **Notifications → All posts** (not "Highlights").
-3. Facebook **Settings → Notifications → Email** → make sure email notifications are on, delivered to the same inbox the app polls.
-4. Keep `facebookmail` in `EMAIL_ALLOWED_SENDERS`. Done — new group/page posts flow in automatically with full metadata; comment/like noise is filtered out.
+- reads your **group notifications** and opens each new post's permalink to capture the full text, **and**
+- **sweeps** one target group's chronological feed per cycle (round-robin), scrolling until it re-sees an already-captured post — so posts Facebook never notified you about (video/reel posts especially) are still caught.
+
+Captured posts run the normal parse → dedup → score → WhatsApp/digest pipeline with group/author metadata. Setup: for each apartment group, set **Notifications → All posts** (helps the notification path; the sweep is the safety net for what it still misses). The reader designation survives browser restarts (a localStorage lease — no more silent multi-hour blind spots), a companion **watchdog** WhatsApps you if the reader goes silent 45+ min, and the script **auto-updates** via Tampermonkey (`@updateURL` → this repo, so no manual reinstall).
 
 ### Path B — one-click capture (any surface, while you browse)
 
@@ -134,12 +136,23 @@ For everything Facebook doesn't email you about — **a stranger's public post, 
 
 | Surface | Coverage |
 |---|---|
-| Groups you joined | ✅ Automatic (notification emails, per-group "All posts") |
-| Pages you follow | ✅ Automatic where Facebook emails page notifications; otherwise one-click capture |
+| Groups you joined | ✅ Automatic (the reader userscript: notifications + chronological sweep, per-group "All posts") |
+| Pages you follow | ✅ Automatic where the reader sees notifications; otherwise one-click capture |
 | Public posts / profiles / broker pages / shares / marketplace | ✅ One click while browsing (capture bookmarklet) |
 | Posts by strangers you never see and never get notified about | ❌ Not possible safely — Facebook offers no public search API, and logged-in crawling risks your account and breaks in days. Mitigation: join the groups where such posts appear (→ automatic), and capture anything you encounter (→ one click). |
 
 Facebook alerts include the source type, group/page name, author, and post link. Reposts/reshares of the same apartment are caught by the existing exact + fuzzy dedup and won't spam you; price drops and material changes re-alert per your profile settings. The dashboard's **📘 Facebook monitoring** panel shows configuration state, last check, and ingestion counts.
+
+## Reliability & safety nets
+
+The honest target isn't "miss zero" (impossible without paid feeds or anti-bot evasion — see "Legal / safety stance") but **miss near-zero, make every gap loud, and never silently drop an on-criteria listing.** The layers, all runnable as `launchd` units (see `ops/`):
+
+- **Review digest** (`scripts/review-digest.ts`, `com.david.review-digest`) — the fix for the biggest leak. A listing can pass every hard filter yet be clamped below the WhatsApp threshold (unknown broker, an unmentioned required amenity, too many missing fields → capped at 79 < 80). Those used to vanish silently. Now every on-criteria `possible_match` is **batched into one "review" WhatsApp** a few times a day (deduped, so each listing is surfaced once). Preview safely with `npx tsx scripts/review-digest.ts --dry-run`.
+- **Re-score on criteria change** (`scripts/rescore.ts`) — editing a profile now re-evaluates **every already-captured listing** against the new criteria (it used to leave them frozen at their old verdict). It sends no instant alerts; newly-qualifying items flow through the review digest, so a criteria change can't trigger a WhatsApp burst.
+- **Daily heartbeat** (`scripts/daily-heartbeat.ts`, `com.david.daily-heartbeat`) — one "I'm alive + last-24h counts" WhatsApp each morning. **Its silence is the alarm** — the only thing that catches a totally dead Mac/server (which the stale-sensor watchdogs can't report, because they'd be dead too).
+- **Per-sensor watchdogs** (`ops/yad2-watchdog.ts`, `ops/fb-watchdog.ts`) — WhatsApp a nudge if the Yad2 tab or the Facebook reader delivers nothing for 45+ min during waking hours (deduped 6h).
+- **External dead-man's switch** — the scheduler pings `HEALTHCHECK_URL` (e.g. a free [healthchecks.io](https://healthchecks.io) check) every clean tick; the external service alerts you over an independent channel if the pings stop. No-op until you set the env var.
+- **Redundancy** — because any single sensor can be CAPTCHA-blocked or closed, run **Realta free Telegram alerts** as an independent second channel (see the source stack above).
 
 ## Using it
 
@@ -189,13 +202,13 @@ If any Twilio var is missing, or if a real Twilio request fails for any reason (
 npm run scheduler
 ```
 
-Every `SCAN_INTERVAL_MIN` minutes (default 5), each tick: polls the IMAP inbox for new alert emails → ingests them through parse/dedup/score → **sends WhatsApp immediately for strong matches** → processes any leftover unscanned listings (manual paste, seed) → records source health for the dashboard panel. `npm run ingest:email` runs a single tick for setup validation, and the dashboard's **Run scan now** button triggers the same pass on demand. Keep the watcher running in a terminal (or wrap it in `launchd`/`pm2` if you want it to survive reboots).
+Every `SCAN_INTERVAL_MIN` minutes (default 5), each tick: polls the IMAP inbox for new alert emails → ingests them through parse/dedup/score → **sends WhatsApp immediately for strong matches** (possible/borderline matches are surfaced separately by the review digest — see "Reliability & safety nets") → processes any leftover unscanned listings (manual paste, seed) → records source health → pings the external dead-man's switch. `npm run ingest:email` runs a single tick for setup validation, and the dashboard's **Run scan now** button triggers the same pass on demand. In production it runs under `launchd` (see `ops/`) so it survives reboots.
 
 ## Scoring (summary)
 
 - Hard rejects: deal-type mismatch, price >5% over max, wrong city, required feature explicitly absent, broker rules (`private_only`+broker, `broker_only`+private, `no_fee_only`+fee exists).
 - Unknown fields never auto-reject — they reduce score and appear as *missing info* to ask about.
-- `private_only` + unknown broker ⇒ capped at possible_match with "broker status unknown".
+- `private_only` + unknown broker ⇒ capped at possible_match with "broker status unknown". These sub-threshold-but-on-criteria listings are **not dropped silently** — they're surfaced by the review digest (see "Reliability & safety nets").
 - Private-preferred + broker listing ⇒ penalty, not rejection.
 - Duplicates are detected (Yad2 ID → URL → content fingerprint, plus fuzzy text matching — see below) and update the existing listing rather than alerting again for no reason (see "Duplicate suppression & price-drop re-alerts" above).
 - **Entry-date matching**: if a profile has a desired entry-by date, an immediate/flexible listing (מיידי/גמיש) or one whose parsed date is at/before that date scores a small bonus ("Entry date looks compatible"); a clearly later date is a soft penalty ("Entry date may be too late") — never a hard rejection; an entry date the parser couldn't read at all is just listed as missing info. Only simple `D.M`, `D/M`, and `D.M.YYYY`-style dates are understood (plus מיידי/גמיש) — no natural-language date math, and a date with no year assumes the current year.
@@ -210,7 +223,7 @@ Reposts of the same apartment across different sources (e.g. Yad2 → Facebook) 
 npm test
 ```
 
-87+ Vitest unit tests: parser extraction, broker classification, Yad2 ID extraction, scoring rules (price/location/brokerage/required-features/entry-date), fuzzy-duplicate detection (reworded reposts vs. genuinely different listings), and the alert-lifecycle decision (`decideAlertAction` — new match / price drop / material change / suppressed) plus Twilio fallback safety — all pure-function tests with no database or network required.
+182 Vitest unit tests: parser extraction, broker classification, Yad2 ID extraction, scoring rules (price/location/brokerage/required-features/entry-date), fuzzy-duplicate detection (reworded reposts vs. genuinely different listings), and the alert-lifecycle decision (`decideAlertAction` — new match / price drop / material change / suppressed) plus Twilio fallback safety — all pure-function tests with no database or network required. The browser userscripts and pacing/lease logic are covered by standalone Node simulations.
 
 ## Stack
 
