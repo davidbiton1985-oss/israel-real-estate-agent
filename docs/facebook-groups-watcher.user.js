@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RE-Agent Facebook Notification Reader
 // @namespace    israel-real-estate-agent
-// @version      12.9
+// @version      12.10
 // @description  Notification-driven reader: one designated tab checks facebook.com/notifications every 7–12 min (randomized, slower overnight); every "posted in group" notification links to the post's own page, which the tab then opens and reads IN FULL — parsed, scored, WhatsApp'd by your local RE-Agent (localhost:3000). v12.8 also sweeps one target group's chronological feed per cycle (round-robin) so posts Facebook never notified about are still caught. Runs only in your own logged-in browser session — no scraping server, no login/CAPTCHA bypass; if Facebook shows a checkpoint the reader BACKS OFF instead of hammering it. Your other Facebook tabs are untouched (the reader runs only in the tab you start with #re-agent).
 // @match        https://www.facebook.com/*
 // @grant        GM_xmlhttpRequest
@@ -34,7 +34,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "12.9";
+  var VERSION = "12.10";
   var APP = "http://localhost:3000/api/capture";
   var SEEN_KEY = "reAgentSeenFbPosts_v12"; // localStorage: post URLs already ingested
   var SEEN_MAX = 1200;
@@ -60,12 +60,32 @@
   var SWEPT_KEY = "reAgentSweptGroups_v12"; // localStorage: groups discovered from posts
   var SWEEP_IDX_KEY = "reAgentSweepIdx_v12"; // localStorage: round-robin cursor
 
-  // ---- reader-tab designation (per-tab; survives navigation) ---------------
-  if (location.hash.indexOf("re-agent") !== -1) {
-    try { sessionStorage.setItem(READER_KEY, "1"); } catch {}
+  // ---- reader-tab designation: a localStorage LEASE (survives restart) -------
+  // The old design kept the role only in sessionStorage, which the browser wipes
+  // on restart — and because NOTIF_URL carries no #re-agent hash, a restarted
+  // tab reloaded role-less and sat silent for 22h. Now the role lives in a
+  // localStorage lease that survives restarts and self-heals: a tab is the
+  // reader if it set the #re-agent hash, already owns the lease, or the lease is
+  // stale/orphaned (no live reader renewed it). The reader renews on every
+  // navigation, so the lease stays fresh while it's working.
+  var LEASE_KEY = "reAgentReaderLease_v12";
+  var LEASE_STALE_MS = 45 * 60000; // > the longest idle gap between cycles (~35m overnight)
+  function myTabId() {
+    var id = "";
+    try { id = sessionStorage.getItem(READER_KEY) || ""; } catch {}
+    if (!id) {
+      id = String(Date.now()) + "." + Math.random().toString(36).slice(2, 8);
+      try { sessionStorage.setItem(READER_KEY, id); } catch {}
+    }
+    return id;
   }
-  var IS_READER = false;
-  try { IS_READER = sessionStorage.getItem(READER_KEY) === "1"; } catch {}
+  function readLease() { try { return JSON.parse(localStorage.getItem(LEASE_KEY) || "null"); } catch { return null; } }
+  function claimLease(owner) { try { localStorage.setItem(LEASE_KEY, JSON.stringify({ owner: owner, ts: Date.now() })); } catch {} }
+  var TAB = myTabId();
+  var lease = readLease();
+  var leaseStale = !lease || Date.now() - lease.ts > LEASE_STALE_MS;
+  var IS_READER = location.hash.indexOf("re-agent") !== -1 || (lease && lease.owner === TAB) || leaseStale;
+  if (IS_READER) claimLease(TAB); // claim (fresh/orphaned) or renew (already ours)
 
   // ---- badge + manual capture button (button on all tabs, badge on reader) --
   var badge = document.createElement("div");
@@ -453,34 +473,60 @@
 
   function handleGroupSweep(item) {
     setBadge("group sweep: " + (item.group || ""));
-    setTimeout(function () {
-      // Nudge the feed so a few posts below the fold render before we read.
-      try { window.scrollBy(0, 1200); } catch {}
+    var MAX_STEPS = 6; // bound the scrolling so one busy group can't run forever
+    var seen = loadSeen();
+
+    // Overlap = the feed now shows a post we've ALREADY ingested. Once we see one,
+    // everything above it (newer) is captured, so scrolling further is pointless
+    // and we can stop with a completeness guarantee for this group. (Reading only
+    // the top screen used to silently lose posts a busy group pushed below fold.)
+    function reachedOverlap() {
+      var arts = outermostArticles();
+      for (var i = 0; i < arts.length; i++) {
+        var links = arts[i].querySelectorAll('a[href*="/groups/"]');
+        for (var j = 0; j < links.length; j++) {
+          var link = canonPostUrl(links[j].href);
+          var pid = link && postIdOf(link);
+          if (pid && seen.indexOf(pid) !== -1) return true;
+        }
+      }
+      return false;
+    }
+
+    function collectAndSend() {
+      var posts = [];
+      outermostArticles().forEach(function (a) {
+        var t = postOwnText(a);
+        if (t.length < 40) return;
+        var link = null;
+        var links = a.querySelectorAll('a[href*="/groups/"]');
+        for (var i = 0; i < links.length; i++) { link = canonPostUrl(links[i].href); if (link) break; }
+        // No own permalink → cannot attribute reliably → drop (attribution must
+        // never guess; a wrong link is worse than a missed capture).
+        if (!link) return;
+        var pid = postIdOf(link);
+        if (pid && seen.indexOf(pid) !== -1) return; // already handled → skip (dedupe re-sends)
+        posts.push({ text: t.slice(0, 3000), url: link });
+      });
+      if (posts.length === 0) { finishItem(item); return; }
+      postToApp({ posts: posts, groupName: item.group || (document.title || ""), url: item.url }, function (d) {
+        // Mark seen only on confirmed ingest, so a failed send retries next sweep.
+        if (d && d.ok) posts.forEach(function (p) { var pid = postIdOf(p.url); if (pid) markSeen(pid); });
+        finishItem(item);
+      });
+    }
+
+    // Scroll the chronological feed until we reach an already-seen post or hit
+    // the step cap, lazy-loading deeper batches each step, then read+send.
+    function step(n) {
       expandSeeMore();
-      setTimeout(function () {
-        var seen = loadSeen();
-        var posts = [];
-        outermostArticles().forEach(function (a) {
-          var t = postOwnText(a);
-          if (t.length < 40) return;
-          var link = null;
-          var links = a.querySelectorAll('a[href*="/groups/"]');
-          for (var i = 0; i < links.length; i++) { link = canonPostUrl(links[i].href); if (link) break; }
-          // No own permalink → cannot attribute reliably → drop (attribution
-          // must never guess; a wrong link is worse than a missed capture).
-          if (!link) return;
-          var pid = postIdOf(link);
-          if (pid && seen.indexOf(pid) !== -1) return; // already handled → skip (dedupe re-sends)
-          posts.push({ text: t.slice(0, 3000), url: link });
-        });
-        if (posts.length === 0) { finishItem(item); return; }
-        postToApp({ posts: posts, groupName: item.group || (document.title || ""), url: item.url }, function (d) {
-          // Mark seen only on confirmed ingest, so a failed send retries next sweep.
-          if (d && d.ok) posts.forEach(function (p) { var pid = postIdOf(p.url); if (pid) markSeen(pid); });
-          finishItem(item);
-        });
-      }, 1800); // let scrolled-in posts settle
-    }, 8000); // initial render of a group page
+      if (n >= MAX_STEPS || reachedOverlap()) { setTimeout(collectAndSend, 800); return; }
+      setBadge("group sweep: " + (item.group || "") + " · scroll " + (n + 1));
+      try { window.scrollBy(0, 1600); } catch {}
+      setTimeout(function () { step(n + 1); }, 1400); // let the next batch render
+    }
+
+    setTimeout(function () { step(0); }, 8000); // initial group-page render
   }
 
   // ---- router ----------------------------------------------------------------
