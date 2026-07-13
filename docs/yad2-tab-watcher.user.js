@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RE-Agent Yad2 Tab Watcher
 // @namespace    israel-real-estate-agent
-// @version      1.6
+// @version      1.7
 // @description  Watches YOUR open Yad2 search tab: every 7–10 min (randomized, slower overnight) it re-checks the results and sends new listings to your local Israel Real Estate Agent (localhost:3000), which scores them and WhatsApps you strong matches. Runs only in your own browser session — no CAPTCHA bypass, no fake fingerprints, no login automation. If Yad2 shows a verification page the watcher BACKS OFF and stops hammering it; solve it yourself like normal and it resumes.
 // @match        https://www.yad2.co.il/realestate/*
 // @noframes
@@ -73,7 +73,12 @@
 
   // --- consecutive empty/challenge reads (persisted across reloads) ----------
   function getEmptyStreak() {
-    return Number(localStorage.getItem(EMPTY_KEY) || "0");
+    try {
+      var n = Number(localStorage.getItem(EMPTY_KEY) || "0");
+      return isNaN(n) ? 0 : n; // guard read + corrupt value (was unwrapped → could throw/NaN-wedge)
+    } catch {
+      return 0;
+    }
   }
   function setEmptyStreak(n) {
     try {
@@ -90,7 +95,17 @@
     var h = new Date().getHours();
     return h >= QUIET_START_HOUR && h < QUIET_END_HOUR;
   }
+  function quietInterval() {
+    // random 20–30 min overnight — slower, but still non-robotic (no on-the-dot beat)
+    return 20 * 60000 + Math.floor(Math.random() * 10 * 60000);
+  }
+  // Hard "never wedge" guarantee: a fallback reload is armed on every page load
+  // and cancelled by the first real scheduleReload. If a cycle ever throws or
+  // hangs before scheduling (e.g. the local server accepts the socket but never
+  // responds), this still reloads and the watcher recovers on its own.
+  var fallbackTimer = setTimeout(function () { location.reload(); }, MAX_MS + 5 * 60000);
   function scheduleReload(ms) {
+    try { clearTimeout(fallbackTimer); } catch {}
     setTimeout(function () {
       location.reload();
     }, ms);
@@ -111,7 +126,7 @@
       return;
     }
     setEmptyStreak(0);
-    scheduleReload(inQuietHours() ? BACKOFF_MS : randInterval());
+    scheduleReload(inQuietHours() ? quietInterval() : randInterval());
   }
 
   // --- collect listing cards from the page ---------------------------------
@@ -165,17 +180,47 @@
   // dead tab and the watchdog sends false WhatsApp nudges.
   function heartbeat() {
     try {
-      fetch(APP, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ heartbeat: "YAD2" }) });
+      fetch(APP, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ heartbeat: "YAD2" }) }).catch(function () {});
     } catch {}
   }
 
-  function processPage() {
+  // Poll the SPA a few times before concluding the page is empty — a slow render
+  // must not be misread as a challenge (which would false-nag and drop cadence).
+  function readCardsWithRetry(attempt, done) {
     var cards = collectCards();
+    if (cards.length > 0 || attempt >= 4) { done(cards); return; }
+    setTimeout(function () { readCardsWithRetry(attempt + 1, done); }, 3000);
+  }
+  // A PerimeterX/verification page is near-empty; a normal Yad2 results page —
+  // even one with zero matches — still renders the full header/filter chrome.
+  function pageLooksBlocked() {
+    try {
+      if (document.querySelector('#px-captcha, [id*="px-captcha"], iframe[src*="captcha" i]')) return true;
+      return document.querySelectorAll("a, button").length < 8;
+    } catch {
+      return false;
+    }
+  }
+
+  function processPage() {
+    readCardsWithRetry(0, function (cards) {
+      handleCards(cards);
+    });
+  }
+
+  function handleCards(cards) {
     if (cards.length === 0) {
-      // Either still loading, or Yad2 is showing a verification/empty page.
-      // We do nothing special — no bypassing. planNext backs off instead of
-      // hammering, and after a few empty reads assumes a challenge and crawls.
-      planNext("empty"); // sets its own badge; NO heartbeat (unreadable ≠ healthy)
+      if (pageLooksBlocked()) {
+        // Verification/blank page — back off, don't hammer, don't bypass.
+        planNext("empty"); // sets its own badge; NO heartbeat (unreadable ≠ healthy)
+      } else {
+        // Genuinely empty results on a healthy page (or still-thin render): report
+        // alive so the watchdog doesn't false-alarm, and keep the normal cadence.
+        heartbeat();
+        setEmptyStreak(0);
+        setBadge("watching · 0 listings · " + new Date().toLocaleTimeString());
+        scheduleReload(inQuietHours() ? quietInterval() : randInterval());
+      }
       return;
     }
     var seen = loadSeen();
@@ -202,10 +247,16 @@
         return;
       }
       var c = fresh[idx];
+      // Timeout: a local server that accepts the socket but never responds would
+      // otherwise leave this promise unsettled forever → the chain (and the next
+      // reload) would never advance. Abort after 15s so the cycle always finishes.
+      var ctrl = new AbortController();
+      var to = setTimeout(function () { try { ctrl.abort(); } catch (e) {} }, 15000);
       fetch(APP, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: c.text, url: c.url, title: document.title }),
+        signal: ctrl.signal,
       })
         .then(function (r) {
           return r.json();
@@ -223,6 +274,7 @@
           setBadge("app not reachable — will retry these next cycle");
         })
         .then(function () {
+          clearTimeout(to);
           setTimeout(function () {
             next(idx + 1);
           }, 400); // gentle pacing between posts
@@ -237,5 +289,9 @@
   // back-off when the page looks blocked. There is deliberately NO unconditional
   // reload timer here anymore — that was what kept reloading the verification
   // page every 5 minutes and escalated the block.
-  setTimeout(processPage, 6000 + Math.floor(Math.random() * 3000)); // jittered render wait
+  setTimeout(function () {
+    // Guard the synchronous entry: if processPage throws before scheduling, the
+    // fallback timer (armed above) still reloads, but back it off explicitly too.
+    try { processPage(); } catch (e) { scheduleReload(BACKOFF_MS); }
+  }, 6000 + Math.floor(Math.random() * 3000)); // jittered render wait
 })();

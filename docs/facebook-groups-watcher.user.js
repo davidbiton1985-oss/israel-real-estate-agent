@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RE-Agent Facebook Notification Reader
 // @namespace    israel-real-estate-agent
-// @version      12.11
+// @version      12.12
 // @description  Notification-driven reader: one designated tab checks facebook.com/notifications every 7–12 min (randomized, slower overnight); every "posted in group" notification links to the post's own page, which the tab then opens and reads IN FULL — parsed, scored, WhatsApp'd by your local RE-Agent (localhost:3000). It also sweeps one target group's chronological feed per cycle (round-robin, scroll-until-overlap) so posts Facebook never notified about are still caught, and survives browser restarts via a localStorage reader lease. Runs only in your own logged-in browser session — no scraping server, no login/CAPTCHA bypass; if Facebook shows a checkpoint the reader BACKS OFF instead of hammering it. Your other Facebook tabs are untouched (the reader runs only in the tab you start with #re-agent).
 // @match        https://www.facebook.com/*
 // @noframes
@@ -35,7 +35,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "12.11";
+  var VERSION = "12.12";
   var APP = "http://localhost:3000/api/capture";
   var SEEN_KEY = "reAgentSeenFbPosts_v12"; // localStorage: post URLs already ingested
   var SEEN_MAX = 1200;
@@ -85,7 +85,12 @@
   var TAB = myTabId();
   var lease = readLease();
   var leaseStale = !lease || Date.now() - lease.ts > LEASE_STALE_MS;
-  var IS_READER = location.hash.indexOf("re-agent") !== -1 || (lease && lease.owner === TAB) || leaseStale;
+  // A stale/orphaned lease is only self-claimed by a tab that has the #re-agent
+  // hash or is ON the notifications page (the reader's home) — never by a random
+  // tab the user is browsing, so self-heal can't hijack/redirect an active tab.
+  var hasHash = location.hash.indexOf("re-agent") !== -1;
+  var onNotifications = /facebook\.com\/notifications/.test(location.href.split("#")[0]);
+  var IS_READER = hasHash || (lease && lease.owner === TAB) || (leaseStale && onNotifications);
   if (IS_READER) claimLease(TAB); // claim (fresh/orphaned) or renew (already ours)
 
   // ---- badge + manual capture button (button on all tabs, badge on reader) --
@@ -178,9 +183,9 @@
     if (groups.length === 0) return;
     var idx = Number(localStorage.getItem(SWEEP_IDX_KEY) || "0") % groups.length;
     var gid = groups[idx];
-    try { localStorage.setItem(SWEEP_IDX_KEY, String((idx + 1) % groups.length)); } catch {}
     var chrono = "https://www.facebook.com/groups/" + gid + "/?sorting_setting=CHRONOLOGICAL";
-    if (queued[chrono]) return;
+    if (queued[chrono]) return; // already queued — bail BEFORE advancing, so this group isn't skipped
+    try { localStorage.setItem(SWEEP_IDX_KEY, String((idx + 1) % groups.length)); } catch {}
     q.push({ url: chrono, group: "sweep " + gid, kind: "group" }); // no seenKey → runs every rotation
     queued[chrono] = 1;
   }
@@ -288,7 +293,12 @@
       var seen = loadSeen();
       var q = loadQueue();
       var queued = {};
-      q.forEach(function (it) { queued[it.url] = 1; });
+      var queuedIds = {}; // dedup by POST ID too — FB exposes the same post as both
+      q.forEach(function (it) { // /posts/<id>/ and /permalink/<id>/, different strings, same id
+        queued[it.url] = 1;
+        var qpid = postIdOf(it.url);
+        if (qpid) queuedIds[qpid] = 1;
+      });
       var anchors = document.querySelectorAll('a[href*="/groups/"]');
       var foundPosts = 0, foundGroups = 0;
       function enqueuePost(url, groupName) {
@@ -296,9 +306,10 @@
         // numeric-gid, vanity-slug and permalink URL forms; string keys let
         // the same dead post re-queue forever (seen live: 10+ re-reads).
         var pid = postIdOf(url);
-        if (!pid || seen.indexOf(pid) !== -1 || queued[url]) return;
+        if (!pid || seen.indexOf(pid) !== -1 || queued[url] || queuedIds[pid]) return;
         q.push({ url: url, group: groupName, kind: "post" });
         queued[url] = 1;
+        queuedIds[pid] = 1;
         foundPosts++;
       }
       for (var i = 0; i < anchors.length; i++) {
@@ -367,7 +378,13 @@
 
   function finishItem(item, msg) {
     rememberGroup(groupIdOf(item.url)); // self-extend the sweep set from real activity
-    markSeen(item.seenKey || postIdOf(item.url) || item.url);
+    // Group sweeps have no post id — only mark the per-day fallback key, never the
+    // chronological group URL, so sweeps don't burn slots in the post-seen window.
+    if (item.kind === "group") {
+      if (item.seenKey) markSeen(item.seenKey);
+    } else {
+      markSeen(item.seenKey || postIdOf(item.url) || item.url);
+    }
     var q = loadQueue();
     q = q.filter(function (it) { return it.url !== item.url; });
     saveQueue(q);
@@ -465,7 +482,21 @@
         postToApp(
           { posts: [{ text: text, url: item.url }], groupName: item.group || (document.title || ""), url: item.url },
           function (d) {
-            finishItem(item, d && d.ok ? "✓ sent " + text.length + " chars" : "✗ send failed");
+            if (d && d.ok) { finishItem(item, "✓ sent " + text.length + " chars"); return; }
+            // Transient send failure (server restarting / 500 / timeout): do NOT
+            // mark seen and drop it — that would silently lose a matching post.
+            // Re-queue at the back for a bounded number of retries instead.
+            var q = loadQueue().filter(function (it) { return it.url !== item.url; });
+            item.sendTries = (item.sendTries || 0) + 1;
+            if (item.sendTries < 3) {
+              q.push(item);
+              setBadge("✗ send failed — requeued (" + item.sendTries + "/3)");
+            } else {
+              markSeen(item.seenKey || postIdOf(item.url) || item.url); // give up after 3, don't spin forever
+              setBadge("✗ send failed 3× — skipping");
+            }
+            saveQueue(q);
+            goNext();
           }
         );
       }, 1500); // let "see more" expansion settle
