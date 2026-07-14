@@ -15,13 +15,30 @@ import { sendAlert } from "../src/core/alert";
 
 const READER_URL = "https://www.facebook.com/notifications#re-agent";
 
-// Self-heal: reopen the reader tab. The #re-agent hash makes the new tab claim
-// the localStorage lease and resume, which recovers the common outage classes
-// (Mac woke and the tab didn't resume, tab closed, Chrome discarded it) WITHOUT
-// bothering David. A CAPTCHA is the one case this can't fix — that still escalates.
+// Self-heal: revive the reader tab. Navigate an EXISTING facebook.com tab to the
+// reader URL (the #re-agent hash reclaims the lease) — reusing a tab, never
+// `open`ing a new one, because a duplicate tab means TWO readers contend for the
+// single lease and the badge ping-pongs (this bug spawned the second tab once).
+// Only open a fresh tab if Chrome has no facebook tab at all.
 function reopenReaderTab(): Promise<void> {
+  const script = [
+    'tell application "Google Chrome"',
+    "  set didReuse to false",
+    "  repeat with w in windows",
+    "    repeat with t in tabs of w",
+    '      if (URL of t) contains "facebook.com" then',
+    '        set URL of t to "' + READER_URL + '"',
+    "        set didReuse to true",
+    "        exit repeat",
+    "      end if",
+    "    end repeat",
+    "    if didReuse then exit repeat",
+    "  end repeat",
+    '  if not didReuse then open location "' + READER_URL + '"',
+    "end tell",
+  ].join("\n");
   return new Promise((resolve) => {
-    execFile("open", ["-a", "Google Chrome", READER_URL], () => resolve());
+    execFile("osascript", ["-e", script], () => resolve());
   });
 }
 

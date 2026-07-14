@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RE-Agent Facebook Notification Reader
 // @namespace    israel-real-estate-agent
-// @version      12.13
+// @version      12.14
 // @description  Notification-driven reader: one designated tab checks facebook.com/notifications every 7–12 min (randomized, slower overnight); every "posted in group" notification links to the post's own page, which the tab then opens and reads IN FULL — parsed, scored, WhatsApp'd by your local RE-Agent (localhost:3000). It also sweeps one target group's chronological feed per cycle (round-robin, scroll-until-overlap) so posts Facebook never notified about are still caught, and survives browser restarts via a localStorage reader lease. Runs only in your own logged-in browser session — no scraping server, no login/CAPTCHA bypass; if Facebook shows a checkpoint the reader BACKS OFF instead of hammering it. Your other Facebook tabs are untouched (the reader runs only in the tab you start with #re-agent).
 // @match        https://www.facebook.com/*
 // @noframes
@@ -35,7 +35,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "12.13";
+  var VERSION = "12.14";
   var APP = "http://localhost:3000/api/capture";
   var SEEN_KEY = "reAgentSeenFbPosts_v12"; // localStorage: post URLs already ingested
   var SEEN_MAX = 1200;
@@ -380,11 +380,17 @@
     for (var j = 0; j < nested.length; j++) nested[j].style.display = saved[j];
     return txt;
   }
+  // FB truncates long posts behind a "see more" toggle; if it isn't clicked the
+  // body is only a ~95-char preview and the parser can't read rooms/price/city.
+  // Match the SHORT toggle label (length-guarded so we never click a paragraph
+  // that merely contains the word), across the known FB variants.
+  var SEE_MORE_LABELS = ["See more", "הצג עוד", "ראה עוד", "ראו עוד", "עוד"];
   function expandSeeMore() {
     var nodes = document.querySelectorAll('[role="button"], div[tabindex], span');
     nodes.forEach(function (n) {
       var t = (n.innerText || "").trim();
-      if (t === "See more" || t === "הצג עוד" || t === "ראה עוד") {
+      if (t.length > 12) return; // a see-more toggle is a short label, never body text
+      if (SEE_MORE_LABELS.indexOf(t) !== -1) {
         try { n.click(); } catch {}
       }
     });
@@ -418,6 +424,14 @@
     for (var i = 0; i < hooks.length; i++) {
       var t = (hooks[i].innerText || "").trim();
       if (t.length > best.length) { best = t; via = "message-hook"; }
+      // The message-hook is often a TRUNCATED preview (~95 chars) even after the
+      // post renders. Its OWN enclosing article holds the full body (same post →
+      // no cross-attribution), so prefer that when it's longer.
+      var art = hooks[i].closest('[role="article"]');
+      if (art) {
+        var at = postOwnText(art);
+        if (at.length > best.length) { best = at; via = "hook-article"; }
+      }
     }
     if (best.length >= 25) return { text: best, via: via, hooks: hooks.length };
 
