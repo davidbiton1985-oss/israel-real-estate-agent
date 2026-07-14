@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RE-Agent Facebook Notification Reader
 // @namespace    israel-real-estate-agent
-// @version      12.14
+// @version      12.15
 // @description  Notification-driven reader: one designated tab checks facebook.com/notifications every 7–12 min (randomized, slower overnight); every "posted in group" notification links to the post's own page, which the tab then opens and reads IN FULL — parsed, scored, WhatsApp'd by your local RE-Agent (localhost:3000). It also sweeps one target group's chronological feed per cycle (round-robin, scroll-until-overlap) so posts Facebook never notified about are still caught, and survives browser restarts via a localStorage reader lease. Runs only in your own logged-in browser session — no scraping server, no login/CAPTCHA bypass; if Facebook shows a checkpoint the reader BACKS OFF instead of hammering it. Your other Facebook tabs are untouched (the reader runs only in the tab you start with #re-agent).
 // @match        https://www.facebook.com/*
 // @noframes
@@ -35,7 +35,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "12.14";
+  var VERSION = "12.15";
   var APP = "http://localhost:3000/api/capture";
   var SEEN_KEY = "reAgentSeenFbPosts_v12"; // localStorage: post URLs already ingested
   var SEEN_MAX = 1200;
@@ -457,6 +457,8 @@
 
   function handlePostPage(item) {
     var waited = 0;
+    var lastLen = -1;
+    var stableCount = 0;
     setBadge("reading… (" + loadQueue().length + " in queue)");
     var timer = setInterval(function () {
       waited += STEP_MS;
@@ -466,9 +468,19 @@
         expandSeeMore();
       }
       var probe = bestPostText();
-      var ready = probe.text.length >= 25;
-      if (!ready && waited < POST_WAIT_MS) return;
+      var len = probe.text.length;
+      // Wait for the body to STOP GROWING before reading. Facebook hydrates the
+      // post progressively — the message hook was seen starting at ~95 chars and
+      // settling at ~463 — and reading at the first ≥25 chars grabbed the
+      // truncated preview, so the parser got nothing. "Ready" now means the
+      // length held steady for ~2 polls (or we hit the overall wait cap).
+      if (len > lastLen) stableCount = 0;
+      else if (len >= 25) stableCount++;
+      lastLen = len;
+      var stable = len >= 25 && stableCount >= 2;
+      if (!stable && waited < POST_WAIT_MS) return;
       clearInterval(timer);
+      var ready = len >= 25;
       if (!ready) {
         // Partial text = the page was still streaming in (seen live: a post cut
         // off at "🏡 למכירה – 4.5" after 12s). One fresh reload usually
