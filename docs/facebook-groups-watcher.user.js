@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RE-Agent Facebook Notification Reader
 // @namespace    israel-real-estate-agent
-// @version      12.12
+// @version      12.13
 // @description  Notification-driven reader: one designated tab checks facebook.com/notifications every 7–12 min (randomized, slower overnight); every "posted in group" notification links to the post's own page, which the tab then opens and reads IN FULL — parsed, scored, WhatsApp'd by your local RE-Agent (localhost:3000). It also sweeps one target group's chronological feed per cycle (round-robin, scroll-until-overlap) so posts Facebook never notified about are still caught, and survives browser restarts via a localStorage reader lease. Runs only in your own logged-in browser session — no scraping server, no login/CAPTCHA bypass; if Facebook shows a checkpoint the reader BACKS OFF instead of hammering it. Your other Facebook tabs are untouched (the reader runs only in the tab you start with #re-agent).
 // @match        https://www.facebook.com/*
 // @noframes
@@ -35,7 +35,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "12.12";
+  var VERSION = "12.13";
   var APP = "http://localhost:3000/api/capture";
   var SEEN_KEY = "reAgentSeenFbPosts_v12"; // localStorage: post URLs already ingested
   var SEEN_MAX = 1200;
@@ -60,6 +60,7 @@
   ];
   var SWEPT_KEY = "reAgentSweptGroups_v12"; // localStorage: groups discovered from posts
   var SWEEP_IDX_KEY = "reAgentSweepIdx_v12"; // localStorage: round-robin cursor
+  var RESWEEP_KEY = "reAgentReSweep_v12"; // localStorage: a group that overflowed its last sweep
 
   // ---- reader-tab designation: a localStorage LEASE (survives restart) -------
   // The old design kept the role only in sessionStorage, which the browser wipes
@@ -181,11 +182,24 @@
     if (new Date().getHours() < 7) return; // overnight: skip sweeps (no posts, less activity)
     var groups = knownGroups();
     if (groups.length === 0) return;
-    var idx = Number(localStorage.getItem(SWEEP_IDX_KEY) || "0") % groups.length;
-    var gid = groups[idx];
-    var chrono = "https://www.facebook.com/groups/" + gid + "/?sorting_setting=CHRONOLOGICAL";
-    if (queued[chrono]) return; // already queued — bail BEFORE advancing, so this group isn't skipped
-    try { localStorage.setItem(SWEEP_IDX_KEY, String((idx + 1) % groups.length)); } catch {}
+    // Priority: a group that overflowed its last sweep (hit the scroll cap without
+    // reaching overlap) is re-swept before the rotation advances, so its backlog
+    // is drained instead of waiting ~an hour for the cursor to wrap back.
+    var reGid = "";
+    try { reGid = localStorage.getItem(RESWEEP_KEY) || ""; } catch {}
+    var gid, chrono;
+    if (reGid && groups.indexOf(reGid) !== -1) {
+      gid = reGid;
+      chrono = "https://www.facebook.com/groups/" + gid + "/?sorting_setting=CHRONOLOGICAL";
+      if (queued[chrono]) return;
+      try { localStorage.removeItem(RESWEEP_KEY); } catch {} // consumed; if it overflows again the sweep re-sets it
+    } else {
+      var idx = Number(localStorage.getItem(SWEEP_IDX_KEY) || "0") % groups.length;
+      gid = groups[idx];
+      chrono = "https://www.facebook.com/groups/" + gid + "/?sorting_setting=CHRONOLOGICAL";
+      if (queued[chrono]) return; // already queued — bail BEFORE advancing, so this group isn't skipped
+      try { localStorage.setItem(SWEEP_IDX_KEY, String((idx + 1) % groups.length)); } catch {}
+    }
     q.push({ url: chrono, group: "sweep " + gid, kind: "group" }); // no seenKey → runs every rotation
     queued[chrono] = 1;
   }
@@ -484,16 +498,19 @@
           function (d) {
             if (d && d.ok) { finishItem(item, "✓ sent " + text.length + " chars"); return; }
             // Transient send failure (server restarting / 500 / timeout): do NOT
-            // mark seen and drop it — that would silently lose a matching post.
-            // Re-queue at the back for a bounded number of retries instead.
+            // mark seen and drop it — this is a post we successfully READ, i.e. a
+            // matching apartment we'd otherwise lose. Keep re-queuing across cycles
+            // for up to 6h (survives a local-server restart or a longer outage,
+            // which 3 quick tries within one rotation could not) before giving up.
             var q = loadQueue().filter(function (it) { return it.url !== item.url; });
             item.sendTries = (item.sendTries || 0) + 1;
-            if (item.sendTries < 3) {
+            item.firstFailedAt = item.firstFailedAt || Date.now();
+            if (Date.now() - item.firstFailedAt < 6 * 3600000) {
               q.push(item);
-              setBadge("✗ send failed — requeued (" + item.sendTries + "/3)");
+              setBadge("✗ send failed — will retry (attempt " + item.sendTries + ")");
             } else {
-              markSeen(item.seenKey || postIdOf(item.url) || item.url); // give up after 3, don't spin forever
-              setBadge("✗ send failed 3× — skipping");
+              markSeen(item.seenKey || postIdOf(item.url) || item.url); // gave up after 6h of failures
+              setBadge("✗ send failing 6h — skipping");
             }
             saveQueue(q);
             goNext();
@@ -506,21 +523,24 @@
   function handleGroupSweep(item) {
     setBadge("group sweep: " + (item.group || ""));
     var MAX_STEPS = 6; // bound the scrolling so one busy group can't run forever
+    var OVERLAP_K = 3; // consecutive already-seen posts that define the overlap
     var seen = loadSeen();
+    var gid = groupIdOf(item.url);
 
-    // Overlap = the feed now shows a post we've ALREADY ingested. Once we see one,
-    // everything above it (newer) is captured, so scrolling further is pointless
-    // and we can stop with a completeness guarantee for this group. (Reading only
-    // the top screen used to silently lose posts a busy group pushed below fold.)
+    // Overlap = K CONSECUTIVE already-seen posts in feed order. A single seen post
+    // must NOT stop the sweep: a PINNED already-seen post sits at the top of the
+    // chronological feed on every sweep and would short-circuit at step 0 (the new
+    // posts below it never read); one stray repost would do the same. Requiring a
+    // run of K means we only stop once we're genuinely back in captured territory.
     function reachedOverlap() {
       var arts = outermostArticles();
+      var run = 0;
       for (var i = 0; i < arts.length; i++) {
+        var pid = null;
         var links = arts[i].querySelectorAll('a[href*="/groups/"]');
-        for (var j = 0; j < links.length; j++) {
-          var link = canonPostUrl(links[j].href);
-          var pid = link && postIdOf(link);
-          if (pid && seen.indexOf(pid) !== -1) return true;
-        }
+        for (var j = 0; j < links.length; j++) { var link = canonPostUrl(links[j].href); pid = link && postIdOf(link); if (pid) break; }
+        if (!pid) continue; // ad / suggested / no-permalink article — ignore, don't reset the run
+        if (seen.indexOf(pid) !== -1) { run++; if (run >= OVERLAP_K) return true; } else run = 0;
       }
       return false;
     }
@@ -548,11 +568,21 @@
       });
     }
 
-    // Scroll the chronological feed until we reach an already-seen post or hit
-    // the step cap, lazy-loading deeper batches each step, then read+send.
+    // Scroll the chronological feed until we reach overlap or hit the step cap,
+    // lazy-loading deeper batches each step, then read+send.
     function step(n) {
       expandSeeMore();
-      if (n >= MAX_STEPS || reachedOverlap()) { setTimeout(collectAndSend, 800); return; }
+      if (reachedOverlap()) { setTimeout(collectAndSend, 800); return; }
+      if (n >= MAX_STEPS) {
+        // Hit the scroll cap WITHOUT reaching overlap → this group had more new
+        // posts than we scrolled. Flag it to be re-swept next cycle instead of
+        // rotating past it, else the overflow is silently lost until the cursor
+        // wraps ~an hour later.
+        if (gid) { try { localStorage.setItem(RESWEEP_KEY, gid); } catch {} }
+        setBadge("group sweep: " + (item.group || "") + " · overflow — will re-sweep");
+        setTimeout(collectAndSend, 800);
+        return;
+      }
       setBadge("group sweep: " + (item.group || "") + " · scroll " + (n + 1));
       try { window.scrollBy(0, 1600); } catch {}
       setTimeout(function () { step(n + 1); }, 1400); // let the next batch render
