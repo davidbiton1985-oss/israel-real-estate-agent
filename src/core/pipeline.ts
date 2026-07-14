@@ -4,7 +4,7 @@ import { prisma } from "../lib/db";
 import { parseListing } from "./parser";
 import { fingerprint, isLikelyDuplicateText } from "./dedup";
 import { scoreListing } from "./matching";
-import { buildAlertMessage, buildPriceDropMessage, buildMaterialChangeMessage, sendAlert, decideAlertAction } from "./alert";
+import { buildAlertMessage, buildPriceDropMessage, buildMaterialChangeMessage, sendAlert, decideAlertAction, intendsWhatsapp } from "./alert";
 import type { Listing } from "@prisma/client";
 
 export type Source = "YAD2" | "FACEBOOK" | "WHATSAPP" | "MANUAL" | "URL" | "DEMO" | "EMAIL";
@@ -236,14 +236,15 @@ export async function matchListing(listing: Listing): Promise<MatchSummary> {
         sentAt: sent.status === "SENT" ? new Date() : null,
       },
     });
-    // "Alerted" means REACHED THE USER. When Twilio was attempted but failed
-    // (e.g. the trial account's 50/day cap → console fallback), the match must
-    // stay un-alerted so the next scan retries — otherwise a real apartment
-    // found on a capped day is lost forever, not delayed. A console "send"
-    // WITHOUT a Twilio attempt (Twilio not configured) still counts as
-    // delivered — console IS the channel then, and re-alert loops must not
-    // return (the 200×-per-post flood).
-    const delivered = !(sent.twilioAttempted && sent.channel === "console");
+    // "Alerted" means REACHED THE USER. A console outcome counts as delivered
+    // ONLY for a pure console-only user (no Twilio configured at all). If the
+    // user intends WhatsApp (any Twilio var set) and we still land on console —
+    // whether Twilio was attempted-and-failed (cap/expiry) OR never attempted
+    // because a var is missing/typo'd — the phone did NOT get it, so keep the
+    // match un-alerted and retry next scan. Without this, one `.env` regression
+    // silently marks every match "alerted" and suppresses it forever.
+    const consoleOnly = sent.channel === "console";
+    const delivered = consoleOnly ? !(sent.twilioAttempted || intendsWhatsapp()) : true;
     if (delivered) {
       await prisma.match.update({
         where: { id: match.id },

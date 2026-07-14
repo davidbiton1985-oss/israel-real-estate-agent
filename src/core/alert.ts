@@ -54,11 +54,16 @@ export function describeFbSource(listing: Listing): string | null {
 // The user's chosen alert shape: a one-line Hebrew summary, then the ORIGINAL
 // Hebrew post verbatim, then the direct link. No English, no field dump.
 export function buildAlertMessage(listing: Listing): string {
+  const raw = (listing.rawText ?? "").trim();
+  // Twilio caps a WhatsApp body at ~1600 chars; a long post (rawText up to 3000)
+  // used to fail (error 21617) → console fallback → retried forever, identically.
+  // Cap the body so a matching apartment always gets delivered.
+  const body = raw.length > 1200 ? raw.slice(0, 1200) + "…\n(הטקסט קוצר — הפרטים המלאים בקישור)" : raw;
   return [
     "🏠 דירה חדשה שמתאימה לך",
     summaryLine(listing),
     SEP,
-    (listing.rawText ?? "").trim(),
+    body,
     "",
     `🔗 ${listing.url ?? "—"}`,
   ].join("\n");
@@ -138,6 +143,18 @@ const REQUIRED_TWILIO_VARS = ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO
 export function twilioConfigVars(): { configured: boolean; missing: string[] } {
   const missing = REQUIRED_TWILIO_VARS.filter((k) => !process.env[k]);
   return { configured: missing.length === 0, missing };
+}
+
+/**
+ * True if the user INTENDS WhatsApp delivery (any Twilio var is set). When true,
+ * a console-only outcome means the phone did NOT get the alert (misconfig /
+ * partial config / a typo'd var) — so it must NOT count as delivered, or a
+ * `.env` regression would silently mark every match "alerted" and suppress it
+ * forever. A user with NO Twilio vars at all is a console-only user; for them
+ * console IS the channel and counts as delivered.
+ */
+export function intendsWhatsapp(): boolean {
+  return REQUIRED_TWILIO_VARS.some((k) => !!process.env[k]);
 }
 
 /** @deprecated use twilioConfigVars() for details on what's missing */
