@@ -12,12 +12,28 @@
 //      server / Twilio is dead and cannot alert about itself.
 import { prisma } from "../lib/db";
 
-/** Fire-and-forget external heartbeat. No-op unless HEALTHCHECK_URL is set. */
+const STALE_MS = 45 * 60000;
+
+/**
+ * External dead-man's switch. No-op unless HEALTHCHECK_URL is set. Pings ONLY
+ * when every browser sensor that has ever reported is currently FRESH — so the
+ * external monitor (e.g. healthchecks.io) alarms on COVERAGE loss (a stale
+ * sensor), not merely on the scheduler process dying. This alarm path is
+ * independent of Twilio AND the Mac, so it fires even when the in-app watchdogs
+ * cannot (they share the Mac/Twilio they're trying to report on).
+ */
 export async function pingHealthcheck(): Promise<void> {
   const url = process.env.HEALTHCHECK_URL;
   if (!url) return;
   try {
-    await fetch(url, { method: "GET" });
+    const [y, f] = await Promise.all([
+      prisma.sourceHealth.findUnique({ where: { source: "YAD2_BROWSER" } }),
+      prisma.sourceHealth.findUnique({ where: { source: "FACEBOOK" } }),
+    ]);
+    const everSucceeded = [y, f].filter((h): h is NonNullable<typeof h> => !!h?.lastSuccessAt);
+    const allFresh = everSucceeded.length > 0 && everSucceeded.every((h) => Date.now() - h.lastSuccessAt!.getTime() < STALE_MS);
+    if (allFresh) await fetch(url, { method: "GET" });
+    // else: skip the ping → the monitor's grace period elapses → external alarm.
   } catch {
     /* never let a monitoring ping break the tick */
   }
@@ -40,11 +56,19 @@ export async function buildDailyHeartbeat(): Promise<string> {
   ]);
   const [yAge, fAge] = await Promise.all([ageMin("YAD2_BROWSER"), ageMin("FACEBOOK")]);
   const fmtAge = (m: number | null) => (m == null ? "אף פעם" : `${m} ד'`);
-  return [
+  const lines = [
     "✅ RE-Agent פעיל (סיכום 24 שעות)",
     `נקלטו: Yad2 ${yad2} · פייסבוק ${fb} · מייל ${email}`,
     `התראות שנשלחו: ${alerts} · ממתינות לבדיקה: ${reviewPending}`,
     `חיישנים — קליטה אחרונה: Yad2 ${fmtAge(yAge)} · פייסבוק ${fmtAge(fAge)}`,
-    "(אם ההודעה הזו לא הגיעה בבוקר — משהו במערכת מת, בדוק אותה)",
-  ].join("\n");
+  ];
+  // "Alive-but-blind" flag: a sensor that's heartbeating (fresh) yet captured
+  // NOTHING in 24h is the signature of extraction rot (a DOM/selector change) —
+  // it looks identical to a quiet market, so surface it softly for a glance
+  // rather than staying invisibly green.
+  const fresh = (m: number | null) => m != null && m < 45;
+  if (fresh(yAge) && yad2 === 0) lines.push("⚠️ Yad2 חי אך 0 קליטות ב-24ש — בדוק שהטאב מציג מודעות");
+  if (fresh(fAge) && fb === 0) lines.push("⚠️ פייסבוק חי אך 0 קליטות ב-24ש — בדוק את הקורא");
+  lines.push("(אם ההודעה הזו לא הגיעה בבוקר — משהו במערכת מת, בדוק אותה)");
+  return lines.join("\n");
 }
