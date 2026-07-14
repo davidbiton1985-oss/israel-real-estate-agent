@@ -153,6 +153,15 @@ The honest target isn't "miss zero" (impossible without paid feeds or anti-bot e
 - **Per-sensor watchdogs** (`ops/yad2-watchdog.ts`, `ops/fb-watchdog.ts`) — WhatsApp a nudge if the Yad2 tab or the Facebook reader delivers nothing for 45+ min during waking hours (deduped 6h).
 - **External dead-man's switch** — the scheduler pings `HEALTHCHECK_URL` (e.g. a free [healthchecks.io](https://healthchecks.io) check) every clean tick; the external service alerts you over an independent channel if the pings stop. No-op until you set the env var.
 - **Redundancy** — because any single sensor can be CAPTCHA-blocked or closed, run **Realta free Telegram alerts** as an independent second channel (see the source stack above).
+- **Self-healing** — when the Facebook reader goes 45+ min stale during waking hours, `fb-watchdog` first **auto-reopens the reader tab** (`open -a "Google Chrome" …notifications#re-agent` — the hash reclaims the lease) and only WhatsApps you if that didn't bring it back next cycle (i.e. a real CAPTCHA). So a Mac-woke / tab-dropped outage recovers unattended.
+
+### Keeping the sensors alive (browser substrate — zero code, do once)
+The sensors run in Chrome tabs, so Chrome/macOS settings matter as much as the code:
+- **Chrome Memory Saver** discards inactive tabs (a prime cause of silent stalls). Settings → Performance → add `facebook.com` and `yad2.co.il` to **"Always keep these sites active."**
+- **Session restore**: Chrome → "Continue where you left off," and keep both tabs **pinned** so they reopen on launch.
+- **Sleep**: keep the Mac awake (Energy settings / `caffeinate` / Amphetamine) so launchd, the watchers, and the watchdogs keep running. (A Mac that's *off* is fine — the missing daily heartbeat is the correct "system down" signal — but a Mac *asleep* looks alive while capturing nothing.)
+- **Tampermonkey**: enable "Check for updates" so `@version` bumps propagate without a manual paste.
+- Confirm all jobs are loaded: `launchctl list | grep david`.
 
 ## Using it
 

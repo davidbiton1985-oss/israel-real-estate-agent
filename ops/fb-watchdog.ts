@@ -9,8 +9,21 @@
 // independent. Cooldown is scoped by reason so the two watchdogs don't suppress
 // each other.
 import { readFileSync } from "fs";
+import { execFile } from "child_process";
 import { prisma } from "../src/lib/db";
 import { sendAlert } from "../src/core/alert";
+
+const READER_URL = "https://www.facebook.com/notifications#re-agent";
+
+// Self-heal: reopen the reader tab. The #re-agent hash makes the new tab claim
+// the localStorage lease and resume, which recovers the common outage classes
+// (Mac woke and the tab didn't resume, tab closed, Chrome discarded it) WITHOUT
+// bothering David. A CAPTCHA is the one case this can't fix — that still escalates.
+function reopenReaderTab(): Promise<void> {
+  return new Promise((resolve) => {
+    execFile("open", ["-a", "Google Chrome", READER_URL], () => resolve());
+  });
+}
 
 // Standalone tsx doesn't load .env into process.env — load it explicitly
 // before doing anything (the Next server loads .env natively; scripts don't).
@@ -28,6 +41,7 @@ function loadEnv() {
 
 const STALE_MINUTES = 45; // > the 7–12 min daytime scan cadence + queue work
 const NUDGE_COOLDOWN_H = 6;
+const SELFHEAL_WINDOW_MIN = 50; // > the 30-min watchdog interval, so the next run escalates rather than re-reopening
 
 async function main() {
   loadEnv();
@@ -41,6 +55,20 @@ async function main() {
   const lastNudge = await prisma.alert.findFirst({ where: { kind: "WATCHDOG", reason: "FB_STALE" }, orderBy: { createdAt: "desc" } });
   if (lastNudge && Date.now() - lastNudge.createdAt.getTime() < NUDGE_COOLDOWN_H * 3600_000) {
     return console.log("[fb-watchdog] stale but already nudged recently");
+  }
+
+  // Escalation: first stale detection → silently auto-reopen the tab and give it
+  // ~one watchdog cycle to resume. Only if a reopen was already tried recently
+  // and it's STILL stale (the reopen didn't help → almost certainly a CAPTCHA)
+  // do we bother David. So a Mac-woke/tab-dropped outage self-heals unattended.
+  const lastHeal = await prisma.alert.findFirst({ where: { kind: "WATCHDOG", reason: "FB_SELFHEAL" }, orderBy: { createdAt: "desc" } });
+  const healedRecently = lastHeal && Date.now() - lastHeal.createdAt.getTime() < SELFHEAL_WINDOW_MIN * 60000;
+  if (!healedRecently) {
+    await reopenReaderTab();
+    await prisma.alert.create({
+      data: { kind: "WATCHDOG", channel: "none", status: "SENT", reason: "FB_SELFHEAL", message: "auto-reopened the reader tab (self-heal); escalate only if still stale next cycle", sentAt: new Date() },
+    });
+    return console.log(`[fb-watchdog] stale ${Math.round(ageMin)}m → auto-reopened reader tab; will escalate next cycle if unresolved`);
   }
 
   const ageText = ageMin === Infinity ? "אף פעם" : `לפני ${Math.round(ageMin)} דקות`;
