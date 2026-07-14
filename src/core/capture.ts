@@ -11,15 +11,17 @@ export interface CaptureClassification {
   healthSource: "FACEBOOK" | "YAD2_BROWSER" | null;
 }
 
-// A single Yad2 card carries ONE price tag and ONE rooms tag. A capture holding
-// several of BOTH is the results grid merged into one blob (tab-watcher < v1.1
-// climbed too far up the DOM) — its parsed fields and its URL then belong to
-// DIFFERENT apartments, so reject it rather than store a corrupt listing.
-// Strict AND: a legit post that merely mentions rooms twice is not rejected.
+// A merged results-grid blob (tab-watcher < v1.1 climbed too far up the DOM)
+// bundles MANY apartments, so its parsed fields and URL belong to different
+// listings — reject it. Threshold is 3+ of BOTH price and rooms tags: a real
+// merged grid shows several of each, whereas a legit single card can carry two
+// price tags for an entirely valid reason — a PRICE DROP (old struck-through +
+// new price) — which is the highest-value event to capture and must NOT be
+// rejected (it would also be marked handled and retired forever by the watcher).
 export function looksLikeMergedYad2Cards(text: string): boolean {
   const priceTags = (text.match(/\d[\d,]{2,}\s*₪/g) || []).length;
   const roomTags = (text.match(/\d+(?:\.\d)?\s*חדרים/g) || []).length;
-  return priceTags >= 2 && roomTags >= 2;
+  return priceTags >= 3 && roomTags >= 3;
 }
 
 export function classifyCaptureSource(url: string | null, title: string | null): CaptureClassification {

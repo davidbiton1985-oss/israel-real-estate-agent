@@ -28,6 +28,14 @@ describe("looksLikeMergedYad2Cards — reject grid-blob captures (tab-watcher < 
     const twiceRooms = 'דירת 4 חדרים, מתוכם 3 חדרים עם מרפסת. 6,500 ₪ לחודש';
     expect(looksLikeMergedYad2Cards(twiceRooms)).toBe(false);
   });
+
+  it("passes a PRICE-DROP card (old + new price, rooms twice) — must not be rejected/retired", () => {
+    // A single card showing a price drop: struck-through old price + new price,
+    // and "4 חדרים" in both the title and the details block. Two of each — the
+    // old ≥2 threshold would have wrongly discarded the highest-value event.
+    const priceDrop = ['דירת 4 חדרים להשכרה, גני תקווה', "9,000 ₪", "8,500 ₪", '4 חדרים • קומה 2 • 100 מ"ר'].join("\n");
+    expect(looksLikeMergedYad2Cards(priceDrop)).toBe(false);
+  });
 });
 
 describe("capture-source classification (bookmarklet + Yad2 tab watcher)", () => {
