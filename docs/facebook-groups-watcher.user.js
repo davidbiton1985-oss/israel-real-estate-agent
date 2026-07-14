@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RE-Agent Facebook Notification Reader
 // @namespace    israel-real-estate-agent
-// @version      12.15
+// @version      12.16
 // @description  Notification-driven reader: one designated tab checks facebook.com/notifications every 7–12 min (randomized, slower overnight); every "posted in group" notification links to the post's own page, which the tab then opens and reads IN FULL — parsed, scored, WhatsApp'd by your local RE-Agent (localhost:3000). It also sweeps one target group's chronological feed per cycle (round-robin, scroll-until-overlap) so posts Facebook never notified about are still caught, and survives browser restarts via a localStorage reader lease. Runs only in your own logged-in browser session — no scraping server, no login/CAPTCHA bypass; if Facebook shows a checkpoint the reader BACKS OFF instead of hammering it. Your other Facebook tabs are untouched (the reader runs only in the tab you start with #re-agent).
 // @match        https://www.facebook.com/*
 // @noframes
@@ -35,7 +35,7 @@
 (function () {
   "use strict";
 
-  var VERSION = "12.15";
+  var VERSION = "12.16";
   var APP = "http://localhost:3000/api/capture";
   var SEEN_KEY = "reAgentSeenFbPosts_v12"; // localStorage: post URLs already ingested
   var SEEN_MAX = 1200;
@@ -83,16 +83,25 @@
   }
   function readLease() { try { return JSON.parse(localStorage.getItem(LEASE_KEY) || "null"); } catch { return null; } }
   function claimLease(owner) { try { localStorage.setItem(LEASE_KEY, JSON.stringify({ owner: owner, ts: Date.now() })); } catch {} }
+  var ROLE_KEY = "reAgentReaderRole"; // sessionStorage: this tab has established itself as the reader
+  function sessionIsReader() { try { return sessionStorage.getItem(ROLE_KEY) === "1"; } catch { return false; } }
   var TAB = myTabId();
   var lease = readLease();
   var leaseStale = !lease || Date.now() - lease.ts > LEASE_STALE_MS;
-  // A stale/orphaned lease is only self-claimed by a tab that has the #re-agent
-  // hash or is ON the notifications page (the reader's home) — never by a random
-  // tab the user is browsing, so self-heal can't hijack/redirect an active tab.
   var hasHash = location.hash.indexOf("re-agent") !== -1;
   var onNotifications = /facebook\.com\/notifications/.test(location.href.split("#")[0]);
-  var IS_READER = hasHash || (lease && lease.owner === TAB) || (leaseStale && onNotifications);
-  if (IS_READER) claimLease(TAB); // claim (fresh/orphaned) or renew (already ours)
+  // Facebook periodically PRUNES the userscript's localStorage (verified live:
+  // the lease + seen keys get wiped mid-session while FB's own keys survive),
+  // which erased the lease and made the reader lose its role on a post page
+  // after a few posts. sessionStorage is NOT pruned, so once a tab establishes
+  // itself as reader we LATCH that in sessionStorage and trust it for the rest
+  // of the tab's life; the localStorage lease now only bootstraps a fresh tab
+  // (via the hash / notifications) and enables cross-restart self-heal.
+  var IS_READER = hasHash || sessionIsReader() || (lease && lease.owner === TAB) || (leaseStale && onNotifications);
+  if (IS_READER) {
+    claimLease(TAB); // renew the localStorage lease when it survives (restart hint)
+    try { sessionStorage.setItem(ROLE_KEY, "1"); } catch {} // latch the role where FB can't prune it
+  }
 
   // ---- badge + manual capture button (button on all tabs, badge on reader) --
   var badge = document.createElement("div");
