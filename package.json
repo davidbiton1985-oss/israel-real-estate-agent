@@ -11,7 +11,8 @@
     "db:seed": "tsx prisma/seed.ts",
     "scheduler": "tsx scripts/scheduler.ts",
     "test": "vitest run",
-    "ingest:email": "tsx scripts/ingest-email-once.ts"
+    "ingest:email": "tsx scripts/ingest-email-once.ts",
+    "telegram:setup": "tsx scripts/telegram-setup.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

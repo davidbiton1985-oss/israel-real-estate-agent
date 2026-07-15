@@ -157,6 +157,30 @@ export function intendsWhatsapp(): boolean {
   return REQUIRED_TWILIO_VARS.some((k) => !!process.env[k]);
 }
 
+// ---------------------------------------------------------------------------
+// Telegram — the preferred channel. Unlike WhatsApp it has NO 24-hour delivery
+// window, so it can't silently stop delivering (the Twilio-sandbox trap). Free,
+// reliable, one HTTP call. Configured with a bot token + chat id.
+// ---------------------------------------------------------------------------
+const REQUIRED_TELEGRAM_VARS = ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"] as const;
+export function telegramConfigured(): boolean {
+  return REQUIRED_TELEGRAM_VARS.every((k) => !!process.env[k]);
+}
+async function sendTelegram(message: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const token = process.env.TELEGRAM_BOT_TOKEN!;
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: process.env.TELEGRAM_CHAT_ID!, text: message, disable_web_page_preview: false }),
+    });
+    if (res.ok) return { ok: true };
+    return { ok: false, error: `Telegram ${res.status}: ${(await res.text()).slice(0, 160)}` };
+  } catch (e) {
+    return { ok: false, error: `Telegram exception: ${e instanceof Error ? e.message : String(e)}` };
+  }
+}
+
 /** @deprecated use twilioConfigVars() for details on what's missing */
 export function twilioConfigured(): boolean {
   return twilioConfigVars().configured;
@@ -185,7 +209,7 @@ function parseTwilioError(bodyText: string): string {
 }
 
 export interface SendAlertResult {
-  channel: "whatsapp" | "console";
+  channel: "telegram" | "whatsapp" | "console";
   status: "SENT" | "FAILED";
   /** Populated whenever Twilio was attempted and failed, even if console fallback succeeded. */
   error?: string;
@@ -193,11 +217,18 @@ export interface SendAlertResult {
 }
 
 /**
- * Sends via WhatsApp if Twilio env is fully configured, otherwise (or on any
- * Twilio failure) falls back to a console log. Never throws. Never logs the
- * auth token — only the response body/message.
+ * Delivery preference: Telegram (no 24h window) → WhatsApp (Twilio) → console.
+ * Never throws. Never logs secrets.
  */
 export async function sendAlert(message: string): Promise<SendAlertResult> {
+  // Telegram first when configured — it has no 24-hour delivery window, so it
+  // can't silently stop delivering the way the WhatsApp sandbox does.
+  if (telegramConfigured()) {
+    const t = await sendTelegram(message);
+    if (t.ok) return { channel: "telegram", status: "SENT", twilioAttempted: false };
+    console.error("[alert] Telegram send failed, falling back to WhatsApp/console:", t.error);
+  }
+
   const { configured, missing } = twilioConfigVars();
 
   if (!configured) {
