@@ -19,18 +19,18 @@ export default function StatTile({
   const inner = (
     <div className="flex items-start justify-between">
       <div>
-        <div className="tnum font-display text-3xl font-bold leading-tight">{value}</div>
-        <div className="mt-0.5 text-sm text-muted">{label}</div>
+        <div className="tnum text-[26px] font-extrabold leading-tight tracking-tight">{value}</div>
+        <div className="mt-0.5 text-xs text-muted">{label}</div>
         {hint && <div className="mt-1 text-xs text-faint">{hint}</div>}
       </div>
       {icon && (
-        <div className="rounded-lg bg-accent-soft p-2 text-accent">
-          <Icon name={icon} size={18} />
-        </div>
+        <span className="mt-0.5 text-faint">
+          <Icon name={icon} size={16} />
+        </span>
       )}
     </div>
   );
-  const cls = "block rounded-xl2 border border-line bg-card p-4 shadow-card";
+  const cls = "block rounded-xl2 border border-line bg-card px-4 py-3.5";
   if (href) {
     return (
       <Link href={href} className={`${cls} transition-shadow hover:shadow-lift`}>

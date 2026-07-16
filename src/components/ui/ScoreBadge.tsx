@@ -1,36 +1,24 @@
-// Score ring: SVG arc 0–100. Band color mirrors match status semantics
-// (strong ≥80 good · possible ≥60 warn-ish accent · weak/rejected muted).
-function bandColor(score: number): string {
-  if (score >= 80) return "var(--good)";
-  if (score >= 60) return "var(--warn)";
-  return "var(--faint)";
+// Score chip 0–100. Band tone mirrors match status semantics
+// (strong ≥80 · possible ≥60 · weak/rejected muted) — color never stands
+// alone, the number is always shown.
+function bandCls(score: number): string {
+  if (score >= 80) return "bg-accent-soft text-accent";
+  if (score >= 60) return "bg-warn-soft text-warn";
+  return "bg-card2 text-muted";
 }
 
-export default function ScoreBadge({ score, size = 56 }: { score: number; size?: number }) {
-  const r = 24;
-  const c = 2 * Math.PI * r;
-  const clamped = Math.max(0, Math.min(100, score));
-  const filled = (clamped / 100) * c;
-  const color = bandColor(clamped);
+export default function ScoreBadge({ score, size }: { score: number; size?: number }) {
+  const clamped = Math.max(0, Math.min(100, Math.round(score)));
+  const large = (size ?? 0) >= 44;
   return (
-    <div className="relative shrink-0" style={{ width: size, height: size }} title={`ציון ${clamped}/100`}>
-      <svg viewBox="0 0 56 56" width={size} height={size} aria-hidden="true">
-        <circle cx="28" cy="28" r={r} fill="none" stroke="var(--line)" strokeWidth="4" />
-        <circle
-          cx="28"
-          cy="28"
-          r={r}
-          fill="none"
-          stroke={color}
-          strokeWidth="4"
-          strokeLinecap="round"
-          strokeDasharray={`${filled} ${c - filled}`}
-          transform="rotate(-90 28 28)"
-        />
-      </svg>
-      <div className="tnum absolute inset-0 flex items-center justify-center font-display text-base font-bold">
-        {clamped}
-      </div>
-    </div>
+    <span
+      title={`ציון ${clamped}/100`}
+      className={`tnum inline-flex shrink-0 items-baseline gap-1 rounded-full font-extrabold ${bandCls(clamped)} ${
+        large ? "px-3 py-1 text-sm" : "px-2.5 py-0.5 text-xs"
+      }`}
+    >
+      {clamped}
+      <small className="text-[10px] font-medium opacity-75">התאמה</small>
+    </span>
   );
 }

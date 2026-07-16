@@ -1,18 +1,27 @@
 export function Card({
   className = "",
+  balcony = false,
+  style,
   children,
 }: {
   className?: string;
+  /** Feature cards (matches, profiles) get the signature Bauhaus balcony corner. */
+  balcony?: boolean;
+  /** Passthrough for CSS custom properties (e.g. the ribbon's --score). */
+  style?: React.CSSProperties;
   children: React.ReactNode;
 }) {
   return (
-    <div className={`rounded-xl2 border border-line bg-card shadow-card ${className}`}>
+    <div
+      className={`${balcony ? "rounded-balc" : "rounded-xl2"} border border-line bg-card shadow-card ${className}`}
+      style={style}
+    >
       {children}
     </div>
   );
 }
 
-/** Section heading with optional trailing action, display typeface. */
+/** Section eyebrow with optional trailing action — quiet label over content. */
 export function SectionTitle({
   children,
   action,
@@ -21,8 +30,8 @@ export function SectionTitle({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="mb-3 flex items-end justify-between gap-4">
-      <h2 className="font-display text-xl font-semibold">{children}</h2>
+    <div className="mb-2.5 flex items-baseline justify-between gap-4">
+      <h2 className="text-xs font-medium tracking-[0.08em] text-faint">{children}</h2>
       {action}
     </div>
   );

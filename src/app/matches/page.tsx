@@ -24,6 +24,7 @@ import {
   ALERT_STATUS_HE,
   ALERT_STATUS_TONE,
 } from "@/lib/labels";
+import { hebrewCity } from "@/core/alert";
 import { price, dateTime } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -279,7 +280,7 @@ export default async function MatchesPage({ searchParams }: { searchParams: Matc
                         </span>
                         <span className="flex items-center gap-1 text-sm text-muted">
                           <Icon name="pin" size={13} />
-                          {[l.city, l.neighborhood, l.street].filter(Boolean).join(", ") || "מיקום לא ידוע"}
+                          {[hebrewCity(l.city), l.neighborhood, l.street].filter(Boolean).join(", ") || "מיקום לא ידוע"}
                         </span>
                         {l.rooms != null && <span className="tnum text-sm text-muted">{l.rooms} חד׳</span>}
                         {l.sizeSqm != null && <span className="tnum text-sm text-muted">{l.sizeSqm} מ״ר</span>}

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { runScanAction, sendTestAlertAction, deleteProfile } from "./actions";
-import { twilioConfigVars } from "@/core/alert";
+import { hebrewCity, telegramConfigured, twilioConfigVars } from "@/core/alert";
 import { emailConfigVars } from "@/core/connectors/email";
 import { Card, SectionTitle } from "@/components/ui/Card";
 import { ButtonLink } from "@/components/ui/Button";
@@ -50,7 +50,7 @@ function SourceCell({
   note?: string | null;
 }) {
   return (
-    <div className="flex items-center gap-3 px-4 py-3" title={note ?? undefined}>
+    <div className="flex min-w-0 items-center gap-3 px-4 py-3" title={note ?? undefined}>
       <span className="text-muted">
         <Icon name={icon} size={16} />
       </span>
@@ -87,24 +87,42 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
   ]);
   const twilio = twilioConfigVars();
   const email = emailConfigVars();
+  const telegram = telegramConfigured();
 
-  // Configured ≠ verified: green only after a test alert actually SENT.
-  const whatsappState: DotState = !twilio.configured
-    ? "off"
-    : latestTestAlert == null
-      ? "stale"
-      : latestTestAlert.status === "FAILED"
-        ? "error"
-        : "live";
+  // Telegram is the preferred channel (no 24h window); WhatsApp is legacy
+  // fallback. Configured ≠ verified: green only after a test alert SENT.
+  const alertChannelTitle = telegram ? "טלגרם" : "וואטסאפ";
+  const alertChannelState: DotState = telegram
+    ? latestTestAlert?.status === "FAILED"
+      ? "error"
+      : "live"
+    : !twilio.configured
+      ? "off"
+      : latestTestAlert == null
+        ? "stale"
+        : latestTestAlert.status === "FAILED"
+          ? "error"
+          : "live";
+  const alertChannelWhen = telegram
+    ? latestTestAlert?.status === "FAILED"
+      ? "הבדיקה נכשלה"
+      : "מחובר · התראות פעילות"
+    : !twilio.configured
+      ? "לא מוגדר"
+      : latestTestAlert == null
+        ? "שלח התראת בדיקה לאימות"
+        : latestTestAlert.status === "FAILED"
+          ? "הבדיקה נכשלה"
+          : `אומת ${relTime(latestTestAlert.sentAt ?? latestTestAlert.createdAt)}`;
 
   return (
     <div className="space-y-8">
       {/* Header row */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="font-display text-3xl font-bold">הדירה הבאה שלך</h1>
-          <p className="mt-1 text-sm text-muted">
-            סריקה אוטומטית של יד2, פייסבוק ואימייל כל ~5 דקות · וואטסאפ על התאמות חזקות
+          <h1 className="text-3xl font-extrabold">הדירה הבאה שלך</h1>
+          <p className="mt-1.5 text-sm leading-relaxed text-muted">
+            סורק יד2, פייסבוק ואימייל כל ~5 דקות · התאמות חזקות נשלחות אליך בטלגרם
           </p>
         </div>
         <div className="flex gap-3">
@@ -124,7 +142,7 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
       {searchParams.testAlert && (
         <div className="flex items-center gap-2 rounded-xl2 border border-line bg-good-soft px-4 py-3 text-sm text-good">
           <Icon name="bell" size={16} />
-          התראת בדיקה נשלחה — בדוק את הוואטסאפ שלך ואת שורת הסטטוס למטה.
+          התראת בדיקה נשלחה — בדוק את הטלגרם שלך ואת שורת הסטטוס למטה.
         </div>
       )}
 
@@ -145,21 +163,29 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
           </EmptyState>
         ) : (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            {heroMatches.map((m) => {
+            {heroMatches.map((m, idx) => {
               const l = m.listing;
               return (
-                <Card key={m.id} className="flex flex-col p-5">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="tnum font-display text-2xl font-bold">
+                <Card
+                  key={m.id}
+                  balcony
+                  className="relative flex flex-col overflow-hidden p-4 pb-7"
+                  // The balcony ribbon: its width IS the match score.
+                  style={{ ["--score" as string]: `${Math.max(0, Math.min(100, m.score))}%` } as React.CSSProperties}
+                >
+                  <div className="flex items-baseline justify-between gap-2">
+                    <div className={`tnum font-extrabold tracking-tight ${idx === 0 ? "text-3xl" : "text-2xl"}`}>
                       {l.price != null ? price(l.price) : "מחיר לא צוין"}
                     </div>
                     <ScoreBadge score={m.score} size={44} />
                   </div>
-                  <div className="mt-1 flex items-center gap-1.5 text-sm text-muted">
-                    <Icon name="pin" size={13} />
-                    {[l.city, l.neighborhood].filter(Boolean).join(", ") || "מיקום לא ידוע"}
+                  <div className="mt-1 flex items-center gap-1.5 text-[15px] font-medium">
+                    <span className="text-faint">
+                      <Icon name="pin" size={13} />
+                    </span>
+                    {[hebrewCity(l.city), l.neighborhood].filter(Boolean).join(", ") || "מיקום לא ידוע"}
                   </div>
-                  <div className="tnum mt-1 text-sm text-muted">
+                  <div className="tnum mt-0.5 text-sm text-muted">
                     {[
                       l.rooms != null ? `${l.rooms} חד׳` : null,
                       l.sizeSqm != null ? `${l.sizeSqm} מ״ר` : null,
@@ -169,7 +195,7 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
                       .filter(Boolean)
                       .join(" · ")}
                   </div>
-                  <div className="mt-2 flex items-center gap-2 text-xs text-faint">
+                  <div className="mt-2.5 flex items-center gap-2 text-xs text-faint">
                     <Badge tone="neutral">{SOURCE_HE[l.source] ?? l.source}</Badge>
                     נמצאה {relTime(l.createdAt)}
                   </div>
@@ -182,6 +208,9 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
                     <ButtonLink href="/matches" variant="secondary" size="sm" className="flex-1">
                       פרטים מלאים
                     </ButtonLink>
+                  </div>
+                  <div className="ribbon" aria-hidden="true">
+                    <i />
                   </div>
                 </Card>
               );
@@ -221,18 +250,10 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
           note={emailHealth?.lastError}
         />
         <SourceCell
-          title="וואטסאפ"
+          title={alertChannelTitle}
           icon="bell"
-          state={whatsappState}
-          when={
-            !twilio.configured
-              ? "לא מוגדר"
-              : latestTestAlert == null
-                ? "שלח התראת בדיקה לאימות"
-                : latestTestAlert.status === "FAILED"
-                  ? "הבדיקה נכשלה"
-                  : `אומת ${relTime(latestTestAlert.sentAt ?? latestTestAlert.createdAt)}`
-          }
+          state={alertChannelState}
+          when={alertChannelWhen}
           note={latestTestAlert?.error}
         />
       </Card>
@@ -264,11 +285,11 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
         ) : (
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {profiles.map((p) => (
-              <Card key={p.id} className="p-5">
+              <Card key={p.id} balcony className="p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-display text-lg font-semibold">{p.name}</span>
+                      <span className="text-[15.5px] font-extrabold">{p.name}</span>
                       <Badge tone={p.dealType === "RENT" ? "accent" : "neutral"}>
                         {DEAL_HE[p.dealType] ?? p.dealType}
                       </Badge>
@@ -284,7 +305,7 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
                       תיווך: <b className="text-ink">{BROKER_PREF_HE[p.brokerStatusPref] ?? p.brokerStatusPref}</b>
                     </div>
                     <div className="tnum mt-2 text-xs text-faint">
-                      📱 וואטסאפ מציון {p.whatsappThreshold} ·{" "}
+                      התראה בטלגרם מציון {p.whatsappThreshold} ·{" "}
                       {p.priceDropReAlert ? "התראה חוזרת בירידת מחיר" : "התראה אחת בלבד"}
                     </div>
                   </div>

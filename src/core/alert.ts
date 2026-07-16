@@ -9,8 +9,9 @@ import { CITIES } from "./parser";
 const BROKER_HE: Record<string, string> = { PRIVATE: "פרטי", BROKER: "מתיווך" };
 const SEP = "────────────";
 
-/** Canonical city ("Herzliya") → its Hebrew name ("הרצליה") for the summary line. */
-function hebrewCity(canonical: string | null): string | null {
+/** Canonical city ("Herzliya") → its Hebrew name ("הרצליה"). Shared by alert
+ * messages and the dashboard, so listings always display in Hebrew. */
+export function hebrewCity(canonical: string | null): string | null {
   if (!canonical) return null;
   const entry = CITIES.find((c) => c.canonical === canonical);
   return entry?.aliases.find((a) => /[א-ת]/.test(a)) ?? canonical;

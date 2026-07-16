@@ -29,15 +29,18 @@ const config: Config = {
         crit: { DEFAULT: "var(--crit)", soft: "var(--crit-soft)" },
       },
       fontFamily: {
-        body: ["var(--font-body)", "Heebo", "sans-serif"],
-        display: ["var(--font-display)", "Frank Ruhl Libre", "serif"],
+        body: ["var(--font-body)", "Rubik", "sans-serif"],
+        display: ["var(--font-display)", "Rubik", "sans-serif"],
       },
       borderRadius: {
-        xl2: "1rem",
+        xl2: "0.625rem",
+        /* Bauhaus balcony corner — one rounded corner per card (physical
+           corners; the app is always RTL so bottom-left is the end corner). */
+        balc: "6px 6px 6px 26px",
       },
       boxShadow: {
-        card: "0 1px 2px 0 rgb(43 33 24 / 0.04), 0 1px 6px -1px rgb(43 33 24 / 0.06)",
-        lift: "0 4px 16px -4px rgb(43 33 24 / 0.12)",
+        card: "0 1px 2px 0 rgb(19 26 42 / 0.05), 0 8px 28px -12px rgb(19 26 42 / 0.10)",
+        lift: "0 4px 18px -4px rgb(19 26 42 / 0.16)",
       },
     },
   },
