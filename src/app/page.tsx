@@ -10,6 +10,7 @@ import Badge from "@/components/ui/Badge";
 import StatTile from "@/components/ui/StatTile";
 import ScoreBadge from "@/components/ui/ScoreBadge";
 import StatusDot, { type DotState } from "@/components/ui/StatusDot";
+import PushToggle from "@/components/ui/PushToggle";
 import EmptyState from "@/components/ui/EmptyState";
 import Icon, { type IconName } from "@/components/ui/Icon";
 import { BROKER_PREF_HE, BROKER_HE, DEAL_HE, SOURCE_HE } from "@/lib/labels";
@@ -124,6 +125,9 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
           <p className="mt-1.5 text-sm leading-relaxed text-muted">
             סורק יד2, פייסבוק ואימייל כל ~5 דקות · התאמות חזקות נשלחות אליך בטלגרם
           </p>
+          <div className="mt-2">
+            <PushToggle />
+          </div>
         </div>
         <div className="flex gap-3">
           <form action={runScanAction}>

@@ -149,3 +149,14 @@ model Alert {
   sentAt    DateTime?
   createdAt DateTime  @default(now())
 }
+
+// A device subscribed to Web Push (the installed PWA). One row per device;
+// dead endpoints (410 Gone) are pruned automatically on send.
+model PushSubscription {
+  id        String   @id @default(cuid())
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
+}

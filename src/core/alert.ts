@@ -3,6 +3,7 @@
 // without touching Prisma.
 import type { Listing, Profile } from "@prisma/client";
 import { CITIES } from "./parser";
+import { sendWebPushBroadcast } from "./webpush";
 
 // Alerts go out in HEBREW — the user wants the ORIGINAL Hebrew Facebook post,
 // not an English parse. We prepend only a compact one-line Hebrew summary.
@@ -222,6 +223,10 @@ export interface SendAlertResult {
  * Never throws. Never logs secrets.
  */
 export async function sendAlert(message: string): Promise<SendAlertResult> {
+  // Web Push to the installed PWA runs in PARALLEL with the channels below —
+  // best-effort, never throws, no-op unless VAPID keys are configured.
+  await sendWebPushBroadcast(message);
+
   // Telegram first when configured — it has no 24-hour delivery window, so it
   // can't silently stop delivering the way the WhatsApp sandbox does.
   if (telegramConfigured()) {
