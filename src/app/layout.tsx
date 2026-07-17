@@ -5,6 +5,7 @@ import "./globals.css";
 import NavLinks from "@/components/ui/NavLinks";
 import TabBar from "@/components/ui/TabBar";
 import AutoRefresh from "@/components/ui/AutoRefresh";
+import SwNavigate from "@/components/ui/SwNavigate";
 import LandingMark from "@/components/ui/LandingMark";
 
 // monday-style pairing: Heebo carries the Hebrew UI, Figtree carries the
@@ -46,6 +47,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="he" dir="rtl" className={`${heebo.variable} ${figtree.variable}`}>
       <body className="min-h-screen">
         <AutoRefresh />
+        <SwNavigate />
         {/* Desktop-only slim header; on the phone the dashboard hero carries
             the brand and the TabBar carries navigation. */}
         <header className="sticky top-0 z-20 border-b border-line bg-card/95 backdrop-blur max-sm:hidden">

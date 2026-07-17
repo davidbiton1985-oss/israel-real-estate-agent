@@ -48,6 +48,10 @@ self.addEventListener("pushsubscriptionchange", (event) => {
 });
 
 // Tap → open the listing link (or the app) — reuse an open window if there is one.
+// iOS quirk: WindowClient.navigate() silently fails in a standalone PWA that
+// was resumed from background (the app focuses on its LAST page — David tapped
+// a listing push and landed on the dashboard). The reliable route on iOS is
+// postMessage → the page navigates itself; navigate() stays as belt-and-braces.
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const url = (event.notification.data && event.notification.data.url) || "/";
@@ -57,7 +61,12 @@ self.addEventListener("notificationclick", (event) => {
       if (url.startsWith("http") && new URL(url).origin !== self.location.origin) {
         return self.clients.openWindow(url); // external listing link
       }
-      if (sameApp) return sameApp.focus().then((w) => ("navigate" in w ? w.navigate(url) : w));
+      if (sameApp) {
+        return sameApp.focus().then((w) => {
+          try { w.postMessage({ navigate: url }); } catch (e) {}
+          if ("navigate" in w) return w.navigate(url).catch(() => {});
+        });
+      }
       return self.clients.openWindow(url);
     })
   );
