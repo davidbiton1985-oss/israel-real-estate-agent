@@ -27,6 +27,26 @@ self.addEventListener("push", (event) => {
   event.waitUntil(self.registration.showNotification(data.title || "סוכן הנדל״ן", options));
 });
 
+// iOS silently rotates/expires push subscriptions (updates, storage clears).
+// Re-subscribe with the same server key and re-register — otherwise the
+// server keeps pushing at a dead endpoint and the lock screen goes quiet.
+self.addEventListener("pushsubscriptionchange", (event) => {
+  event.waitUntil(
+    (async () => {
+      const key = event.oldSubscription && event.oldSubscription.options
+        ? event.oldSubscription.options.applicationServerKey
+        : null;
+      if (!key) return;
+      const sub = await self.registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+      await fetch("/api/push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(sub.toJSON()),
+      });
+    })().catch(() => {})
+  );
+});
+
 // Tap → open the listing link (or the app) — reuse an open window if there is one.
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();

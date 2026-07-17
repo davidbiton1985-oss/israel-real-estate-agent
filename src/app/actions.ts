@@ -120,6 +120,41 @@ export async function saveListingNotes(formData: FormData) {
   revalidatePath("/matches"); // no redirect: stay on the current filtered view
 }
 
+// --- Wave 2: the decide→act loop ---------------------------------------
+
+const USER_STATUSES = ["NEW", "CONTACTED", "VIEWING", "DISMISSED", "WON"] as const;
+
+/** One-tap triage. DISMISSED also silences every future re-alert for the
+ * listing (decideAlertAction's userDismissed input). Tapping the current
+ * status again returns the listing to NEW (undo). */
+export async function setListingStatus(formData: FormData) {
+  const listingId = str(formData, "listingId");
+  const status = str(formData, "status") as (typeof USER_STATUSES)[number] | null;
+  if (!listingId || !status || !USER_STATUSES.includes(status)) return;
+  const current = await prisma.listing.findUnique({ where: { id: listingId }, select: { userStatus: true } });
+  if (!current) return;
+  const next = current.userStatus === status ? "NEW" : status;
+  await prisma.listing.update({ where: { id: listingId }, data: { userStatus: next } });
+  revalidatePath("/");
+  revalidatePath("/matches");
+  revalidatePath(`/listing/${listingId}`);
+}
+
+/** Pursuit details: a free note ("callback after 18:00") + viewing datetime. */
+export async function savePursuit(formData: FormData) {
+  const listingId = str(formData, "listingId");
+  if (!listingId) return;
+  const userNote = str(formData, "userNote");
+  const viewingRaw = str(formData, "viewingAt");
+  const viewingAt = viewingRaw ? new Date(viewingRaw) : null;
+  await prisma.listing.update({
+    where: { id: listingId },
+    data: { userNote, viewingAt: viewingAt && !isNaN(viewingAt.getTime()) ? viewingAt : null },
+  });
+  revalidatePath("/");
+  revalidatePath(`/listing/${listingId}`);
+}
+
 export async function sendTestAlertAction() {
   const result = await sendAlert(TEST_ALERT_MESSAGE);
   await prisma.alert.create({

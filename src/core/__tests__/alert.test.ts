@@ -5,6 +5,7 @@ import type { Listing } from "@prisma/client";
 const BASE: AlertDecisionInput = {
   scoreQualifies: true,
   isDuplicate: false,
+  userDismissed: false,
   alreadyAlertedBefore: false,
   lastAlertedPrice: null,
   currentPrice: 7000,
@@ -16,6 +17,18 @@ const BASE: AlertDecisionInput = {
 describe("decideAlertAction — alert lifecycle rules", () => {
   it("score below threshold → NONE", () => {
     expect(decideAlertAction({ ...BASE, scoreQualifies: false })).toBe("NONE");
+  });
+
+  it("user-dismissed listing → NONE, even on a price drop", () => {
+    const r = decideAlertAction({
+      ...BASE,
+      userDismissed: true,
+      alreadyAlertedBefore: true,
+      lastAlertedPrice: 8000,
+      currentPrice: 7000, // a drop that would normally re-alert
+      lastAlertedSnapshot: "{}",
+    });
+    expect(r).toBe("NONE");
   });
 
   it("duplicate → SUPPRESSED (never NEW_MATCH, even if never alerted before)", () => {

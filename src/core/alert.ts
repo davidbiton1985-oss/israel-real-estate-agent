@@ -73,12 +73,15 @@ export function buildAlertMessage(
   const facts = [summaryLine(listing), extras?.score != null ? `ציון ${extras.score}` : null]
     .filter(Boolean)
     .join(" · ");
+  // The winning move is calling within minutes — the lister's number is a
+  // first-class line, contiguous E.164 so Telegram renders it tap-to-call.
+  const phone = listing.phone ? `📞 ${listing.phone}` : null;
   // What the parser could NOT confirm = the call script for the first phone call.
   const verify =
     extras?.missingFields && extras.missingFields.length > 0
       ? `לוודא בשיחה: ${extras.missingFields.slice(0, 3).join(" · ")}`
       : null;
-  return [`🏠 ${facts}`, verify, SEP, capBody(listing.rawText), "", `🔗 ${listing.url ?? "—"}`]
+  return [`🏠 ${facts}`, phone, verify, SEP, capBody(listing.rawText), "", `🔗 ${listing.url ?? "—"}`]
     .filter((l): l is string => l !== null)
     .join("\n");
 }
@@ -326,6 +329,8 @@ export type AlertAction = "NEW_MATCH" | "PRICE_DROP" | "MATERIAL_CHANGE" | "SUPP
 export interface AlertDecisionInput {
   scoreQualifies: boolean; // score >= profile.whatsappThreshold
   isDuplicate: boolean; // listing.isDuplicateOf != null
+  /** listing.userStatus === "DISMISSED" — David said no; nothing re-alerts, not even a price drop. */
+  userDismissed: boolean;
   alreadyAlertedBefore: boolean; // match.alerted — NOT lastAlertedPrice!=null (null price would re-alert forever)
   lastAlertedPrice: number | null;
   currentPrice: number | null;
@@ -366,6 +371,7 @@ export function materiallyChanged(prevJson: string | null, currJson: string): bo
  * Priority when re-alerting: PRICE_DROP > MATERIAL_CHANGE > SUPPRESSED.
  */
 export function decideAlertAction(input: AlertDecisionInput): AlertAction {
+  if (input.userDismissed) return "NONE"; // David's verdict outranks everything
   if (!input.scoreQualifies) return "NONE";
   if (input.isDuplicate) return "SUPPRESSED";
   if (!input.alreadyAlertedBefore) return "NEW_MATCH";

@@ -12,7 +12,7 @@ import Icon from "@/components/ui/Icon";
 import PushToggle from "@/components/ui/PushToggle";
 import FlashBanner from "@/components/ui/FlashBanner";
 import LandingMark from "@/components/ui/LandingMark";
-import { DEAL_HE, BROKER_HE, SOURCE_HE } from "@/lib/labels";
+import { DEAL_HE, BROKER_HE, SOURCE_HE, USER_STATUS_HE } from "@/lib/labels";
 import { price, relTime, minutesSince } from "@/lib/format";
 import type { SourceHealth } from "@prisma/client";
 
@@ -86,7 +86,7 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
   const dayStart = new Date();
   dayStart.setHours(0, 0, 0, 0);
 
-  const [profiles, pendingCount, latestTestAlert, emailHealth, fbHealth, yad2Health, todayMatches, listingsToday, heroMatches, reviewMatches] =
+  const [profiles, pendingCount, latestTestAlert, emailHealth, fbHealth, yad2Health, todayMatches, listingsToday, heroMatches, reviewMatches, pursuits] =
     await Promise.all([
       prisma.profile.findMany({ orderBy: { createdAt: "desc" } }),
       prisma.listing.count({ where: { scanned: false } }),
@@ -101,19 +101,35 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
         _count: { _all: true },
       }),
       prisma.listing.count({ where: { createdAt: { gte: dayStart }, isDuplicateOf: null } }),
-      // the product: newest strong matches
+      // the product: newest strong matches David hasn't dismissed
       prisma.match.findMany({
-        where: { status: "strong_match", profile: { active: true }, listing: { isDuplicateOf: null } },
+        where: {
+          status: "strong_match",
+          profile: { active: true },
+          listing: { isDuplicateOf: null, userStatus: { notIn: ["DISMISSED", "WON"] } },
+        },
         include: { listing: true },
         orderBy: { listing: { createdAt: "desc" } },
         take: 3,
       }),
       // the 79s: near-misses waiting for a human verdict
       prisma.match.findMany({
-        where: { status: "possible_match", alerted: false, profile: { active: true }, listing: { isDuplicateOf: null } },
+        where: {
+          status: "possible_match",
+          alerted: false,
+          profile: { active: true },
+          listing: { isDuplicateOf: null, userStatus: "NEW" },
+        },
         include: { listing: true },
         orderBy: [{ score: "desc" }, { createdAt: "desc" }],
         take: 3,
+      }),
+      // the pursuit shelf: apartments David is actively chasing
+      prisma.listing.findMany({
+        where: { userStatus: { in: ["CONTACTED", "VIEWING"] } },
+        include: { matches: { where: { profile: { active: true } }, orderBy: { score: "desc" }, take: 1 } },
+        orderBy: [{ viewingAt: "asc" }, { createdAt: "desc" }],
+        take: 5,
       }),
     ]);
 
@@ -238,6 +254,47 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
         </div>
       </section>
 
+      {/* ===== GROUP: the pursuit shelf — hope lives highest ===== */}
+      {pursuits.length > 0 && (
+        <section>
+          <GroupHead color="text-special" label="בטיפול" count={pursuits.length} />
+          <div className="overflow-hidden rounded-xl2 border border-line bg-card shadow-card">
+            {pursuits.map((l) => (
+              <BoardRow
+                key={l.id}
+                strip="bg-special"
+                title={rowTitle(l)}
+                priceText={l.price != null ? price(l.price) : null}
+                sub={[
+                  USER_STATUS_HE[l.userStatus],
+                  l.viewingAt
+                    ? `סיור ${l.viewingAt.toLocaleDateString("he-IL", { day: "numeric", month: "numeric" })} ${l.viewingAt.toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}`
+                    : null,
+                  l.userNote,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              >
+                {l.matches[0] && <ScoreBadge score={l.matches[0].score} />}
+                <span className="ms-auto flex gap-2">
+                  {l.phone && (
+                    <a
+                      href={`tel:${l.phone}`}
+                      className="inline-flex items-center justify-center rounded-badge border border-accent bg-card px-3 py-1.5 text-xs font-semibold text-accent transition-all hover:bg-accent-soft active:scale-[0.98]"
+                    >
+                      📞 חייג
+                    </a>
+                  )}
+                  <ButtonLink href={`/listing/${l.id}`} variant="secondary" size="sm">
+                    דף דירה
+                  </ButtonLink>
+                </span>
+              </BoardRow>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* ===== GROUP: strong matches ===== */}
       <section>
         <GroupHead color="text-accent" label="התאמות חזקות" count={heroMatches.length} />
@@ -260,8 +317,16 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
                   <ScoreBadge score={m.score} />
                   <Badge tone="neutral">{relTime(l.createdAt) === "עכשיו" ? "חדשה" : SOURCE_HE[l.source] ?? l.source}</Badge>
                   <span className="ms-auto flex gap-2">
-                    <ButtonLink href="/matches" variant="secondary" size="sm">
-                      פרטים
+                    {l.phone && (
+                      <a
+                        href={`tel:${l.phone}`}
+                        className="inline-flex items-center justify-center rounded-badge border border-accent bg-card px-3 py-1.5 text-xs font-semibold text-accent transition-all hover:bg-accent-soft active:scale-[0.98]"
+                      >
+                        📞
+                      </a>
+                    )}
+                    <ButtonLink href={`/listing/${l.id}`} variant="secondary" size="sm">
+                      דף דירה
                     </ButtonLink>
                     {l.url && (
                       <ButtonLink href={l.url} external variant="primary" size="sm" icon="external">
@@ -299,7 +364,7 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
                   <ScoreBadge score={m.score} />
                   <Badge tone="neutral">ממתינה להחלטה</Badge>
                   <span className="ms-auto">
-                    <ButtonLink href="/matches?status=possible_match" variant="ghost" size="sm">
+                    <ButtonLink href={`/listing/${l.id}`} variant="ghost" size="sm">
                       רלוונטי?
                     </ButtonLink>
                   </span>

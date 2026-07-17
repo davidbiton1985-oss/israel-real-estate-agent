@@ -116,6 +116,8 @@ interface MatchesSearchParams {
   alertReason?: string;
   hasRedFlags?: string;
   minScore?: string;
+  /** ?dismissed=1 shows listings David marked לא רלוונטי (hidden by default). */
+  dismissed?: string;
   /** ?debug=1 reveals the parsed-fields dump (QA console mode). */
   debug?: string;
 }
@@ -131,6 +133,8 @@ export default async function MatchesPage({ searchParams }: { searchParams: Matc
 
   const minScore = searchParams.minScore ? Number(searchParams.minScore) : null;
   const matches = allMatches.filter((m) => {
+    // David said "לא רלוונטי" — it leaves the working view (opt back in via checkbox)
+    if (m.listing.userStatus === "DISMISSED" && searchParams.dismissed !== "1") return false;
     if (searchParams.profile && m.profileId !== searchParams.profile) return false;
     if (searchParams.status && m.status !== searchParams.status) return false;
     if (searchParams.source && m.listing.source !== searchParams.source) return false;
@@ -253,6 +257,10 @@ export default async function MatchesPage({ searchParams }: { searchParams: Matc
             <input type="checkbox" name="hasRedFlags" value="1" defaultChecked={searchParams.hasRedFlags === "1"} className="h-4 w-4 accent-[var(--accent)]" />
             רק עם דגלים אדומים
           </label>
+          <label className="flex items-center gap-1.5 pb-2 text-xs text-muted">
+            <input type="checkbox" name="dismissed" value="1" defaultChecked={searchParams.dismissed === "1"} className="h-4 w-4 accent-[var(--accent)]" />
+            הצג גם שנדחו
+          </label>
           <div className="flex items-center gap-2 pb-0.5">
             <Button size="sm" icon="filter">
               סנן
@@ -358,13 +366,16 @@ export default async function MatchesPage({ searchParams }: { searchParams: Matc
                       )}
                       {latestAlert?.error && <div className="mt-1 text-xs text-warn">{latestAlert.error}</div>}
                     </div>
-                    {l.url && (
-                      <div className="shrink-0">
+                    <div className="flex shrink-0 flex-col gap-1.5">
+                      <ButtonLink href={`/listing/${l.id}`} variant="primary" size="sm">
+                        דף דירה
+                      </ButtonLink>
+                      {l.url && (
                         <ButtonLink href={l.url} external variant="secondary" size="sm" icon="external">
                           פתח מודעה
                         </ButtonLink>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
 
                   {/* Recommended action — only when it adds information */}

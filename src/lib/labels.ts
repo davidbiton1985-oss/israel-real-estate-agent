@@ -116,3 +116,19 @@ export const FEATURE_HE: Record<string, string> = {
   elevator: "מעלית",
   mamad: 'ממ"ד',
 };
+
+// Wave 2 — the decide→act loop: David's own verdict on a listing.
+export const USER_STATUS_HE: Record<string, string> = {
+  NEW: "חדשה",
+  CONTACTED: "יצרתי קשר",
+  VIEWING: "נקבע סיור",
+  DISMISSED: "לא רלוונטי",
+  WON: "חתמתי! 🎉",
+};
+export const USER_STATUS_TONE: Record<string, BadgeTone> = {
+  NEW: "neutral",
+  CONTACTED: "accent",
+  VIEWING: "accent",
+  DISMISSED: "neutral",
+  WON: "good",
+};

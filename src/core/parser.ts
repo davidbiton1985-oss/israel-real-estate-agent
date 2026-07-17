@@ -36,6 +36,23 @@ export interface ParsedListing {
   brokerFeeStatus: FeeStatus;
   brokerFeeText: string | null;
   yad2ListingId: string | null;
+  phone: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Phone extraction — the load-bearing feature of the decide→act loop: winning
+// an apartment means calling within minutes, so the lister's number must be
+// one tap away. Israeli formats, normalized to E.164 (+972…). Mobile (05X)
+// wins over landline; digit-boundary guards keep prices/sizes from matching.
+// ---------------------------------------------------------------------------
+const MOBILE_RE = /(?<!\d)(?:(?:\+|00)972[-\s.]?0?|0)(5\d)[-\s.]?(\d{3})[-\s.]?(\d{4})(?!\d)/;
+const LANDLINE_RE = /(?<!\d)(?:(?:\+|00)972[-\s.]?0?|0)([23489])[-\s.]?(\d{3})[-\s.]?(\d{4})(?!\d)/;
+
+export function extractPhone(rawText: string): string | null {
+  const text = rawText.replace(/[‎‏‪-‮]/g, ""); // strip bidi marks
+  const m = MOBILE_RE.exec(text) ?? LANDLINE_RE.exec(text);
+  if (!m) return null;
+  return `+972${m[1]}${m[2]}${m[3]}`;
 }
 
 // Pre-seeded cities (Gush Dan + Sharon) with HE/EN aliases. Any city can be typed manually in profiles.
@@ -371,6 +388,7 @@ export function parseListing(rawText: string, url: string | null = null): Parsed
     condition: extractCondition(rawText),
     furnished: extractFurnished(rawText),
     propertyType: extractPropertyType(rawText),
+    phone: extractPhone(rawText),
     entryImmediate: entry.immediate,
     entryFlexible: entry.flexible,
     entryDate: entry.date,

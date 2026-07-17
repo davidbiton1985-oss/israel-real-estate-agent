@@ -37,8 +37,16 @@ export default function PushToggle() {
         }
         const reg = await navigator.serviceWorker.register("/sw.js");
         const sub = await reg.pushManager.getSubscription();
-        if (sub) setState("on");
-        else setState(Notification.permission === "denied" ? "denied" : "off");
+        if (sub) {
+          // Heal server-side drift on every open: re-POST the subscription
+          // (idempotent upsert) so a rotated endpoint never goes stale-green.
+          fetch("/api/push", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(sub.toJSON()),
+          }).catch(() => {});
+          setState("on");
+        } else setState(Notification.permission === "denied" ? "denied" : "off");
       } catch {
         setState("unsupported");
       }

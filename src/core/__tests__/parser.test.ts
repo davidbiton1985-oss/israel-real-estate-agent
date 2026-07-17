@@ -1,5 +1,35 @@
 import { describe, it, expect } from "vitest";
-import { parseListing, classifyBroker, extractYad2Id } from "../parser";
+import { parseListing, classifyBroker, extractYad2Id, extractPhone } from "../parser";
+
+describe("phone extraction (the tap-to-call feature)", () => {
+  it("extracts a plain mobile", () => {
+    expect(extractPhone("דירה מהממת! לפרטים 0501234567")).toBe("+972501234567");
+  });
+  it("extracts a dashed mobile", () => {
+    expect(extractPhone("לתיאום: 052-345-6789 דני")).toBe("+972523456789");
+  });
+  it("extracts 05X-XXXXXXX style", () => {
+    expect(extractPhone("טל: 054-7654321")).toBe("+972547654321");
+  });
+  it("extracts +972 international format", () => {
+    expect(extractPhone("call +972-50-123-4567")).toBe("+972501234567");
+  });
+  it("prefers mobile over landline", () => {
+    expect(extractPhone("משרד: 03-1234567 נייד: 0521112233")).toBe("+972521112233");
+  });
+  it("falls back to landline when no mobile", () => {
+    expect(extractPhone("טלפון במשרד 03-5556677")).toBe("+97235556677");
+  });
+  it("does not mistake prices/sizes for phones", () => {
+    expect(extractPhone("שכירות 8,500 ₪ · 120 מ״ר · קומה 3 · ועד 350")).toBeNull();
+  });
+  it("does not glue neighboring digits (boundary guard)", () => {
+    expect(extractPhone("מחיר 1234567890123 שקלים")).toBeNull();
+  });
+  it("returns null when there is no phone", () => {
+    expect(extractPhone("דירה יפה בקרית אונו, פנו בהודעה פרטית")).toBeNull();
+  });
+});
 
 describe("broker classification", () => {
   it("ללא תיווך → PRIVATE (not BROKER despite the תיווך substring)", () => {

@@ -72,6 +72,7 @@ export async function ingestListing(rawText: string, source: Source, url: string
     entryDate: parsed.entryDate,
     arnonaMonthly: parsed.arnonaMonthly,
     vaadMonthly: parsed.vaadMonthly,
+    phone: parsed.phone,
     brokerStatus: parsed.brokerStatus,
     brokerConfidence: parsed.brokerConfidence,
     brokerEvidence: parsed.brokerEvidence,
@@ -144,6 +145,8 @@ export async function ingestListing(rawText: string, source: Source, url: string
       fbSourceName: metaData.fbSourceName ?? existing.fbSourceName,
       fbAuthor: metaData.fbAuthor ?? existing.fbAuthor,
       ...parsedData,
+      // a repost without the number must not erase a phone we already found
+      phone: parsedData.phone ?? existing.phone,
     },
   });
 
@@ -186,6 +189,7 @@ export async function matchListing(listing: Listing): Promise<MatchSummary> {
     const action = decideAlertAction({
       scoreQualifies: result.score >= profile.whatsappThreshold,
       isDuplicate: Boolean(listing.isDuplicateOf),
+      userDismissed: listing.userStatus === "DISMISSED",
       // MUST be the boolean flag — NOT `lastAlertedPrice != null`: a price-less
       // listing keeps lastAlertedPrice null after alerting, which re-fired the
       // same "new match" WhatsApp on every watcher cycle (seen: 200×/post).
@@ -239,9 +243,15 @@ export async function matchListing(listing: Listing): Promise<MatchSummary> {
     const pendingAlert = await prisma.alert.create({
       data: { matchId: match.id, kind: "MATCH_ALERT", channel: "pending", status: "SENDING", reason: action, message },
     });
-    // Structured push target: tap opens the listing; tag=listing id so a
-    // price-drop notification replaces the stale original on the lock screen.
-    const sent = await sendAlert(message, { url: listing.url ?? undefined, tag: listing.id });
+    // Structured push target: the tap lands on the app's own listing page —
+    // score, reasons, call script, phone — with the external ad one tap
+    // further; tag=listing id so a price-drop notification replaces the
+    // stale original on the lock screen.
+    const appBase = process.env.APP_PUBLIC_URL?.replace(/\/$/, "");
+    const sent = await sendAlert(message, {
+      url: appBase ? `${appBase}/listing/${listing.id}` : (listing.url ?? undefined),
+      tag: listing.id,
+    });
     await prisma.alert.update({
       where: { id: pendingAlert.id },
       data: {
