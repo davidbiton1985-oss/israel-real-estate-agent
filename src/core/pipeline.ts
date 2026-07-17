@@ -201,13 +201,26 @@ export async function matchListing(listing: Listing): Promise<MatchSummary> {
 
     if (action === "SUPPRESSED") {
       summary.suppressedCount++;
+      const reason = listing.isDuplicateOf ? "DUPLICATE_SUPPRESSED" : "NO_CHANGE_SUPPRESSED";
+      // Record each suppression ONCE, not per scan cycle: a listing that stays
+      // visible on Yad2 is re-captured every ~20 min and used to append an
+      // identical row each time (36+/day per match), drowning the real alert
+      // history. Skip the write when the match's latest alert already says
+      // the same thing; a suppression after a SENT (or a reason change) still
+      // gets its row.
+      const last = await prisma.alert.findFirst({
+        where: { matchId: match.id },
+        orderBy: { createdAt: "desc" },
+        select: { status: true, reason: true },
+      });
+      if (last?.status === "SUPPRESSED" && last.reason === reason) continue;
       await prisma.alert.create({
         data: {
           matchId: match.id,
           kind: "MATCH_ALERT",
           channel: "none",
           status: "SUPPRESSED",
-          reason: listing.isDuplicateOf ? "DUPLICATE_SUPPRESSED" : "NO_CHANGE_SUPPRESSED",
+          reason,
           message: listing.isDuplicateOf
             ? "Duplicate listing — alert suppressed to avoid repeat noise."
             : "Listing unchanged since the last alert — suppressed to avoid repeat noise.",
