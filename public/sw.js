@@ -57,16 +57,14 @@ self.addEventListener("notificationclick", (event) => {
   const url = (event.notification.data && event.notification.data.url) || "/";
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((wins) => {
-      const sameApp = wins.find((w) => new URL(w.url).origin === self.location.origin);
-      if (url.startsWith("http") && new URL(url).origin !== self.location.origin) {
-        return self.clients.openWindow(url); // external listing link
-      }
-      if (sameApp) {
-        return sameApp.focus().then((w) => {
-          try { w.postMessage({ navigate: url }); } catch (e) {}
-          if ("navigate" in w) return w.navigate(url).catch(() => {});
-        });
-      }
+      // Already showing exactly this page → just focus it.
+      const exact = wins.find((w) => w.url.split("#")[0] === url.split("#")[0]);
+      if (exact && "focus" in exact) return exact.focus();
+      // Anything else → openWindow. On an installed iOS PWA this navigates
+      // the app itself (the ONLY reliable route there — focus()+navigate()
+      // and postMessage both depend on a healthy resumed page and fail
+      // silently after suspension; David tapped a listing push and landed
+      // on the dashboard twice before this).
       return self.clients.openWindow(url);
     })
   );
