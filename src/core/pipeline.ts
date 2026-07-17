@@ -4,7 +4,7 @@ import { prisma } from "../lib/db";
 import { parseListing } from "./parser";
 import { fingerprint, isLikelyDuplicateText } from "./dedup";
 import { scoreListing } from "./matching";
-import { buildAlertMessage, buildPriceDropMessage, buildMaterialChangeMessage, sendAlert, decideAlertAction, intendsWhatsapp } from "./alert";
+import { buildAlertMessage, buildPriceDropMessage, buildMaterialChangeMessage, sendAlert, decideAlertAction } from "./alert";
 import type { Listing } from "@prisma/client";
 
 export type Source = "YAD2" | "FACEBOOK" | "WHATSAPP" | "MANUAL" | "URL" | "DEMO" | "EMAIL";
@@ -234,12 +234,14 @@ export async function matchListing(listing: Listing): Promise<MatchSummary> {
         ? buildPriceDropMessage(profile, listing, match.lastAlertedPrice!, listing.price!)
         : action === "MATERIAL_CHANGE"
           ? buildMaterialChangeMessage(profile, listing, match.lastAlertedSnapshot, currentSnapshot)
-          : buildAlertMessage(listing);
+          : buildAlertMessage(listing, { score: result.score, missingFields: result.missingFields });
 
     const pendingAlert = await prisma.alert.create({
       data: { matchId: match.id, kind: "MATCH_ALERT", channel: "pending", status: "SENDING", reason: action, message },
     });
-    const sent = await sendAlert(message);
+    // Structured push target: tap opens the listing; tag=listing id so a
+    // price-drop notification replaces the stale original on the lock screen.
+    const sent = await sendAlert(message, { url: listing.url ?? undefined, tag: listing.id });
     await prisma.alert.update({
       where: { id: pendingAlert.id },
       data: {
@@ -249,15 +251,13 @@ export async function matchListing(listing: Listing): Promise<MatchSummary> {
         sentAt: sent.status === "SENT" ? new Date() : null,
       },
     });
-    // "Alerted" means REACHED THE USER. A console outcome counts as delivered
-    // ONLY for a pure console-only user (no Twilio configured at all). If the
-    // user intends WhatsApp (any Twilio var set) and we still land on console —
-    // whether Twilio was attempted-and-failed (cap/expiry) OR never attempted
-    // because a var is missing/typo'd — the phone did NOT get it, so keep the
-    // match un-alerted and retry next scan. Without this, one `.env` regression
-    // silently marks every match "alerted" and suppresses it forever.
-    const consoleOnly = sent.channel === "console";
-    const delivered = consoleOnly ? !(sent.twilioAttempted || intendsWhatsapp()) : true;
+    // "Alerted" means REACHED THE USER. sendAlert now encodes this honestly:
+    // a console outcome is SENT only for a true console-only user (no Telegram
+    // and no Twilio configured/intended); any real-channel failure lands as
+    // FAILED, keeping the match un-alerted so every scan pass retries it.
+    // Without this, one `.env` regression silently marks every match
+    // "alerted" and suppresses it forever.
+    const delivered = sent.status === "SENT";
     if (delivered) {
       await prisma.match.update({
         where: { id: match.id },

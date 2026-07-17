@@ -8,7 +8,7 @@ import { pollSources } from "@/core/poll";
 import { sendAlert } from "@/core/alert";
 import { rescoreAll } from "@/core/rescore";
 
-const TEST_ALERT_MESSAGE = ["🏠 Real Estate Agent test alert", "If you received this, WhatsApp alerts are working."].join("\n");
+const TEST_ALERT_MESSAGE = ["🧪 בדיקת התראות — סוכן הנדל״ן", "אם ההודעה הזו הגיעה אליך, ההתראות עובדות."].join("\n");
 
 function str(fd: FormData, key: string): string | null {
   const v = fd.get(key);
@@ -100,9 +100,16 @@ export async function runScanAction() {
   const result = await pollSources();
   revalidatePath("/");
   revalidatePath("/matches");
-  redirect(
-    `/matches?scanned=${result.scannedLeftovers + result.listingsIngested}&alertsSent=${result.alertsSent}&emails=${result.emailsSeen}`
-  );
+  // A failed email poll must NOT wear the success banner — carry the error.
+  const params = new URLSearchParams({
+    scanned: String(result.scannedLeftovers + result.listingsIngested),
+    alertsSent: String(result.alertsSent),
+    emails: String(result.emailsSeen),
+  });
+  if (result.emailConfigured && !result.emailOk) {
+    params.set("scanError", (result.emailError ?? "בדיקת האימייל נכשלה").slice(0, 160));
+  }
+  redirect(`/matches?${params.toString()}`);
 }
 
 export async function saveListingNotes(formData: FormData) {
@@ -127,5 +134,6 @@ export async function sendTestAlertAction() {
     },
   });
   revalidatePath("/");
-  redirect("/?testAlert=1");
+  // The banner must tell the truth: sent and failed are different outcomes.
+  redirect(`/?testAlert=${result.status === "SENT" ? "sent" : "failed"}`);
 }

@@ -97,7 +97,8 @@ async function main() {
     "(אם מופיע עמוד אימות — פתור אותו והסריקה תתחדש)",
   ].join("\n");
 
-  const r = await sendAlert(msg);
+  // System messages share one tag: consecutive nudges coalesce to one card.
+  const r = await sendAlert(msg, { tag: "re-agent-system" });
   await prisma.alert.create({
     data: {
       kind: "WATCHDOG",

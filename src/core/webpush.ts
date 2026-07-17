@@ -11,12 +11,17 @@ export function webPushConfigured(): boolean {
 }
 
 /**
- * Push `message` to all subscriptions. Title = first line, body = the next
- * lines; a URL inside the message becomes the notification's click target
- * (deep link straight to the listing). Dead endpoints (404/410) are pruned.
- * Never throws.
+ * Push `message` to all subscriptions. Title = first line (which the message
+ * builders guarantee is the decision facts), body = the next lines. The tap
+ * target comes STRUCTURED from the caller — never re-parsed from prose; the
+ * only fallback is the message's own `🔗 <url>` convention line. A `tag`
+ * makes a newer notification REPLACE its stale sibling (renotify keeps the
+ * buzz). Dead endpoints (404/410) are pruned. Never throws.
  */
-export async function sendWebPushBroadcast(message: string): Promise<void> {
+export async function sendWebPushBroadcast(
+  message: string,
+  opts: { url?: string; tag?: string } = {}
+): Promise<void> {
   if (!webPushConfigured()) return;
   try {
     const [{ prisma }, webpushMod] = await Promise.all([import("../lib/db"), import("web-push")]);
@@ -30,11 +35,11 @@ export async function sendWebPushBroadcast(message: string): Promise<void> {
       process.env.VAPID_PRIVATE_KEY!
     );
 
-    const lines = message.split("\n").filter((l) => l.trim() !== "");
+    const lines = message.split("\n").filter((l) => l.trim() !== "" && !/^─+$/.test(l.trim()));
     const title = (lines[0] ?? "התראה").slice(0, 90);
     const body = lines.slice(1).join("\n").slice(0, 300);
-    const url = message.match(/https?:\/\/\S+/)?.[0] ?? "/";
-    const payload = JSON.stringify({ title, body, url });
+    const url = opts.url ?? message.match(/🔗 (https?:\/\/\S+)/)?.[1] ?? "/";
+    const payload = JSON.stringify({ title, body, url, tag: opts.tag });
 
     await Promise.all(
       subs.map(async (s) => {

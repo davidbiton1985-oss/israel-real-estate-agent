@@ -53,35 +53,46 @@ export function describeFbSource(listing: Listing): string | null {
   return parts.join(" ");
 }
 
-// The user's chosen alert shape: a one-line Hebrew summary, then the ORIGINAL
+// Twilio caps a WhatsApp body at ~1600 chars; a long post (rawText up to 3000)
+// used to fail (error 21617) → console fallback → retried forever, identically.
+// EVERY builder caps through here — price-drop/material re-alerts hit the same
+// wall as new matches.
+function capBody(rawText: string | null | undefined): string {
+  const raw = (rawText ?? "").trim();
+  return raw.length > 1200 ? raw.slice(0, 1200) + "…\n(הטקסט קוצר — הפרטים המלאים בקישור)" : raw;
+}
+
+// The user's chosen alert shape, lock-screen-first: LINE 1 IS THE DECISION
+// (city · rooms · price · broker · score) because the push title is derived
+// from it — never a category label the user already knows. Then the ORIGINAL
 // Hebrew post verbatim, then the direct link. No English, no field dump.
-export function buildAlertMessage(listing: Listing): string {
-  const raw = (listing.rawText ?? "").trim();
-  // Twilio caps a WhatsApp body at ~1600 chars; a long post (rawText up to 3000)
-  // used to fail (error 21617) → console fallback → retried forever, identically.
-  // Cap the body so a matching apartment always gets delivered.
-  const body = raw.length > 1200 ? raw.slice(0, 1200) + "…\n(הטקסט קוצר — הפרטים המלאים בקישור)" : raw;
-  return [
-    "🏠 דירה חדשה שמתאימה לך",
-    summaryLine(listing),
-    SEP,
-    body,
-    "",
-    `🔗 ${listing.url ?? "—"}`,
-  ].join("\n");
+export function buildAlertMessage(
+  listing: Listing,
+  extras?: { score?: number; missingFields?: string[] }
+): string {
+  const facts = [summaryLine(listing), extras?.score != null ? `ציון ${extras.score}` : null]
+    .filter(Boolean)
+    .join(" · ");
+  // What the parser could NOT confirm = the call script for the first phone call.
+  const verify =
+    extras?.missingFields && extras.missingFields.length > 0
+      ? `לוודא בשיחה: ${extras.missingFields.slice(0, 3).join(" · ")}`
+      : null;
+  return [`🏠 ${facts}`, verify, SEP, capBody(listing.rawText), "", `🔗 ${listing.url ?? "—"}`]
+    .filter((l): l is string => l !== null)
+    .join("\n");
 }
 
 export function buildPriceDropMessage(_profile: Profile, listing: Listing, oldPrice: number, newPrice: number): string {
   const diff = oldPrice - newPrice;
   const pct = oldPrice > 0 ? Math.round((diff / oldPrice) * 100) : 0;
+  // The delta IS the news — it leads, with the words carrying direction
+  // (a bare arrow between digits is bidirectionally ambiguous in RTL).
   return [
-    "📉 ירידת מחיר בדירה שכבר קיבלת",
+    `📉 עכשיו ${newPrice.toLocaleString()} ₪ במקום ${oldPrice.toLocaleString()} ₪ (${pct}%-)`,
     summaryLine(listing),
-    `מחיר קודם: ${oldPrice.toLocaleString()} ₪`,
-    `מחיר חדש: ${newPrice.toLocaleString()} ₪`,
-    `הפרש: ${diff.toLocaleString()} ₪ (${pct}%-)`,
     SEP,
-    (listing.rawText ?? "").trim(),
+    capBody(listing.rawText),
     "",
     `🔗 ${listing.url ?? "—"}`,
   ].join("\n");
@@ -124,17 +135,21 @@ export function buildMaterialChangeMessage(
   }
   const changes: string[] = [];
   for (const key of Object.keys(curr)) {
-    if (prev[key] !== curr[key]) changes.push(`${FIELD_HE[key] ?? key}: ${fmtValHe(prev[key])} ← ${fmtValHe(curr[key])}`);
+    // Words carry the direction — "היה X → עכשיו Y" stays unambiguous in RTL.
+    if (prev[key] !== curr[key])
+      changes.push(`${FIELD_HE[key] ?? key}: היה ${fmtValHe(prev[key])} → עכשיו ${fmtValHe(curr[key])}`);
   }
+  // The first change leads — it's the news and becomes the push title.
   return [
-    "🔄 עדכון בפרטי דירה שכבר קיבלת",
-    summaryLine(listing),
-    `שינויים: ${changes.join("; ") || "הפרטים עודכנו"}`,
+    `🔄 ${changes[0] ?? "הפרטים עודכנו"} · ${summaryLine(listing)}`,
+    changes.length > 1 ? `שינויים נוספים: ${changes.slice(1).join("; ")}` : null,
     SEP,
-    (listing.rawText ?? "").trim(),
+    capBody(listing.rawText),
     "",
     `🔗 ${listing.url ?? "—"}`,
-  ].join("\n");
+  ]
+    .filter((l): l is string => l !== null)
+    .join("\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -168,13 +183,20 @@ const REQUIRED_TELEGRAM_VARS = ["TELEGRAM_BOT_TOKEN", "TELEGRAM_CHAT_ID"] as con
 export function telegramConfigured(): boolean {
   return REQUIRED_TELEGRAM_VARS.every((k) => !!process.env[k]);
 }
-async function sendTelegram(message: string): Promise<{ ok: boolean; error?: string }> {
+async function sendTelegram(message: string, silent = false): Promise<{ ok: boolean; error?: string }> {
   try {
     const token = process.env.TELEGRAM_BOT_TOKEN!;
     const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: process.env.TELEGRAM_CHAT_ID!, text: message, disable_web_page_preview: false }),
+      body: JSON.stringify({
+        chat_id: process.env.TELEGRAM_CHAT_ID!,
+        text: message,
+        disable_web_page_preview: false,
+        // Ambient messages (heartbeat, digest) deliver without a buzz — the
+        // interruption budget is reserved for apartments.
+        disable_notification: silent,
+      }),
     });
     if (res.ok) return { ok: true };
     return { ok: false, error: `Telegram ${res.status}: ${(await res.text()).slice(0, 160)}` };
@@ -218,24 +240,40 @@ export interface SendAlertResult {
   twilioAttempted: boolean;
 }
 
+export interface SendAlertOptions {
+  /** Structured tap target for the push notification — never re-parsed from prose. */
+  url?: string;
+  /** Web-push notification tag: same tag REPLACES the stale card (e.g. listing id). */
+  tag?: string;
+  /** Ambient = Telegram delivered silently, no web push. For heartbeat/digest. */
+  ambient?: boolean;
+}
+
 /**
  * Delivery preference: Telegram (no 24h window) → WhatsApp (Twilio) → console.
  * Never throws. Never logs secrets.
  */
-export async function sendAlert(message: string): Promise<SendAlertResult> {
+export async function sendAlert(message: string, opts: SendAlertOptions = {}): Promise<SendAlertResult> {
   // Web Push to the installed PWA runs in PARALLEL with the channels below —
   // best-effort, never throws, no-op unless VAPID keys are configured.
-  await sendWebPushBroadcast(message);
+  // Ambient messages skip it entirely: only apartments reach the lock screen.
+  if (!opts.ambient) await sendWebPushBroadcast(message, { url: opts.url, tag: opts.tag });
 
   // Telegram first when configured — it has no 24-hour delivery window, so it
   // can't silently stop delivering the way the WhatsApp sandbox does.
   if (telegramConfigured()) {
-    const t = await sendTelegram(message);
+    const t = await sendTelegram(message, opts.ambient === true);
     if (t.ok) return { channel: "telegram", status: "SENT", twilioAttempted: false };
     console.error("[alert] Telegram send failed, falling back to WhatsApp/console:", t.error);
   }
 
   const { configured, missing } = twilioConfigVars();
+
+  // A console outcome counts as SENT only for a true console-only user (no
+  // real channel configured or intended anywhere). If Telegram and/or WhatsApp
+  // is intended and we still land on console, the phone did NOT get it —
+  // that's a FAILED delivery and the UI must say so, never a quiet green.
+  const intendsRealChannel = telegramConfigured() || intendsWhatsapp();
 
   if (!configured) {
     console.log(
@@ -245,9 +283,11 @@ export async function sendAlert(message: string): Promise<SendAlertResult> {
     );
     return {
       channel: "console",
-      status: "SENT",
+      status: intendsRealChannel ? "FAILED" : "SENT",
       twilioAttempted: false,
-      error: `Twilio not configured (missing: ${missing.join(", ")})`,
+      error: telegramConfigured()
+        ? "Telegram send failed and WhatsApp is not configured — alert did NOT reach the phone."
+        : `Twilio not configured (missing: ${missing.join(", ")})`,
     };
   }
 
@@ -269,12 +309,12 @@ export async function sendAlert(message: string): Promise<SendAlertResult> {
     const errMsg = parseTwilioError(await res.text());
     console.error("[alert] Twilio send failed:", errMsg);
     console.log("\n===== 🏠 ALERT (console fallback — Twilio failed) =====\n" + message + "\n=======================================\n");
-    return { channel: "console", status: "SENT", twilioAttempted: true, error: errMsg };
+    return { channel: "console", status: "FAILED", twilioAttempted: true, error: errMsg };
   } catch (e) {
     const errMsg = `Twilio request exception: ${e instanceof Error ? e.message : String(e)}`;
     console.error("[alert]", errMsg);
     console.log("\n===== 🏠 ALERT (console fallback — Twilio exception) =====\n" + message + "\n=======================================\n");
-    return { channel: "console", status: "SENT", twilioAttempted: true, error: errMsg };
+    return { channel: "console", status: "FAILED", twilioAttempted: true, error: errMsg };
   }
 }
 

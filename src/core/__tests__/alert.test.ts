@@ -151,7 +151,15 @@ describe("buildAlertMessage — Hebrew: original post + link, not an English par
 });
 
 describe("Twilio configuration + safe fallback", () => {
-  const ALL_VARS = ["TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "TWILIO_WHATSAPP_FROM", "ALERT_WHATSAPP_TO"] as const;
+  // Clear ALL channel vars so tests are hermetic regardless of the host env.
+  const ALL_VARS = [
+    "TWILIO_ACCOUNT_SID",
+    "TWILIO_AUTH_TOKEN",
+    "TWILIO_WHATSAPP_FROM",
+    "ALERT_WHATSAPP_TO",
+    "TELEGRAM_BOT_TOKEN",
+    "TELEGRAM_CHAT_ID",
+  ] as const;
 
   function clearTwilioEnv(): Record<string, string | undefined> {
     const saved: Record<string, string | undefined> = {};
@@ -192,6 +200,16 @@ describe("Twilio configuration + safe fallback", () => {
     process.env.TWILIO_AUTH_TOKEN = "super-secret-token-value";
     const result = await sendAlert("test message");
     expect(JSON.stringify(result)).not.toContain("super-secret-token-value");
+    restoreEnv(saved);
+  });
+
+  it("console fallback is FAILED (not SENT) when the user intends a real channel", async () => {
+    // Partial Twilio config = the user INTENDS WhatsApp; console is NOT delivery.
+    const saved = clearTwilioEnv();
+    process.env.TWILIO_ACCOUNT_SID = "AC123"; // intends, but not configured
+    const result = await sendAlert("test message");
+    expect(result.channel).toBe("console");
+    expect(result.status).toBe("FAILED");
     restoreEnv(saved);
   });
 });

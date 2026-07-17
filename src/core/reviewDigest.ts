@@ -65,7 +65,11 @@ function buildMessage(matches: Awaited<ReturnType<typeof queryMatches>>): { text
   });
   const more = matches.length - shown.length;
   const header = `🔎 ${matches.length} דירות שמתאימות לקריטריונים שלך — שווה לעבור עליהן:`;
-  const footer = more > 0 ? `\n\n… ועוד ${more} בלוח.` : "";
+  // The digest's tap target is the QUEUE, not one apartment — link the board.
+  const base = process.env.APP_PUBLIC_URL?.replace(/\/$/, "");
+  const boardUrl = base ? `${base}/matches?status=possible_match` : null;
+  const footer =
+    (more > 0 ? `\n\n… ועוד ${more} בלוח.` : "") + (boardUrl ? `\n🔗 ${boardUrl}` : "");
   return { text: `${header}\n\n${lines.join("\n\n")}${footer}`, included: shown.length };
 }
 
@@ -86,7 +90,9 @@ export async function runReviewDigest(opts: { dryRun?: boolean } = {}): Promise<
     return { pending: matches.length, included, sent: false, channel: "console(dry-run)", message: text };
   }
 
-  const res = await sendAlert(text);
+  // Ambient: delivered to Telegram silently, no push — review is a batch
+  // ritual, not an interruption; only apartments buzz.
+  const res = await sendAlert(text, { ambient: true });
   // Mark exactly the matches shown in THIS message as digested (the "… ועוד" tail
   // remains pending and rolls into the next run).
   const shown = matches.slice(0, included);

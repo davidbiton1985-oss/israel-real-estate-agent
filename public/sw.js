@@ -10,16 +10,21 @@ self.addEventListener("push", (event) => {
   } catch {
     data = { title: "סוכן הנדל״ן", body: event.data ? event.data.text() : "" };
   }
-  event.waitUntil(
-    self.registration.showNotification(data.title || "סוכן הנדל״ן", {
-      body: data.body || "",
-      icon: "/icons/icon-192.png",
-      badge: "/icons/icon-192.png",
-      dir: "rtl",
-      lang: "he",
-      data: { url: data.url || "/" },
-    })
-  );
+  const options = {
+    body: data.body || "",
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
+    dir: "rtl",
+    lang: "he",
+    data: { url: data.url || "/" },
+  };
+  if (data.tag) {
+    // Same tag = the newer notification REPLACES the stale one (a price drop
+    // supersedes the original card); renotify keeps the buzz on replacement.
+    options.tag = data.tag;
+    options.renotify = true;
+  }
+  event.waitUntil(self.registration.showNotification(data.title || "סוכן הנדל״ן", options));
 });
 
 // Tap → open the listing link (or the app) — reuse an open window if there is one.

@@ -25,7 +25,9 @@ async function main() {
     console.log("\n===== ✅ DAILY HEARTBEAT (dry-run) =====\n" + msg + "\n=======================================\n");
     return;
   }
-  const r = await sendAlert(msg);
+  // Ambient: arrives silently — the heartbeat is morning-coffee reading, not
+  // an interruption; its NON-arrival is the real alarm.
+  const r = await sendAlert(msg, { ambient: true });
   console.log(`[daily-heartbeat] sent via ${r.channel} (${r.status})`);
 }
 
