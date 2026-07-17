@@ -4,10 +4,11 @@ import Icon, { type IconName } from "./Icon";
 type Variant = "primary" | "secondary" | "ghost" | "danger";
 type Size = "sm" | "md";
 
+// monday button grammar: solid blue primary, quiet white secondary, 4px radius.
 const VARIANTS: Record<Variant, string> = {
-  primary: "bg-accent text-accent-ink hover:bg-accent-strong border border-transparent shadow-card",
-  secondary: "bg-card text-ink border border-line hover:border-faint hover:bg-card2",
-  ghost: "bg-transparent text-muted hover:text-ink border border-transparent hover:bg-card2",
+  primary: "bg-accent text-accent-ink border border-transparent hover:bg-accent-strong",
+  secondary: "bg-card text-ink border border-linestrong hover:bg-card2",
+  ghost: "bg-transparent text-accent border border-accent hover:bg-accent-soft",
   danger: "bg-transparent text-crit border border-transparent hover:bg-crit-soft",
 };
 
@@ -17,7 +18,7 @@ const SIZES: Record<Size, string> = {
 };
 
 const BASE =
-  "inline-flex items-center justify-center rounded-lg font-medium transition-colors select-none whitespace-nowrap";
+  "inline-flex items-center justify-center rounded-badge font-semibold transition-all select-none whitespace-nowrap active:scale-[0.98]";
 
 interface CommonProps {
   variant?: Variant;

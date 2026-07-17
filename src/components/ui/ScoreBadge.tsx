@@ -1,10 +1,10 @@
-// Score chip 0–100. Band tone mirrors match status semantics
-// (strong ≥80 · possible ≥60 · weak/rejected muted) — color never stands
-// alone, the number is always shown.
+// Score as a monday status block: solid color, white bold number — the same
+// visual grammar as a board status. ≥80 green (strong) · 60–79 orange
+// (possible) · below gray. Color never stands alone; the number always shows.
 function bandCls(score: number): string {
-  if (score >= 80) return "bg-accent-soft text-accent";
-  if (score >= 60) return "bg-warn-soft text-warn";
-  return "bg-card2 text-muted";
+  if (score >= 80) return "bg-good";
+  if (score >= 60) return "bg-warn";
+  return "bg-[#c4c4c4]";
 }
 
 export default function ScoreBadge({ score, size }: { score: number; size?: number }) {
@@ -13,12 +13,11 @@ export default function ScoreBadge({ score, size }: { score: number; size?: numb
   return (
     <span
       title={`ציון ${clamped}/100`}
-      className={`tnum inline-flex shrink-0 items-baseline gap-1 rounded-full font-extrabold ${bandCls(clamped)} ${
-        large ? "px-3 py-1 text-sm" : "px-2.5 py-0.5 text-xs"
+      className={`tnum inline-grid shrink-0 place-items-center rounded-badge font-bold text-white ${bandCls(clamped)} ${
+        large ? "h-[34px] min-w-[56px] px-3 text-[16px]" : "h-[26px] min-w-[44px] px-2 text-[13px]"
       }`}
     >
       {clamped}
-      <small className="text-[10px] font-medium opacity-75">התאמה</small>
     </span>
   );
 }

@@ -19,7 +19,7 @@ export default function TabBar() {
   return (
     <nav
       aria-label="ניווט ראשי"
-      className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-4 border-t border-line bg-card/90 px-1 pt-1.5 backdrop-blur sm:hidden"
+      className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-4 border-t border-linestrong bg-card px-1 pt-1.5 shadow-[0_-4px_12px_rgba(0,0,0,0.05)] sm:hidden"
       style={{ paddingBottom: "calc(0.375rem + env(safe-area-inset-bottom))" }}
     >
       {TABS.map((t) => {
@@ -29,7 +29,7 @@ export default function TabBar() {
             key={t.href}
             href={t.href}
             aria-current={active ? "page" : undefined}
-            className={`flex flex-col items-center gap-0.5 rounded-lg py-1 text-[10.5px] font-medium transition-colors ${
+            className={`flex min-h-[44px] flex-col items-center justify-center gap-0.5 rounded-lg py-1 text-[10.5px] font-semibold transition-all active:scale-95 ${
               active ? "text-accent" : "text-faint hover:text-ink"
             }`}
           >

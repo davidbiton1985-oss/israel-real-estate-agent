@@ -2,8 +2,10 @@
 // These are presentation-only wrappers: the `name` attributes flowing to the
 // server actions are supplied by callers and must never change here.
 
+// 16px on mobile prevents iOS zoom-on-focus; monday field: white, gray border,
+// blue focus.
 export const inputCls =
-  "w-full rounded-lg border border-line bg-card px-3 py-2 text-sm text-ink placeholder:text-faint transition-colors hover:border-faint focus:border-accent focus:outline-none";
+  "w-full rounded-badge border border-linestrong bg-card px-3 py-2 text-base sm:text-sm text-ink placeholder:text-faint transition-all hover:border-faint focus:border-accent focus:outline-none focus:shadow-[0_0_0_3px_rgba(0,115,234,0.12)]";
 
 export function Field({
   label,

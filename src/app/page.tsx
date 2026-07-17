@@ -3,23 +3,23 @@ import { prisma } from "@/lib/db";
 import { runScanAction, sendTestAlertAction, deleteProfile } from "./actions";
 import { hebrewCity, telegramConfigured, twilioConfigVars } from "@/core/alert";
 import { emailConfigVars } from "@/core/connectors/email";
-import { Card, SectionTitle } from "@/components/ui/Card";
 import { ButtonLink } from "@/components/ui/Button";
 import SubmitButton from "@/components/ui/SubmitButton";
 import Badge from "@/components/ui/Badge";
-import StatTile from "@/components/ui/StatTile";
 import ScoreBadge from "@/components/ui/ScoreBadge";
-import StatusDot, { type DotState } from "@/components/ui/StatusDot";
-import PushToggle from "@/components/ui/PushToggle";
 import EmptyState from "@/components/ui/EmptyState";
-import Icon, { type IconName } from "@/components/ui/Icon";
-import { BROKER_PREF_HE, BROKER_HE, DEAL_HE, SOURCE_HE } from "@/lib/labels";
+import Icon from "@/components/ui/Icon";
+import PushToggle from "@/components/ui/PushToggle";
+import FlashBanner from "@/components/ui/FlashBanner";
+import LandingMark from "@/components/ui/LandingMark";
+import { DEAL_HE, BROKER_HE, SOURCE_HE } from "@/lib/labels";
 import { price, relTime, minutesSince } from "@/lib/format";
 import type { SourceHealth } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
 // Watchers deliver every ~5 minutes; under 12 counts as live, under 6h stale.
+type DotState = "live" | "stale" | "error" | "off";
 function freshness(h: SourceHealth | null | undefined): DotState {
   if (!h) return "off";
   if (h.consecutiveErrors > 0) return "error";
@@ -29,251 +29,339 @@ function freshness(h: SourceHealth | null | undefined): DotState {
   if (mins < 360) return "stale";
   return "off";
 }
-
-const DOT_LABEL: Record<DotState, string> = {
-  live: "פעיל",
-  stale: "לא עדכני",
-  error: "שגיאה",
-  off: "לא מחובר",
+const DOT_LABEL: Record<DotState, string> = { live: "פעיל", stale: "לא עדכני", error: "שגיאה", off: "לא מחובר" };
+const DOT_CLS: Record<DotState, string> = {
+  live: "bg-good led-live",
+  stale: "bg-warn",
+  error: "bg-crit",
+  off: "bg-faint",
 };
 
-function SourceCell({
+function greeting(): string {
+  const h = new Date().getHours();
+  if (h >= 5 && h < 12) return "בוקר טוב, דוד 👋";
+  if (h >= 12 && h < 17) return "צהריים טובים, דוד 👋";
+  if (h >= 17 && h < 22) return "ערב טוב, דוד 👋";
+  return "לילה טוב, דוד 🌙";
+}
+
+/** monday board row: colored side-strip, title/price, facts, blocks + actions. */
+function BoardRow({
+  strip,
   title,
-  icon,
-  state,
-  when,
-  note,
+  priceText,
+  sub,
+  children,
 }: {
+  strip: string;
   title: string;
-  icon: IconName;
-  state: DotState;
-  when: string;
-  note?: string | null;
+  priceText: string | null;
+  sub: string;
+  children?: React.ReactNode;
 }) {
   return (
-    <div className="flex min-w-0 items-center gap-3 px-4 py-3" title={note ?? undefined}>
-      <span className="text-muted">
-        <Icon name={icon} size={16} />
-      </span>
-      <div className="min-w-0">
-        <div className="flex items-center gap-1.5 text-sm font-medium">
-          {title}
-          <StatusDot state={state} />
-        </div>
-        <div className="truncate text-xs text-faint">
-          {DOT_LABEL[state]} · {when}
-        </div>
+    <div className="relative grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 border-b border-line p-3 pe-4 ps-[18px] last:border-b-0">
+      <span className={`absolute inset-y-0 start-0 w-[6px] ${strip}`} aria-hidden="true" />
+      <div className="min-w-0 text-[15px] font-bold">{title}</div>
+      <div className="tnum figtree text-start text-[17px] font-bold">
+        {priceText ?? <span className="text-sm font-medium text-muted">מחיר לא צוין</span>}
       </div>
+      <div className="tnum col-start-1 text-xs text-muted">{sub}</div>
+      {children && <div className="col-span-2 mt-2 flex flex-wrap items-center gap-2">{children}</div>}
+    </div>
+  );
+}
+
+function GroupHead({ color, label, count }: { color: string; label: string; count: number }) {
+  return (
+    <div className={`mb-2 flex items-baseline gap-2 px-0.5 text-[15px] font-bold ${color}`}>
+      <span className="text-[10px]">▼</span>
+      {label}
+      <span className="text-xs font-medium text-muted">{count}</span>
     </div>
   );
 }
 
 export default async function Home({ searchParams }: { searchParams: { testAlert?: string } }) {
-  const [profiles, listingCount, strongCount, pendingCount, latestTestAlert, emailHealth, fbHealth, yad2Health, heroMatches] = await Promise.all([
-    prisma.profile.findMany({ orderBy: { createdAt: "desc" } }),
-    prisma.listing.count(),
-    prisma.match.count({ where: { status: "strong_match" } }),
-    prisma.listing.count({ where: { scanned: false } }),
-    prisma.alert.findFirst({ where: { kind: "TEST_ALERT" }, orderBy: { createdAt: "desc" } }),
-    prisma.sourceHealth.findUnique({ where: { source: "EMAIL" } }),
-    prisma.sourceHealth.findUnique({ where: { source: "FACEBOOK" } }),
-    prisma.sourceHealth.findUnique({ where: { source: "YAD2_BROWSER" } }),
-    // The product: the newest strong matches, freshest finds first.
-    prisma.match.findMany({
-      where: { status: "strong_match", profile: { active: true }, listing: { isDuplicateOf: null } },
-      include: { listing: true },
-      orderBy: { listing: { createdAt: "desc" } },
-      take: 3,
-    }),
-  ]);
+  const dayStart = new Date();
+  dayStart.setHours(0, 0, 0, 0);
+
+  const [profiles, pendingCount, latestTestAlert, emailHealth, fbHealth, yad2Health, todayMatches, listingsToday, heroMatches, reviewMatches] =
+    await Promise.all([
+      prisma.profile.findMany({ orderBy: { createdAt: "desc" } }),
+      prisma.listing.count({ where: { scanned: false } }),
+      prisma.alert.findFirst({ where: { kind: "TEST_ALERT" }, orderBy: { createdAt: "desc" } }),
+      prisma.sourceHealth.findUnique({ where: { source: "EMAIL" } }),
+      prisma.sourceHealth.findUnique({ where: { source: "FACEBOOK" } }),
+      prisma.sourceHealth.findUnique({ where: { source: "YAD2_BROWSER" } }),
+      // today's distribution for the battery
+      prisma.match.groupBy({
+        by: ["status"],
+        where: { profile: { active: true }, listing: { createdAt: { gte: dayStart }, isDuplicateOf: null } },
+        _count: { _all: true },
+      }),
+      prisma.listing.count({ where: { createdAt: { gte: dayStart }, isDuplicateOf: null } }),
+      // the product: newest strong matches
+      prisma.match.findMany({
+        where: { status: "strong_match", profile: { active: true }, listing: { isDuplicateOf: null } },
+        include: { listing: true },
+        orderBy: { listing: { createdAt: "desc" } },
+        take: 3,
+      }),
+      // the 79s: near-misses waiting for a human verdict
+      prisma.match.findMany({
+        where: { status: "possible_match", alerted: false, profile: { active: true }, listing: { isDuplicateOf: null } },
+        include: { listing: true },
+        orderBy: [{ score: "desc" }, { createdAt: "desc" }],
+        take: 3,
+      }),
+    ]);
+
   const twilio = twilioConfigVars();
   const email = emailConfigVars();
   const telegram = telegramConfigured();
 
-  // Telegram is the preferred channel (no 24h window); WhatsApp is legacy
-  // fallback. Configured ≠ verified: green only after a test alert SENT.
-  const alertChannelTitle = telegram ? "טלגרם" : "וואטסאפ";
-  const alertChannelState: DotState = telegram
-    ? latestTestAlert?.status === "FAILED"
-      ? "error"
-      : "live"
-    : !twilio.configured
-      ? "off"
-      : latestTestAlert == null
-        ? "stale"
-        : latestTestAlert.status === "FAILED"
+  const count = (s: string) => todayMatches.find((m) => m.status === s)?._count._all ?? 0;
+  const strongToday = count("strong_match");
+  const reviewToday = count("possible_match");
+  const otherToday = Math.max(0, listingsToday - strongToday - reviewToday);
+
+  const sensors: { name: string; state: DotState; when: string; note?: string | null }[] = [
+    { name: "יד2", state: freshness(yad2Health), when: relTime(yad2Health?.lastSuccessAt), note: yad2Health?.lastError },
+    { name: "פייסבוק", state: freshness(fbHealth), when: relTime(fbHealth?.lastSuccessAt), note: fbHealth?.lastError },
+    {
+      name: "אימייל",
+      state: email.configured ? freshness(emailHealth) : "off",
+      when: email.configured ? relTime(emailHealth?.lastSuccessAt) : "לא מוגדר",
+      note: emailHealth?.lastError,
+    },
+    {
+      name: telegram ? "טלגרם" : "וואטסאפ",
+      state: telegram
+        ? latestTestAlert?.status === "FAILED"
           ? "error"
-          : "live";
-  const alertChannelWhen = telegram
-    ? latestTestAlert?.status === "FAILED"
-      ? "הבדיקה נכשלה"
-      : "מחובר · התראות פעילות"
-    : !twilio.configured
-      ? "לא מוגדר"
-      : latestTestAlert == null
-        ? "שלח התראת בדיקה לאימות"
-        : latestTestAlert.status === "FAILED"
-          ? "הבדיקה נכשלה"
-          : `אומת ${relTime(latestTestAlert.sentAt ?? latestTestAlert.createdAt)}`;
+          : "live"
+        : !twilio.configured
+          ? "off"
+          : latestTestAlert?.status === "FAILED"
+            ? "error"
+            : "stale",
+      when: telegram ? "מחובר" : twilio.configured ? "מוגדר" : "לא מוגדר",
+      note: latestTestAlert?.error,
+    },
+  ];
+  const allLive = sensors.every((s) => s.state === "live");
+  const sensorProblem = sensors.find((s) => s.state === "error" || s.state === "off");
+
+  const rowSub = (l: (typeof heroMatches)[number]["listing"]) =>
+    [
+      l.rooms != null ? `${l.rooms} חד׳` : null,
+      l.sizeSqm != null ? `${l.sizeSqm} מ״ר` : null,
+      l.dealType ? DEAL_HE[l.dealType] : null,
+      BROKER_HE[l.brokerStatus] === "לא ידוע" ? null : BROKER_HE[l.brokerStatus],
+      SOURCE_HE[l.source] ?? l.source,
+      relTime(l.createdAt),
+    ]
+      .filter(Boolean)
+      .join(" · ");
+
+  const rowTitle = (l: (typeof heroMatches)[number]["listing"]) =>
+    [hebrewCity(l.city), l.neighborhood ?? l.street].filter(Boolean).join(" · ") || "מיקום לא ידוע";
 
   return (
-    <div className="space-y-8">
-      {/* Header row */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-extrabold">הדירה הבאה שלך</h1>
-          <p className="mt-1.5 text-sm leading-relaxed text-muted">
-            סורק יד2, פייסבוק ואימייל כל ~5 דקות · התאמות חזקות נשלחות אליך בטלגרם
-          </p>
-          <div className="mt-2">
-            <PushToggle />
+    <div className="space-y-6">
+      {/* ===== HERO — the approved centered brand lockup on a monday gradient ===== */}
+      <section className="hero-grad -mx-4 -mt-5 px-4 pb-8 pt-7 text-center sm:-mx-6 sm:-mt-8 sm:rounded-b-2xl">
+        <div className="sm:hidden">
+          {/* Tailwind preflight makes svg display:block — center it explicitly */}
+          <div className="flex justify-center">
+            <LandingMark size={54} />
           </div>
+          <div className="figtree mt-2.5 text-[38px] font-bold leading-none tracking-tight" dir="ltr">
+            Boton
+          </div>
+          <div className="mt-1.5 text-[14.5px] font-semibold text-[#50536b]">בוט אמריקאי מבית ביטון</div>
+          <div className="mx-auto mt-4 w-full border-t border-[rgba(103,104,121,0.14)]" />
         </div>
-        <div className="flex gap-3">
-          <form action={runScanAction}>
-            <SubmitButton icon="search" pendingText="סורק…">
-              סרוק עכשיו{pendingCount > 0 ? ` (${pendingCount})` : ""}
-            </SubmitButton>
-          </form>
-          <form action={sendTestAlertAction}>
-            <SubmitButton variant="secondary" icon="chat" pendingText="שולח…">
-              התראת בדיקה
-            </SubmitButton>
-          </form>
+        <div className="mt-4 sm:mt-0">
+          <h1 className="text-[21px] font-bold">{greeting()}</h1>
+          <p className="mt-1 text-[13.5px] text-[#50536b]">
+            {listingsToday > 0 ? `הבוט סרק ${listingsToday} מודעות היום` : "הבוט סורק כל 5 דקות"} ·{" "}
+            {allLive ? "כל החיישנים מחוברים" : sensorProblem ? `בעיה בחיישן ${sensorProblem.name}` : "חיישן אחד לא עדכני"}
+          </p>
         </div>
-      </div>
+      </section>
 
-      {searchParams.testAlert && (
-        <div className="flex items-center gap-2 rounded-xl2 border border-line bg-good-soft px-4 py-3 text-sm text-good">
-          <Icon name="bell" size={16} />
-          התראת בדיקה נשלחה — בדוק את הטלגרם שלך ואת שורת הסטטוס למטה.
-        </div>
-      )}
+      {searchParams.testAlert &&
+        (searchParams.testAlert === "failed" ? (
+          <FlashBanner clear={["testAlert"]} autoHideMs={0}>
+            <div className="rounded-xl2 border border-line bg-crit-soft px-4 py-3 text-sm text-crit">
+              <span className="flex items-center gap-2 font-semibold">
+                <Icon name="x" size={16} />
+                התראת הבדיקה נכשלה — ההודעה לא הגיעה לנייד.
+              </span>
+              {latestTestAlert?.error && <div className="mt-1 text-xs">{latestTestAlert.error}</div>}
+            </div>
+          </FlashBanner>
+        ) : (
+          <FlashBanner clear={["testAlert"]}>
+            <div className="flex items-center gap-2 rounded-xl2 border border-line bg-good-soft px-4 py-3 text-sm font-semibold text-[#00854d]">
+              <Icon name="bell" size={16} />
+              התראת בדיקה נשלחה — בדוק את הטלגרם שלך.
+            </div>
+          </FlashBanner>
+        ))}
 
-      {/* THE PRODUCT: newest strong matches */}
+      {/* ===== THE BATTERY — today's distribution, the monday signature ===== */}
+      <section className="-mt-10 rounded-xl2 border border-line bg-card p-4 shadow-lift">
+        <h3 className="mb-2.5 text-[13px] font-semibold text-muted">
+          הסריקה של היום · <b className="tnum text-ink">{listingsToday} מודעות</b>
+        </h3>
+        <div className="flex h-[22px] overflow-hidden rounded-badge">
+          {strongToday > 0 && <i style={{ flex: strongToday }} className="bg-good" />}
+          {reviewToday > 0 && <i style={{ flex: reviewToday }} className="bg-warn" />}
+          <i style={{ flex: Math.max(otherToday, listingsToday === 0 ? 1 : 0) || 0.0001 }} className="bg-line" />
+        </div>
+        <div className="tnum mt-2.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
+          <Link href="/matches?status=strong_match" className="inline-flex items-center gap-1.5 hover:text-ink">
+            <i className="h-[9px] w-[9px] rounded-[3px] bg-good" />
+            {strongToday} חזקות
+          </Link>
+          <Link href="/matches?status=possible_match" className="inline-flex items-center gap-1.5 hover:text-ink">
+            <i className="h-[9px] w-[9px] rounded-[3px] bg-warn" />
+            {reviewToday} לבדיקה
+          </Link>
+          <span className="inline-flex items-center gap-1.5">
+            <i className="h-[9px] w-[9px] rounded-[3px] border border-linestrong bg-line" />
+            {otherToday} לא רלוונטי
+          </span>
+        </div>
+      </section>
+
+      {/* ===== GROUP: strong matches ===== */}
       <section>
-        <SectionTitle
-          action={
-            <Link href="/matches" className="text-sm text-accent underline-offset-2 hover:underline">
-              כל ההתאמות ←
-            </Link>
-          }
-        >
-          נמצאו לאחרונה
-        </SectionTitle>
+        <GroupHead color="text-accent" label="התאמות חזקות" count={heroMatches.length} />
         {heroMatches.length === 0 ? (
           <EmptyState icon="spark" title="אין עדיין התאמות חזקות">
-            כשהסורקים ימצאו דירה שעונה על הפרופיל שלך היא תופיע כאן — ותקבל וואטסאפ.
+            כשהסורקים ימצאו דירה שעונה על הפרופיל שלך היא תופיע כאן — ותקבל התראה לנייד.
           </EmptyState>
         ) : (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            {heroMatches.map((m, idx) => {
+          <div className="overflow-hidden rounded-xl2 border border-line bg-card shadow-card">
+            {heroMatches.map((m) => {
               const l = m.listing;
               return (
-                <Card
+                <BoardRow
                   key={m.id}
-                  balcony
-                  className="relative flex flex-col overflow-hidden p-4 pb-7"
-                  // The balcony ribbon: its width IS the match score.
-                  style={{ ["--score" as string]: `${Math.max(0, Math.min(100, m.score))}%` } as React.CSSProperties}
+                  strip="bg-accent"
+                  title={rowTitle(l)}
+                  priceText={l.price != null ? price(l.price) : null}
+                  sub={rowSub(l)}
                 >
-                  <div className="flex items-baseline justify-between gap-2">
-                    <div className={`tnum font-extrabold tracking-tight ${idx === 0 ? "text-3xl" : "text-2xl"}`}>
-                      {l.price != null ? price(l.price) : "מחיר לא צוין"}
-                    </div>
-                    <ScoreBadge score={m.score} size={44} />
-                  </div>
-                  <div className="mt-1 flex items-center gap-1.5 text-[15px] font-medium">
-                    <span className="text-faint">
-                      <Icon name="pin" size={13} />
-                    </span>
-                    {[hebrewCity(l.city), l.neighborhood].filter(Boolean).join(", ") || "מיקום לא ידוע"}
-                  </div>
-                  <div className="tnum mt-0.5 text-sm text-muted">
-                    {[
-                      l.rooms != null ? `${l.rooms} חד׳` : null,
-                      l.sizeSqm != null ? `${l.sizeSqm} מ״ר` : null,
-                      l.dealType ? DEAL_HE[l.dealType] : null,
-                      BROKER_HE[l.brokerStatus] === "לא ידוע" ? null : BROKER_HE[l.brokerStatus],
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
-                  </div>
-                  <div className="mt-2.5 flex items-center gap-2 text-xs text-faint">
-                    <Badge tone="neutral">{SOURCE_HE[l.source] ?? l.source}</Badge>
-                    נמצאה {relTime(l.createdAt)}
-                  </div>
-                  <div className="mt-auto flex gap-2 pt-4">
+                  <ScoreBadge score={m.score} />
+                  <Badge tone="neutral">{relTime(l.createdAt) === "עכשיו" ? "חדשה" : SOURCE_HE[l.source] ?? l.source}</Badge>
+                  <span className="ms-auto flex gap-2">
+                    <ButtonLink href="/matches" variant="secondary" size="sm">
+                      פרטים
+                    </ButtonLink>
                     {l.url && (
-                      <ButtonLink href={l.url} external variant="primary" size="sm" icon="external" className="flex-1">
+                      <ButtonLink href={l.url} external variant="primary" size="sm" icon="external">
                         פתח מודעה
                       </ButtonLink>
                     )}
-                    <ButtonLink href="/matches" variant="secondary" size="sm" className="flex-1">
-                      פרטים מלאים
-                    </ButtonLink>
-                  </div>
-                  <div className="ribbon" aria-hidden="true">
-                    <i />
-                  </div>
-                </Card>
+                  </span>
+                </BoardRow>
               );
             })}
           </div>
         )}
+        <div className="mt-2 text-start">
+          <Link href="/matches" className="text-sm font-semibold text-accent hover:underline">
+            כל ההתאמות ←
+          </Link>
+        </div>
       </section>
 
-      {/* Stat tiles — each links to its view */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatTile value={listingCount} label="דירות במערכת" icon="building" href="/matches" />
-        <StatTile value={strongCount} label="התאמות חזקות" icon="spark" href="/matches?status=strong_match" />
-        <StatTile value={profiles.length} label="פרופילי חיפוש" icon="search" href="/profiles/new" />
-        <StatTile
-          value={pendingCount}
-          label="ממתינות לסריקה"
-          icon="clock"
-          hint={pendingCount > 0 ? "לחץ ״סרוק עכשיו״" : undefined}
-        />
-      </div>
+      {/* ===== GROUP: review queue ===== */}
+      {reviewMatches.length > 0 && (
+        <section>
+          <GroupHead color="text-warn" label="לבדיקה" count={reviewMatches.length} />
+          <div className="overflow-hidden rounded-xl2 border border-line bg-card shadow-card">
+            {reviewMatches.map((m) => {
+              const l = m.listing;
+              return (
+                <BoardRow
+                  key={m.id}
+                  strip="bg-warn"
+                  title={rowTitle(l)}
+                  priceText={l.price != null ? price(l.price) : null}
+                  sub={rowSub(l)}
+                >
+                  <ScoreBadge score={m.score} />
+                  <Badge tone="neutral">ממתינה להחלטה</Badge>
+                  <span className="ms-auto">
+                    <ButtonLink href="/matches?status=possible_match" variant="ghost" size="sm">
+                      רלוונטי?
+                    </ButtonLink>
+                  </span>
+                </BoardRow>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
-      {/* System health — one slim strip */}
-      <Card className="grid grid-cols-2 divide-line max-lg:divide-y lg:grid-cols-4 lg:divide-x lg:divide-x-reverse">
-        <SourceCell title="יד2" icon="building" state={freshness(yad2Health)} when={relTime(yad2Health?.lastSuccessAt)} note={yad2Health?.lastError} />
-        <SourceCell
-          title="פייסבוק"
-          icon="chat"
-          state={freshness(fbHealth)}
-          when={`${relTime(fbHealth?.lastSuccessAt)} · ${fbHealth?.lastItemsFound ?? 0} פוסטים`}
-          note={fbHealth?.lastError}
-        />
-        <SourceCell
-          title="אימייל"
-          icon="envelope"
-          state={email.configured ? freshness(emailHealth) : "off"}
-          when={email.configured ? relTime(emailHealth?.lastSuccessAt) : "לא מוגדר"}
-          note={emailHealth?.lastError}
-        />
-        <SourceCell
-          title={alertChannelTitle}
-          icon="bell"
-          state={alertChannelState}
-          when={alertChannelWhen}
-          note={latestTestAlert?.error}
-        />
-      </Card>
+      {/* ===== sensors as chips ===== */}
+      <section className="flex flex-wrap gap-2">
+        {sensors.map((s) => (
+          <span
+            key={s.name}
+            title={s.note ?? undefined}
+            className="inline-flex items-center gap-2 rounded-full border border-line bg-card px-3 py-1.5 text-xs font-semibold text-muted shadow-card"
+          >
+            <i className={`h-2 w-2 rounded-full ${DOT_CLS[s.state]}`} />
+            {s.name}
+            <span className="font-normal text-faint">
+              {DOT_LABEL[s.state]}
+              {s.state === "live" && s.when !== "מחובר" ? ` · ${s.when}` : ""}
+            </span>
+          </span>
+        ))}
+      </section>
+      {sensorProblem?.note && (
+        <div className="rounded-xl2 border border-line bg-crit-soft px-4 py-2.5 text-xs text-crit">
+          {sensorProblem.name}: {sensorProblem.note}
+        </div>
+      )}
 
-      {/* Search profiles */}
+      {/* ===== ops row ===== */}
+      <section className="flex flex-wrap items-center gap-2.5">
+        <form action={runScanAction}>
+          <SubmitButton
+            variant="secondary"
+            size="sm"
+            icon="search"
+            pendingText="בודק…"
+            title="יד2 ופייסבוק נסרקים אוטומטית מהדפדפן — הכפתור בודק אימייל ומודעות ממתינות"
+          >
+            בדוק אימייל וממתינות{pendingCount > 0 ? ` (${pendingCount})` : ""}
+          </SubmitButton>
+        </form>
+        <form action={sendTestAlertAction}>
+          <SubmitButton variant="secondary" size="sm" icon="chat" pendingText="שולח…">
+            התראת בדיקה
+          </SubmitButton>
+        </form>
+        <PushToggle />
+      </section>
+
+      {/* ===== profiles ===== */}
       <section>
-        <SectionTitle
-          action={
-            <ButtonLink href="/profiles/new" variant="secondary" size="sm" icon="plus">
-              פרופיל חדש
-            </ButtonLink>
-          }
-        >
-          פרופילי חיפוש
-        </SectionTitle>
-
+        <div className="mb-2 flex items-baseline justify-between">
+          <GroupHead color="text-special" label="פרופילי חיפוש" count={profiles.length} />
+          <ButtonLink href="/profiles/new" variant="secondary" size="sm" icon="plus">
+            פרופיל חדש
+          </ButtonLink>
+        </div>
         {profiles.length === 0 ? (
           <EmptyState
             icon="search"
@@ -287,36 +375,30 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
             פרופיל מגדיר מה אתה מחפש — ערים, תקציב, חדרים — והמערכת מתריעה רק על מה שמתאים.
           </EmptyState>
         ) : (
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div className="overflow-hidden rounded-xl2 border border-line bg-card shadow-card">
             {profiles.map((p) => (
-              <Card key={p.id} balcony className="p-5">
+              <div key={p.id} className="relative border-b border-line p-3 pe-4 ps-[18px] last:border-b-0">
+                <span className="absolute inset-y-0 start-0 w-[6px] bg-special" aria-hidden="true" />
                 <div className="flex items-start justify-between gap-3">
-                  <div>
+                  <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-[15.5px] font-extrabold">{p.name}</span>
-                      <Badge tone={p.dealType === "RENT" ? "accent" : "neutral"}>
-                        {DEAL_HE[p.dealType] ?? p.dealType}
-                      </Badge>
+                      <span className="text-[15px] font-bold">{p.name}</span>
+                      <Badge tone={p.dealType === "RENT" ? "accent" : "neutral"}>{DEAL_HE[p.dealType] ?? p.dealType}</Badge>
                       {!p.active && <Badge tone="neutral">לא פעיל</Badge>}
                     </div>
-                    <div className="tnum mt-2 text-sm text-muted">
+                    <div className="tnum mt-1 text-xs text-muted">
                       {p.cities} · {p.priceMin ? `${price(p.priceMin)}–` : "עד "}
                       {price(p.priceMax)}
                       {p.roomsMin ? ` · ${p.roomsMin}${p.roomsMax ? `–${p.roomsMax}` : "+"} חדרים` : ""}
-                      {p.sizeMinSqm ? ` · ${p.sizeMinSqm}+ מ״ר` : ""}
                     </div>
-                    <div className="mt-1 text-sm text-muted">
-                      תיווך: <b className="text-ink">{BROKER_PREF_HE[p.brokerStatusPref] ?? p.brokerStatusPref}</b>
-                    </div>
-                    <div className="tnum mt-2 text-xs text-faint">
-                      התראה בטלגרם מציון {p.whatsappThreshold} ·{" "}
-                      {p.priceDropReAlert ? "התראה חוזרת בירידת מחיר" : "התראה אחת בלבד"}
+                    <div className="tnum mt-0.5 text-xs text-faint">
+                      התראה לנייד מציון {p.whatsappThreshold} · {p.priceDropReAlert ? "התראה חוזרת בירידת מחיר" : "התראה אחת בלבד"}
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
                     <Link
                       href={`/profiles/${p.id}`}
-                      className="rounded-lg p-2 text-muted transition-colors hover:bg-card2 hover:text-ink"
+                      className="rounded-badge p-2 text-muted transition-colors hover:bg-card2 hover:text-ink"
                       title="עריכה"
                     >
                       <Icon name="pencil" size={16} />
@@ -335,7 +417,7 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
                     </form>
                   </div>
                 </div>
-              </Card>
+              </div>
             ))}
           </div>
         )}

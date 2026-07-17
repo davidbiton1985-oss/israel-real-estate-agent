@@ -131,10 +131,10 @@ export default function ProfileForm({ profile }: { profile?: Profile }) {
 
       <FormSection legend="התראות">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <Field label="סף התראת וואטסאפ 📱" hint="דירה בציון הזה ומעלה → הודעה מיידית לנייד">
+          <Field label="סף התראה לנייד" hint="דירה בציון הזה ומעלה → הודעה מיידית (טלגרם + מסך נעילה)">
             <Input name="whatsappThreshold" type="number" min={0} max={100} defaultValue={profile?.whatsappThreshold ?? 80} />
           </Field>
-          <Field label="סף תצוגה בדשבורד" hint="מתחת לציון הזה ההתאמה לא מוצגת כלל">
+          <Field label="סף תקציר הבדיקה" hint="דירות בציון הזה ומעלה (שלא קיבלו התראה) נכללות בתקציר הבדיקה">
             <Input name="dashboardThreshold" type="number" min={0} max={100} defaultValue={profile?.dashboardThreshold ?? 60} />
           </Field>
         </div>

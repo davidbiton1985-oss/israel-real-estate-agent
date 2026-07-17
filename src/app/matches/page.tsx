@@ -8,6 +8,7 @@ import Badge from "@/components/ui/Badge";
 import ScoreBadge from "@/components/ui/ScoreBadge";
 import Sparkline from "@/components/ui/Sparkline";
 import EmptyState from "@/components/ui/EmptyState";
+import FlashBanner from "@/components/ui/FlashBanner";
 import Icon from "@/components/ui/Icon";
 import { Select, Input, inputCls } from "@/components/ui/Field";
 import {
@@ -105,6 +106,8 @@ function dayGroup(d: Date): string {
 interface MatchesSearchParams {
   scanned?: string;
   alertsSent?: string;
+  emails?: string;
+  scanError?: string;
   outcome?: string;
   profile?: string;
   status?: string;
@@ -113,6 +116,8 @@ interface MatchesSearchParams {
   alertReason?: string;
   hasRedFlags?: string;
   minScore?: string;
+  /** ?debug=1 reveals the parsed-fields dump (QA console mode). */
+  debug?: string;
 }
 
 export default async function MatchesPage({ searchParams }: { searchParams: MatchesSearchParams }) {
@@ -157,17 +162,33 @@ export default async function MatchesPage({ searchParams }: { searchParams: Matc
         </span>
       </div>
 
-      {searchParams.scanned && (
-        <div className="flex items-center gap-2 rounded-xl2 border border-line bg-good-soft px-4 py-3 text-sm text-good">
-          <Icon name="check" size={16} />
-          הסריקה הושלמה — עובדו {searchParams.scanned} מודעות, נשלחו {searchParams.alertsSent ?? 0} התראות.
-        </div>
-      )}
+      {searchParams.scanError ? (
+        <FlashBanner clear={["scanned", "alertsSent", "emails", "scanError"]} autoHideMs={0}>
+          <div className="rounded-xl2 border border-line bg-crit-soft px-4 py-3 text-sm text-crit">
+            <span className="flex items-center gap-2 font-medium">
+              <Icon name="x" size={16} />
+              בדיקת האימייל נכשלה — התוצאות למטה חלקיות.
+            </span>
+            <div className="mt-1 text-xs">{searchParams.scanError}</div>
+          </div>
+        </FlashBanner>
+      ) : searchParams.scanned ? (
+        <FlashBanner clear={["scanned", "alertsSent", "emails"]}>
+          <div className="flex items-center gap-2 rounded-xl2 border border-line bg-good-soft px-4 py-3 text-sm text-good">
+            <Icon name="check" size={16} />
+            {searchParams.scanned === "0"
+              ? `נבדקו ${searchParams.emails ?? 0} אימיילים — אין מודעות חדשות.`
+              : `הבדיקה הושלמה — עובדו ${searchParams.scanned} מודעות, נשלחו ${searchParams.alertsSent ?? 0} התראות.`}
+          </div>
+        </FlashBanner>
+      ) : null}
       {searchParams.outcome && (
-        <div className="flex items-center gap-2 rounded-xl2 border border-line bg-accent-soft px-4 py-3 text-sm text-accent">
-          <Icon name="check" size={16} />
-          {OUTCOME_HE[searchParams.outcome] ?? "המודעה עובדה."}
-        </div>
+        <FlashBanner clear={["outcome", "listingId"]}>
+          <div className="flex items-center gap-2 rounded-xl2 border border-line bg-accent-soft px-4 py-3 text-sm text-accent">
+            <Icon name="check" size={16} />
+            {OUTCOME_HE[searchParams.outcome] ?? "המודעה עובדה."}
+          </div>
+        </FlashBanner>
       )}
 
       {/* Filter bar — GET form, same param names as before */}
@@ -243,18 +264,30 @@ export default async function MatchesPage({ searchParams }: { searchParams: Matc
         </form>
       </Card>
 
-      {matches.length === 0 && (
-        <EmptyState icon="search" title="אין התאמות בסינון הזה">
-          נסה לנקות את הסינון, להוסיף מודעה ידנית, או להריץ סריקה מהדשבורד.
-        </EmptyState>
-      )}
+      {matches.length === 0 &&
+        // Don't blame a filter that isn't applied: unfiltered-empty means the
+        // system hasn't matched anything — point at the sensors, not the UI.
+        ([searchParams.profile, searchParams.status, searchParams.source, searchParams.broker, searchParams.alertReason, searchParams.hasRedFlags, searchParams.minScore].some(Boolean) ? (
+          <EmptyState icon="search" title="אין התאמות בסינון הזה">
+            נסה לנקות את הסינון, להוסיף מודעה ידנית, או להריץ בדיקה מהדשבורד.
+          </EmptyState>
+        ) : (
+          <EmptyState icon="spark" title="עדיין אין התאמות">
+            כשהחיישנים יקלטו מודעות שמתאימות לפרופיל הן יופיעו כאן — ודא בדשבורד שהחיישנים פעילים.
+          </EmptyState>
+        ))}
 
       {GROUP_ORDER.filter((g) => groups.has(g)).map((groupName) => (
         <section key={groupName}>
-          <div className="mb-3 mt-2 flex items-center gap-2">
-            <h2 className="font-display text-lg font-semibold">{groupName}</h2>
-            <span className="tnum rounded-full bg-card2 px-2 py-0.5 text-xs text-muted">{groups.get(groupName)!.length}</span>
-            {groupName === "היום" && <span className="h-2 w-2 rounded-full bg-accent" aria-hidden="true" />}
+          {/* monday group header: colored bold title + count */}
+          <div
+            className={`mb-2 mt-2 flex items-baseline gap-2 px-0.5 text-[15px] font-bold ${
+              groupName === "היום" ? "text-accent" : "text-muted"
+            }`}
+          >
+            <span className="text-[10px]">▼</span>
+            {groupName}
+            <span className="tnum text-xs font-medium text-muted">{groups.get(groupName)!.length}</span>
           </div>
           <div className="space-y-3">
             {groups.get(groupName)!.map((m) => {
@@ -389,17 +422,19 @@ export default async function MatchesPage({ searchParams }: { searchParams: Matc
                         {l.rawText}
                       </pre>
                     </details>
-                    <details className="re-collapse open:basis-full">
-                      <summary className="inline-flex items-center gap-1 text-faint transition-colors hover:text-ink">
-                        <span className="chev inline-flex">
-                          <Icon name="chevron" size={10} />
-                        </span>
-                        שדות מפוענחים
-                      </summary>
-                      <pre dir="ltr" className="tnum mt-2 whitespace-pre-wrap rounded-lg bg-card2/60 p-3 text-start font-mono text-xs text-muted">
-                        {debugFieldsText(l)}
-                      </pre>
-                    </details>
+                    {searchParams.debug === "1" && (
+                      <details className="re-collapse open:basis-full">
+                        <summary className="inline-flex items-center gap-1 text-faint transition-colors hover:text-ink">
+                          <span className="chev inline-flex">
+                            <Icon name="chevron" size={10} />
+                          </span>
+                          שדות מפוענחים
+                        </summary>
+                        <pre dir="ltr" className="tnum mt-2 whitespace-pre-wrap rounded-lg bg-card2/60 p-3 text-start font-mono text-xs text-muted">
+                          {debugFieldsText(l)}
+                        </pre>
+                      </details>
+                    )}
                     <details className="re-collapse open:basis-full" open={Boolean(l.qaNotes)}>
                       <summary className="inline-flex items-center gap-1 text-faint transition-colors hover:text-ink">
                         <span className="chev inline-flex">

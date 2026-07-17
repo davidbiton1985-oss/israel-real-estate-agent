@@ -1,12 +1,16 @@
-// Generates the PWA icons (public/icons/*.png) from the app's logo mark —
-// three white "balcony ribbon" bars on an ultramarine block — with no image
-// dependencies: pixels are rasterized by hand and PNG-encoded via zlib.
+// Generates the PWA icons (public/icons/*.png): the Boton mark — "The
+// Landing" (three rounded towers + the green dot settled in the open spot) —
+// on a white tile, monday.com icon grammar. No image dependencies: pixels are
+// rasterized by hand (2x supersampled) and PNG-encoded via zlib.
 // Run: node scripts/generate-pwa-icons.mjs
 import { deflateSync } from "zlib";
 import { mkdirSync, writeFileSync } from "fs";
 
-const COBALT = [0x25, 0x47, 0xd0]; // #2547D0 — matches --accent (light)
 const WHITE = [0xff, 0xff, 0xff];
+const BLUE = [0x00, 0x73, 0xea];
+const YELLOW = [0xff, 0xcb, 0x00];
+const PURPLE = [0xa2, 0x5d, 0xdc];
+const GREEN = [0x00, 0xc8, 0x75];
 
 // CRC32 (PNG chunk checksums)
 const CRC_TABLE = new Int32Array(256).map((_, n) => {
@@ -28,18 +32,17 @@ function chunk(type, data) {
   return Buffer.concat([len, body, crc]);
 }
 function encodePng(size, rgb) {
-  // raw scanlines: filter byte 0 + RGB triplets
   const raw = Buffer.alloc(size * (1 + size * 3));
   for (let y = 0; y < size; y++) {
-    const row = y * (1 + size * 3);
-    raw[row] = 0;
-    rgb.copy(raw, row + 1, y * size * 3, (y + 1) * size * 3);
+    const rowStart = y * (1 + size * 3);
+    raw[rowStart] = 0;
+    rgb.copy(raw, rowStart + 1, y * size * 3, (y + 1) * size * 3);
   }
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(size, 0);
   ihdr.writeUInt32BE(size, 4);
-  ihdr[8] = 8; // bit depth
-  ihdr[9] = 2; // color type: truecolor
+  ihdr[8] = 8;
+  ihdr[9] = 2;
   return Buffer.concat([
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
     chunk("IHDR", ihdr),
@@ -48,43 +51,49 @@ function encodePng(size, rgb) {
   ]);
 }
 
-/** Anti-aliased coverage of point (px,py) by a horizontal capsule bar. */
-function capsuleCoverage(px, py, x0, x1, cy, r) {
-  const cx = Math.max(x0 + r, Math.min(x1 - r, px));
-  const d = Math.hypot(px - cx, py - cy);
-  return Math.max(0, Math.min(1, r - d + 0.5));
+// signed distance to a rounded rect (grid units); inside <= 0
+function roundRectDist(px, py, x, y, w, hgt, r) {
+  const cx = x + w / 2;
+  const cy = y + hgt / 2;
+  const dx = Math.abs(px - cx) - (w / 2 - r);
+  const dy = Math.abs(py - cy) - (hgt / 2 - r);
+  const ox = Math.max(dx, 0);
+  const oy = Math.max(dy, 0);
+  return Math.hypot(ox, oy) + Math.min(Math.max(dx, dy), 0) - r;
+}
+
+// The Landing in its 48-unit grid: [x, y, w, h, r, color]
+const BARS = [
+  [5.5, 6, 9, 36, 4.5, BLUE],
+  [19.5, 30, 9, 12, 4.5, YELLOW],
+  [33.5, 14, 9, 28, 4.5, PURPLE],
+];
+
+function sampleColor(gx, gy) {
+  // green dot paints last (it overlaps nothing, but keep it on top anyway)
+  if (Math.hypot(gx - 24, gy - 24) <= 6) return GREEN;
+  for (const [x, y, w, hgt, r, col] of BARS) {
+    if (roundRectDist(gx, gy, x, y, w, hgt, r) <= 0) return col;
+  }
+  return WHITE;
 }
 
 function renderIcon(size) {
-  // Logo grid is 16 units; keep the mark inside the maskable safe zone.
-  const scale = (size * 0.62) / 16;
-  const off = size * 0.19;
-  // bars: [x, width, y, opacity] in grid units (y = bar top, height 2.2)
-  const bars = [
-    [2, 12, 3, 1],
-    [2, 9, 7, 0.78],
-    [2, 12, 11, 1],
-  ];
   const rgb = Buffer.alloc(size * size * 3);
+  // mark at 62% of the tile, centered (maskable-safe)
+  const scale = (size * 0.62) / 48;
+  const off = (size - 48 * scale) / 2;
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
-      let [r, g, b] = COBALT;
-      for (const [bx, bw, by, op] of bars) {
-        const x0 = off + bx * scale;
-        const x1 = off + (bx + bw) * scale;
-        const cy = off + (by + 1.1) * scale;
-        const rad = 1.1 * scale;
-        const a = capsuleCoverage(x + 0.5, y + 0.5, x0, x1, cy, rad) * op;
-        if (a > 0) {
-          r = r + (WHITE[0] - r) * a;
-          g = g + (WHITE[1] - g) * a;
-          b = b + (WHITE[2] - b) * a;
-        }
+      let r = 0, g = 0, b = 0;
+      for (const [ox, oy] of [[0.25, 0.25], [0.75, 0.25], [0.25, 0.75], [0.75, 0.75]]) {
+        const c = sampleColor((x + ox - off) / scale, (y + oy - off) / scale);
+        r += c[0]; g += c[1]; b += c[2];
       }
       const i = (y * size + x) * 3;
-      rgb[i] = Math.round(r);
-      rgb[i + 1] = Math.round(g);
-      rgb[i + 2] = Math.round(b);
+      rgb[i] = Math.round(r / 4);
+      rgb[i + 1] = Math.round(g / 4);
+      rgb[i + 2] = Math.round(b / 4);
     }
   }
   return encodePng(size, rgb);

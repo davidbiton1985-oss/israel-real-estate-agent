@@ -6,8 +6,8 @@ import { useFormStatus } from "react-dom";
 import Icon, { type IconName } from "./Icon";
 
 const VARIANTS = {
-  primary: "bg-accent text-accent-ink hover:bg-accent-strong border border-transparent shadow-card",
-  secondary: "bg-card text-ink border border-line hover:border-faint hover:bg-card2",
+  primary: "bg-accent text-accent-ink border border-transparent hover:bg-accent-strong",
+  secondary: "bg-card text-ink border border-linestrong hover:bg-card2",
   danger: "bg-transparent text-crit border border-transparent hover:bg-crit-soft",
 } as const;
 
@@ -31,6 +31,7 @@ export default function SubmitButton({
   icon,
   pendingText,
   confirmText,
+  title,
   className = "",
   children,
 }: {
@@ -41,6 +42,7 @@ export default function SubmitButton({
   pendingText?: string;
   /** If set, asks for confirmation before submitting (destructive actions). */
   confirmText?: string;
+  title?: string;
   className?: string;
   children: React.ReactNode;
 }) {
@@ -49,8 +51,9 @@ export default function SubmitButton({
   return (
     <button
       disabled={pending}
+      title={title}
       onClick={confirmText ? (e) => !window.confirm(confirmText) && e.preventDefault() : undefined}
-      className={`inline-flex items-center justify-center whitespace-nowrap rounded-lg font-medium transition-colors select-none disabled:opacity-60 ${VARIANTS[variant]} ${SIZES[size]} ${className}`}
+      className={`inline-flex items-center justify-center whitespace-nowrap rounded-badge font-semibold transition-all select-none active:scale-[0.98] disabled:opacity-60 ${VARIANTS[variant]} ${SIZES[size]} ${className}`}
     >
       {pending ? <Spinner size={iconSize} /> : icon ? <Icon name={icon} size={iconSize} /> : null}
       {pending ? (pendingText ?? children) : children}

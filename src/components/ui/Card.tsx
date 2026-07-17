@@ -1,21 +1,15 @@
 export function Card({
   className = "",
-  balcony = false,
   style,
   children,
 }: {
   className?: string;
-  /** Feature cards (matches, profiles) get the signature Bauhaus balcony corner. */
-  balcony?: boolean;
-  /** Passthrough for CSS custom properties (e.g. the ribbon's --score). */
+  /** Passthrough for CSS custom properties. */
   style?: React.CSSProperties;
   children: React.ReactNode;
 }) {
   return (
-    <div
-      className={`${balcony ? "rounded-balc" : "rounded-xl2"} border border-line bg-card shadow-card ${className}`}
-      style={style}
-    >
+    <div className={`rounded-xl2 border border-line bg-card shadow-card ${className}`} style={style}>
       {children}
     </div>
   );

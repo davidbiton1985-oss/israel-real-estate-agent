@@ -3,110 +3,66 @@
 @tailwind utilities;
 
 /* ---------------------------------------------------------------------------
-   Design tokens — "White City" system, Hebrew-first RTL.
-   Tel Aviv Bauhaus: cool plaster ground, white cards, ultramarine accent.
-   Dark is "Tel Aviv night": deep blue-slate with a luminous accent.
-   Light is the default; dark redefines the same tokens under the OS media
-   query, and the header toggle stamps data-theme on <html>, which must win
-   in BOTH directions — hence the four blocks. Components style through the
-   tokens only, never through raw colors.
+   Design tokens — "Boton" on monday.com's design language (Vibe values),
+   approved 2026-07-17. LIGHT-ONLY by design (like monday): airy #f6f7fb
+   ground, white surfaces, blue #0073ea primary, the monday status colors as
+   solid blocks. Components style through tokens only, never raw colors.
 --------------------------------------------------------------------------- */
 :root {
-  --bg: #eceef1;          /* cool plaster ground */
-  --card: #ffffff;
-  --card-2: #f3f5f8;      /* inset / hover surface */
-  --ink: #131a2a;         /* blue-black */
-  --muted: #5a6478;
-  --faint: #8a93a6;
-  --line: #dde1e8;        /* hairline cool border */
-  --accent: #2547d0;      /* ultramarine */
-  --accent-strong: #1c38a8;
-  --accent-soft: #e7ecfb;
-  --accent-ink: #ffffff;  /* text on accent */
-  --good: #1e7f4f;
-  --good-soft: #e1f2e8;
-  --warn: #9a6b00;
-  --warn-soft: #f6edd4;
-  --crit: #b3362e;
-  --crit-soft: #f7e3e0;
-}
+  color-scheme: light;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #0e1220;
-    --card: #161b2c;
-    --card-2: #1d2334;
-    --ink: #e8ebf4;
-    --muted: #9aa3bc;
-    --faint: #6c7590;
-    --line: #262d42;
-    --accent: #8fa5ff;
-    --accent-strong: #aebeff;
-    --accent-soft: #232c4e;
-    --accent-ink: #0e1220;
-    --good: #63c68f;
-    --good-soft: #17301f;
-    --warn: #d9b25c;
-    --warn-soft: #332a12;
-    --crit: #e08a83;
-    --crit-soft: #3a1d1a;
-  }
-}
-
-:root[data-theme="light"] {
-  --bg: #eceef1;
+  /* surfaces */
+  --bg: #f6f7fb;
   --card: #ffffff;
-  --card-2: #f3f5f8;
-  --ink: #131a2a;
-  --muted: #5a6478;
-  --faint: #8a93a6;
-  --line: #dde1e8;
-  --accent: #2547d0;
-  --accent-strong: #1c38a8;
-  --accent-soft: #e7ecfb;
+  --card-2: #f6f7fb;      /* inset fields / hover surface */
+
+  /* text */
+  --ink: #323338;
+  --muted: #676879;
+  --faint: #9699a6;
+
+  /* lines */
+  --line: #e6e9ef;
+  --line-strong: #d0d4e4;
+
+  /* primary (monday blue) */
+  --accent: #0073ea;
+  --accent-strong: #0060b9;
+  --accent-soft: #e5f0ff;
   --accent-ink: #ffffff;
-  --good: #1e7f4f;
-  --good-soft: #e1f2e8;
-  --warn: #9a6b00;
-  --warn-soft: #f6edd4;
-  --crit: #b3362e;
-  --crit-soft: #f7e3e0;
+
+  /* monday status colors — used as SOLID blocks with white text */
+  --good: #00c875;
+  --good-soft: #e6f9f1;
+  --warn: #fdab3d;
+  --warn-soft: #fff3e2;
+  --crit: #e2445c;
+  --crit-soft: #fcebee;
+  --special: #a25ddc;      /* purple — pursuits / in-progress */
+  --special-soft: #f3ebfb;
+  --yellow: #ffcb00;
+
+  /* shadows */
+  --shadow-sm: 0 4px 8px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.1);
 }
 
-:root[data-theme="dark"] {
-  --bg: #0e1220;
-  --card: #161b2c;
-  --card-2: #1d2334;
-  --ink: #e8ebf4;
-  --muted: #9aa3bc;
-  --faint: #6c7590;
-  --line: #262d42;
-  --accent: #8fa5ff;
-  --accent-strong: #aebeff;
-  --accent-soft: #232c4e;
-  --accent-ink: #0e1220;
-  --good: #63c68f;
-  --good-soft: #17301f;
-  --warn: #d9b25c;
-  --warn-soft: #332a12;
-  --crit: #e08a83;
-  --crit-soft: #3a1d1a;
-}
-
-/* ---------------------------------------------------------------------------
-   Base
---------------------------------------------------------------------------- */
 body {
   background: var(--bg);
   color: var(--ink);
-  font-family: var(--font-body), "Rubik", -apple-system, "Segoe UI", Arial, sans-serif;
+  font-family: var(--font-body), "Heebo", -apple-system, "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
 }
 
 h1, h2, h3 {
-  font-family: var(--font-display), var(--font-body), "Rubik", sans-serif;
-  letter-spacing: -0.02em;
   text-wrap: balance;
+}
+
+/* Latin brand/numeral face (Figtree) — Hebrew text falls back to Heebo */
+.figtree {
+  font-family: var(--font-latin), var(--font-body), sans-serif;
 }
 
 /* Numbers line up in columns everywhere data is shown */
@@ -114,51 +70,27 @@ h1, h2, h3 {
   font-variant-numeric: tabular-nums;
 }
 
-/* Visible keyboard focus, token-colored */
+/* Visible keyboard focus */
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
   border-radius: 4px;
 }
 
-/* Native controls pick up the theme (dropdown arrows, checkboxes, date inputs) */
-:root { color-scheme: light; }
-:root[data-theme="dark"] { color-scheme: dark; }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) { color-scheme: dark; }
+/* The dashboard hero band — monday-style soft gradient */
+.hero-grad {
+  background: linear-gradient(160deg, #e9f1fe 0%, #f4eefe 55%, #fdeef3 100%);
 }
 
 /* Live status LED pulse — disabled for reduced-motion users */
 @keyframes led-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--good) 45%, transparent); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(0, 200, 117, 0.4); }
   60% { box-shadow: 0 0 0 5px transparent; }
 }
 .led-live { animation: led-pulse 2.4s ease-out infinite; }
 
-/* The signature: "balcony ribbon" score bar on match cards — its width IS the
-   score. Card must be relative + overflow-hidden + rounded-balc. */
-.ribbon {
-  position: absolute;
-  inset-inline: 0;
-  bottom: 0;
-  height: 7px;
-  background: var(--card-2);
-}
-.ribbon > i {
-  position: absolute;
-  inset-inline-start: 0;
-  top: 0;
-  bottom: 0;
-  width: var(--score);
-  background: var(--accent);
-  border-end-end-radius: 4px;
-  animation: ribbon-fill 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
-}
-@keyframes ribbon-fill { from { width: 0; } }
-
 @media (prefers-reduced-motion: reduce) {
   .led-live { animation: none; }
-  .ribbon > i { animation: none; }
   * { transition-duration: 0.01ms !important; }
 }
 
