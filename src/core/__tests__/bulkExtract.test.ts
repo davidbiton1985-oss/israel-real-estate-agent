@@ -108,6 +108,13 @@ describe("extractListingFromPost — one post, correct deal type, reject non-off
     const c = extractListingFromPost("דירת 4 חדרים למכירה\nמחיר 2,700,000 שח\n050-1234567", ctx)!;
     expect(parseListing(c.text).dealType).toBe("SALE");
   });
+  it("purchase-speak (לרכוש) without a price is SALE — never inherits the group's RENT", () => {
+    // real bug: "הזדמנות לרכוש… בית בפארק" in a rentals group got stamped
+    // "להשכרה" and alerted at score 87
+    const c = extractListingFromPost("הזדמנות לרכוש דירת 3 חדרים בפרויקט המבוקש\n78 מ״ר בנוי + מרפסת שמש", ctx)!;
+    expect(c.dealType).toBe("SALE");
+    expect(parseListing(c.text).dealType).toBe("SALE");
+  });
   it("a monthly rent is RENT even with a long phone number present (no false SALE)", () => {
     const c = extractListingFromPost("דירת 4 חדרים משופצת\nמחיר 8,700 שח לחודש\n050-1111111", ctx)!;
     const p = parseListing(c.text);

@@ -173,7 +173,9 @@ export function extractListingFromPost(
   // monthly = thousands; a parsed price ≥ 50,000 means sale). We use the parsed
   // price — not a raw digit scan — so phone numbers don't trip it.
   let dealType: "RENT" | "SALE" | null;
-  if (/למכירה|נמכרת/.test(clean) || /מיליון|million/i.test(clean) || (p.price != null && p.price >= 50000)) {
+  // "לרכוש/רכישה" = purchase-speak — a sale post in a rentals group used to
+  // fall back to the group's RENT context and get "להשכרה" stamped into it.
+  if (/למכירה|נמכרת|לרכוש|לרכישה|רכישה/.test(clean) || /מיליון|million/i.test(clean) || (p.price != null && p.price >= 50000)) {
     dealType = "SALE";
   } else if (/להשכרה|להשכיר|שכירות|לחודש|לחו['׳]/.test(clean)) {
     dealType = "RENT";

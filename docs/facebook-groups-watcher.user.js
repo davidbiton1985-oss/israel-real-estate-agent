@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RE-Agent Facebook Notification Reader
 // @namespace    israel-real-estate-agent
-// @version      12.16
+// @version      12.17
 // @description  Notification-driven reader: one designated tab checks facebook.com/notifications every 7–12 min (randomized, slower overnight); every "posted in group" notification links to the post's own page, which the tab then opens and reads IN FULL — parsed, scored, WhatsApp'd by your local RE-Agent (localhost:3000). It also sweeps one target group's chronological feed per cycle (round-robin, scroll-until-overlap) so posts Facebook never notified about are still caught, and survives browser restarts via a localStorage reader lease. Runs only in your own logged-in browser session — no scraping server, no login/CAPTCHA bypass; if Facebook shows a checkpoint the reader BACKS OFF instead of hammering it. Your other Facebook tabs are untouched (the reader runs only in the tab you start with #re-agent).
 // @match        https://www.facebook.com/*
 // @noframes
@@ -389,6 +389,21 @@
     for (var j = 0; j < nested.length; j++) nested[j].style.display = saved[j];
     return txt;
   }
+  // v12.17: the article's OWN permalink — a shared post embeds the ORIGINAL
+  // post's permalink inside a nested [role=article], and "first /groups/ link
+  // in the article" bound text A to link B (dashboard taps opened the WRONG
+  // ad). Only anchors whose nearest article ancestor is THIS article can be
+  // its own permalink; nested (shared/quoted) links are never attribution.
+  function ownPermalink(article) {
+    var links = article.querySelectorAll('a[href*="/groups/"]');
+    for (var i = 0; i < links.length; i++) {
+      var host = links[i].closest ? links[i].closest('[role="article"]') : null;
+      if (host !== article) continue; // sits inside a nested shared post → not ours
+      var link = canonPostUrl(links[i].href);
+      if (link) return link;
+    }
+    return null;
+  }
   // FB truncates long posts behind a "see more" toggle; if it isn't clicked the
   // body is only a ~95-char preview and the parser can't read rooms/price/city.
   // Match the SHORT toggle label (length-guarded so we never click a paragraph
@@ -571,9 +586,8 @@
       var arts = outermostArticles();
       var run = 0;
       for (var i = 0; i < arts.length; i++) {
-        var pid = null;
-        var links = arts[i].querySelectorAll('a[href*="/groups/"]');
-        for (var j = 0; j < links.length; j++) { var link = canonPostUrl(links[j].href); pid = link && postIdOf(link); if (pid) break; }
+        var link = ownPermalink(arts[i]); // v12.17: own permalink only — nested shares don't count
+        var pid = link && postIdOf(link);
         if (!pid) continue; // ad / suggested / no-permalink article — ignore, don't reset the run
         if (seen.indexOf(pid) !== -1) { run++; if (run >= OVERLAP_K) return true; } else run = 0;
       }
@@ -585,9 +599,7 @@
       outermostArticles().forEach(function (a) {
         var t = postOwnText(a);
         if (t.length < 40) return;
-        var link = null;
-        var links = a.querySelectorAll('a[href*="/groups/"]');
-        for (var i = 0; i < links.length; i++) { link = canonPostUrl(links[i].href); if (link) break; }
+        var link = ownPermalink(a); // v12.17: never a nested share's permalink
         // No own permalink → cannot attribute reliably → drop (attribution must
         // never guess; a wrong link is worse than a missed capture).
         if (!link) return;
