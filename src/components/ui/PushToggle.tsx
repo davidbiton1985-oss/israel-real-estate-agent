@@ -37,7 +37,7 @@ export default function PushToggle() {
         }
         // ?v= forces a fresh script fetch so SW fixes reach the phone on the
         // very next app open (bump on every sw.js change).
-        const reg = await navigator.serviceWorker.register("/sw.js?v=3");
+        const reg = await navigator.serviceWorker.register("/sw.js?v=4");
         const sub = await reg.pushManager.getSubscription();
         if (sub) {
           // Heal server-side drift on every open: re-POST the subscription

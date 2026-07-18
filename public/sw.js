@@ -1,7 +1,23 @@
-// Service worker for the installed PWA — receives Web Push and shows the
-// notification. iOS requires showNotification for every push (userVisibleOnly).
-self.addEventListener("install", () => self.skipWaiting());
+// Service worker for the installed PWA — receives Web Push, shows the
+// notification, and serves an offline shell when a navigation fails (the
+// terrain of apartment viewing is stairwells and parking garages).
+const OFFLINE_CACHE = "boton-offline-v1";
+
+self.addEventListener("install", (e) => {
+  self.skipWaiting();
+  e.waitUntil(caches.open(OFFLINE_CACHE).then((c) => c.add("/offline")));
+});
 self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
+
+// Network-first for page navigations; offline → the precached shell.
+self.addEventListener("fetch", (event) => {
+  if (event.request.mode !== "navigate") return;
+  event.respondWith(
+    fetch(event.request).catch(() =>
+      caches.match("/offline").then((r) => r || new Response("offline", { status: 503 }))
+    )
+  );
+});
 
 self.addEventListener("push", (event) => {
   let data = {};

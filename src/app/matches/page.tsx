@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { saveListingNotes } from "@/app/actions";
 import type { Listing } from "@prisma/client";
@@ -9,6 +10,7 @@ import ScoreBadge from "@/components/ui/ScoreBadge";
 import Sparkline from "@/components/ui/Sparkline";
 import EmptyState from "@/components/ui/EmptyState";
 import FlashBanner from "@/components/ui/FlashBanner";
+import AutoSubmitOnChange from "@/components/ui/AutoSubmitOnChange";
 import Icon from "@/components/ui/Icon";
 import { Select, Input, inputCls } from "@/components/ui/Field";
 import {
@@ -162,6 +164,17 @@ export default async function MatchesPage({ searchParams }: { searchParams: Matc
 
   let prevAction = "";
 
+  const activeFilters = [
+    searchParams.profile,
+    searchParams.status,
+    searchParams.source,
+    searchParams.broker,
+    searchParams.alertReason,
+    searchParams.minScore,
+    searchParams.hasRedFlags,
+    searchParams.dismissed,
+  ].filter(Boolean).length;
+
   return (
     <div className="space-y-5">
       <div className="flex items-end justify-between">
@@ -200,9 +213,20 @@ export default async function MatchesPage({ searchParams }: { searchParams: Matc
         </FlashBanner>
       )}
 
-      {/* Filter bar — GET form, same param names as before */}
-      <Card className="p-4">
-        <form method="GET" className="flex flex-wrap items-end gap-3 text-sm">
+      {/* Filter bar — collapsed by default (phone-first); selects auto-submit */}
+      <Card className="px-4 py-1">
+        <details className="re-collapse">
+          <summary className="flex min-h-[44px] items-center gap-2 text-sm font-semibold text-muted">
+            <span className="chev inline-flex">
+              <Icon name="chevron" size={11} />
+            </span>
+            סינון
+            {activeFilters > 0 && (
+              <span className="tnum rounded-full bg-accent-soft px-2 py-0.5 text-xs font-bold text-accent">{activeFilters}</span>
+            )}
+          </summary>
+          <form method="GET" className="flex flex-wrap items-end gap-3 pb-3 pt-1 text-sm">
+            <AutoSubmitOnChange />
           <label className="flex flex-col gap-1">
             <span className="text-xs text-muted">פרופיל</span>
             <Select name="profile" defaultValue={searchParams.profile ?? ""} className="w-auto min-w-28">
@@ -275,7 +299,8 @@ export default async function MatchesPage({ searchParams }: { searchParams: Matc
               נקה
             </a>
           </div>
-        </form>
+          </form>
+        </details>
       </Card>
 
       {matches.length === 0 &&
@@ -342,9 +367,11 @@ export default async function MatchesPage({ searchParams }: { searchParams: Matc
                           </Badge>
                         )}
                         {l.isDuplicateOf && (
-                          <Badge tone="warn" icon="flag">
-                            כפילות
-                          </Badge>
+                          <Link href={`/listing/${l.isDuplicateOf}`} title="פתח את המודעה המקורית">
+                            <Badge tone="warn" icon="flag">
+                              כפילות — למקור ←
+                            </Badge>
+                          </Link>
                         )}
                         {latestAlert && (
                           <Badge tone={ALERT_STATUS_TONE[latestAlert.status] ?? "neutral"} icon="bell">

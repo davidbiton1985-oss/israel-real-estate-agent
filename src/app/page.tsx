@@ -184,6 +184,16 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
   const rowTitle = (l: (typeof heroMatches)[number]["listing"]) =>
     [hebrewCity(l.city), l.neighborhood ?? l.street].filter(Boolean).join(" · ") || "מיקום לא ידוע";
 
+  // one line of WHY — a naked score is an assertion, a reason is an argument
+  const topReason = (json: string): string | null => {
+    try {
+      const arr = JSON.parse(json);
+      return Array.isArray(arr) && typeof arr[0] === "string" ? arr[0] : null;
+    } catch {
+      return null;
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* ===== HERO — the approved centered brand lockup on a monday gradient ===== */}
@@ -315,7 +325,9 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
                   sub={rowSub(l)}
                 >
                   <ScoreBadge score={m.score} />
-                  <Badge tone="neutral">{relTime(l.createdAt) === "עכשיו" ? "חדשה" : SOURCE_HE[l.source] ?? l.source}</Badge>
+                  {topReason(m.reasonsPositive) && (
+                    <span className="max-w-[40%] truncate text-xs font-medium text-[#00854d]">✓ {topReason(m.reasonsPositive)}</span>
+                  )}
                   <span className="ms-auto flex gap-2">
                     {l.phone && (
                       <a
