@@ -8,7 +8,7 @@ import { usePathname } from "next/navigation";
 import Icon, { type IconName } from "./Icon";
 
 const ITEMS: { href: string; label: string; icon: IconName }[] = [
-  { href: "/", label: "גלריה", icon: "home" },
+  { href: "/", label: "בית", icon: "home" },
   { href: "/matches", label: "הכל", icon: "search" },
   { href: "/pursuit", label: "בטיפול", icon: "bell" },
   { href: "/profile", label: "פרופיל", icon: "filter" },

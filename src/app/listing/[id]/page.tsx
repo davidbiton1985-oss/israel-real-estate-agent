@@ -66,7 +66,7 @@ export default async function ListingPage({ params }: { params: { id: string } }
   return (
     <div className="pb-24">
       {/* hero photo, full bleed */}
-      <div className="relative -mx-[18px] -mt-2 sm:mx-0 sm:mt-0 sm:overflow-hidden sm:rounded-xl2">
+      <div className="relative -mx-[10px] -mt-2 sm:mx-0 sm:mt-0 sm:overflow-hidden sm:rounded-xl2">
         {listing.imageUrl ? (
           <div className="relative aspect-[4/3] bg-card2">
             <Thumb src={listing.imageUrl} alt="תמונת הדירה" className="h-full w-full object-cover" />
@@ -84,12 +84,12 @@ export default async function ListingPage({ params }: { params: { id: string } }
           className="absolute top-4 me-4 ms-4 inline-flex items-center rounded-full px-4 py-2.5 text-[13.5px] font-bold shadow-card backdrop-blur"
           style={{ insetInlineStart: 0, background: "var(--glass)" }}
         >
-          → לגלריה
+          → דף הבית
         </Link>
       </div>
 
       {/* the sheet */}
-      <div className={`relative -mx-[18px] rounded-t-sheet bg-bg px-[18px] pt-6 sm:mx-0 ${listing.imageUrl ? "-mt-6" : ""}`}>
+      <div className={`relative -mx-[10px] rounded-t-sheet bg-bg px-[14px] pt-6 sm:mx-0 ${listing.imageUrl ? "-mt-6" : ""}`}>
         {!listing.imageUrl && (
           <div className="display tnum mb-1 text-[26px] leading-none">
             {listing.price != null ? price(listing.price) : <span className="font-body text-base font-semibold text-muted">מחיר לא צוין</span>}
@@ -200,7 +200,7 @@ export default async function ListingPage({ params }: { params: { id: string } }
 
       {/* sticky action bar — the dock steps aside on this page */}
       <div
-        className="fixed bottom-0 left-1/2 z-40 flex w-full max-w-[430px] -translate-x-1/2 items-center gap-2.5 px-[18px] sm:max-w-lg"
+        className="fixed bottom-0 left-1/2 z-40 flex w-full max-w-[430px] -translate-x-1/2 items-center gap-2.5 px-[10px] sm:max-w-lg"
         style={{
           paddingBottom: "calc(12px + env(safe-area-inset-bottom))",
           paddingTop: 12,

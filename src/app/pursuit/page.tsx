@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { hebrewCity } from "@/core/alert";
 import ScoreBadge from "@/components/ui/ScoreBadge";
 import Thumb from "@/components/ui/Thumb";
+import PhotoPlaceholder from "@/components/ui/PhotoPlaceholder";
 import { USER_STATUS_HE } from "@/lib/labels";
 import { price } from "@/lib/format";
 
@@ -42,16 +43,17 @@ export default async function PursuitPage() {
               : USER_STATUS_HE[l.userStatus];
             return (
               <Link key={l.id} href={`/listing/${l.id}`} className="rise block overflow-hidden rounded-xl2 bg-card shadow-card">
-                {l.imageUrl && (
-                  <div className="relative aspect-[16/9] bg-card2">
+                <div className="relative aspect-[16/9] bg-card2">
+                  {l.imageUrl ? (
                     <Thumb src={l.imageUrl} alt="" className="h-full w-full object-cover" />
-                    <div className="placard">
-                      <span className="display tnum text-[17px] leading-none">{step}</span>
-                    </div>
+                  ) : (
+                    <PhotoPlaceholder />
+                  )}
+                  <div className="placard">
+                    <span className="display tnum text-[17px] leading-none">{step}</span>
                   </div>
-                )}
+                </div>
                 <div className="p-4">
-                  {!l.imageUrl && <div className="display mb-1 text-[17px] leading-none text-accent">{step}</div>}
                   <div className="text-[16.5px] font-bold">
                     {[hebrewCity(l.city), l.neighborhood ?? l.street].filter(Boolean).join(" · ")}
                   </div>

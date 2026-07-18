@@ -6,6 +6,7 @@ import ScoreBadge from "@/components/ui/ScoreBadge";
 import FlashBanner from "@/components/ui/FlashBanner";
 import LandingMark from "@/components/ui/LandingMark";
 import Thumb from "@/components/ui/Thumb";
+import PhotoPlaceholder from "@/components/ui/PhotoPlaceholder";
 import { DEAL_HE, BROKER_HE, SOURCE_HE, USER_STATUS_HE } from "@/lib/labels";
 import { price, relTime, minutesSince } from "@/lib/format";
 import type { Listing, SourceHealth } from "@prisma/client";
@@ -46,9 +47,8 @@ function titleLine(l: Listing): string {
   return [hebrewCity(l.city), l.neighborhood ?? l.street].filter(Boolean).join(" · ") || "מיקום לא ידוע";
 }
 
-/** A gallery piece: photo with the glass placard, then the label block.
- * Photo-less listings hang as quiet text cards — the placard only ever sits
- * on truth. */
+/** A gallery piece: photo (or the quiet house placeholder) with the glass
+ * placard, then the label block — every card keeps the same shape. */
 function Piece({
   listing,
   score,
@@ -63,20 +63,19 @@ function Piece({
   const placard = placardText ?? (listing.price != null ? `${price(listing.price)}` : null);
   return (
     <Link href={`/listing/${listing.id}`} className="rise block overflow-hidden rounded-xl2 bg-card shadow-card">
-      {listing.imageUrl ? (
-        <div className="relative aspect-[16/10] bg-card2">
+      <div className="relative aspect-[16/10] bg-card2">
+        {listing.imageUrl ? (
           <Thumb src={listing.imageUrl} alt="" className="h-full w-full object-cover" />
-          {placard && (
-            <div className="placard">
-              <span className="display tnum text-[20px] leading-none">{placard}</span>
-            </div>
-          )}
-        </div>
-      ) : null}
-      <div className="p-4">
-        {!listing.imageUrl && placard && (
-          <div className="display tnum mb-0.5 text-[22px] leading-none">{placard}</div>
+        ) : (
+          <PhotoPlaceholder />
         )}
+        {placard && (
+          <div className="placard">
+            <span className="display tnum text-[20px] leading-none">{placard}</span>
+          </div>
+        )}
+      </div>
+      <div className="p-4">
         <div className="text-[16.5px] font-bold">{titleLine(listing)}</div>
         <div className="tnum mt-0.5 text-[13px] text-muted">{factsLine(listing)}</div>
         <div className="mt-2.5 flex items-baseline gap-2">
@@ -149,21 +148,21 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
 
   const greeting =
     strongTodayCount > 0
-      ? `${greetWord()} דוד — היום נתלו ${strongTodayCount === 1 ? "עבודה חדשה אחת" : `${strongTodayCount} עבודות חדשות`} בגלריה.`
+      ? `${greetWord()} דוד — ${strongTodayCount === 1 ? "דירה חדשה אחת מחכה לך" : `${strongTodayCount} דירות חדשות מחכות לך`} היום.`
       : listingsToday > 0
-        ? `${greetWord()} דוד — ${listingsToday} מודעות נסרקו היום, אין חדשות שעברו את הרף.`
+        ? `${greetWord()} דוד — ${listingsToday} מודעות נסרקו היום, אף אחת לא עברה את הרף.`
         : `${greetWord()} דוד — שקט בינתיים, הבוט סורק כל 5 דקות.`;
 
   return (
     <div>
       {/* top row */}
-      <div className="flex items-center gap-2.5 pt-3">
-        <LandingMark size={26} />
+      <div className="flex items-center gap-3 pt-3">
+        <LandingMark size={40} />
         <div>
-          <div className="display text-[20px] leading-none" dir="ltr">
+          <div className="display text-[27px] leading-none" dir="ltr">
             Boton
           </div>
-          <div className="mt-0.5 text-[11px] text-muted">בוט אמריקאי מבית ביטון</div>
+          <div className="mt-1 text-[12px] text-muted">בוט אמריקאי מבית ביטון</div>
         </div>
         <Link
           href="/profile"
@@ -244,10 +243,10 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
 
       {heroMatches.length === 0 && reviewMatches.length === 0 && (
         <div className="mt-10 rounded-xl2 bg-card p-8 text-center shadow-card">
-          <div className="text-3xl">🖼️</div>
-          <div className="mt-2 text-[16px] font-bold">הגלריה ריקה כרגע</div>
+          <div className="text-3xl">🏠</div>
+          <div className="mt-2 text-[16px] font-bold">אין התאמות חדשות כרגע</div>
           <p className="mx-auto mt-1 max-w-[260px] text-sm leading-relaxed text-muted">
-            כשהבוט ימצא דירה שעונה על הפרופיל שלך היא תיתלה כאן — ותקבל התראה לנייד.
+            כשהבוט ימצא דירה שמתאימה לפרופיל שלך היא תופיע כאן — ותקבל התראה לנייד.
           </p>
         </div>
       )}

@@ -61,7 +61,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <NavLinks />
           </div>
         </header>
-        <main className="mx-auto max-w-6xl px-[18px] pb-32 pt-2 sm:px-6 sm:py-8">{children}</main>
+        <main className="mx-auto max-w-6xl px-[10px] pb-32 pt-2 sm:px-6 sm:py-8">{children}</main>
         <footer className="mx-auto max-w-6xl px-6 pb-32 pt-4 text-center text-xs text-faint sm:pb-8">
           Boton · בוט אמריקאי מבית ביטון · סורק כל 5 דקות
         </footer>

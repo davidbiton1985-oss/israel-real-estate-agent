@@ -8,6 +8,7 @@ import ScoreBadge from "@/components/ui/ScoreBadge";
 import FlashBanner from "@/components/ui/FlashBanner";
 import AutoSubmitOnChange from "@/components/ui/AutoSubmitOnChange";
 import Thumb from "@/components/ui/Thumb";
+import PhotoPlaceholder from "@/components/ui/PhotoPlaceholder";
 import Icon from "@/components/ui/Icon";
 import { Select, Input, inputCls } from "@/components/ui/Field";
 import { SOURCE_HE, DEAL_HE, BROKER_HE, OUTCOME_HE, USER_STATUS_HE } from "@/lib/labels";
@@ -275,11 +276,13 @@ export default async function MatchesPage({ searchParams }: { searchParams: Matc
               return (
                 <div key={m.id} className="overflow-hidden rounded-[18px] bg-card shadow-card">
                   <Link href={`/listing/${l.id}`} className="flex">
-                    {l.imageUrl && (
-                      <div className="w-[104px] flex-none bg-card2">
+                    <div className="w-[104px] flex-none bg-card2">
+                      {l.imageUrl ? (
                         <Thumb src={l.imageUrl} alt="" className="h-full w-full object-cover" />
-                      </div>
-                    )}
+                      ) : (
+                        <PhotoPlaceholder compact />
+                      )}
+                    </div>
                     <div className="min-w-0 flex-1 p-3.5">
                       <div className="text-[15px] font-bold leading-snug">
                         {[hebrewCity(l.city), l.neighborhood ?? l.street].filter(Boolean).join(" · ") || "מיקום לא ידוע"}
