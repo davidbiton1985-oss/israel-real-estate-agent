@@ -42,7 +42,8 @@ export default async function PursuitPage() {
               ? `סיור · ${l.viewingAt.toLocaleDateString("he-IL", { day: "numeric", month: "numeric" })} ${l.viewingAt.toLocaleTimeString("he-IL", { hour: "2-digit", minute: "2-digit" })}`
               : USER_STATUS_HE[l.userStatus];
             return (
-              <Link key={l.id} href={`/listing/${l.id}`} className="rise block overflow-hidden rounded-xl2 bg-card shadow-card">
+              <div key={l.id} className="rise relative overflow-hidden rounded-xl2 bg-card shadow-card">
+                <Link href={`/listing/${l.id}`} className="absolute inset-0 z-[1]" aria-label="פרטי הדירה" />
                 <div className="relative aspect-[16/9] bg-card2">
                   {l.imageUrl ? (
                     <Thumb src={l.imageUrl} alt="" className="h-full w-full object-cover" />
@@ -63,12 +64,22 @@ export default async function PursuitPage() {
                     {l.phone ? " · 📞 יש טלפון" : ""}
                   </div>
                   {l.userNote && <div className="mt-1.5 text-[13px] text-ink">״{l.userNote}״</div>}
-                  <div className="mt-2 flex items-baseline">
+                  <div className="mt-2 flex items-center">
                     {l.matches[0] && <ScoreBadge score={l.matches[0].score} showWord={false} />}
                     <span className="ms-auto text-[11.5px] font-semibold text-accent">{USER_STATUS_HE[l.userStatus]}</span>
+                    {l.url && (
+                      <a
+                        href={l.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="relative z-[2] ms-2 inline-flex min-h-[30px] items-center rounded-full bg-card2 px-3 text-[11.5px] font-bold text-ink transition-all active:scale-95"
+                      >
+                        למודעה ↗
+                      </a>
+                    )}
                   </div>
                 </div>
-              </Link>
+              </div>
             );
           })}
         </div>

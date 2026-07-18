@@ -276,7 +276,9 @@ export default async function MatchesPage({ searchParams }: { searchParams: Matc
                 .join(" · ");
               return (
                 <div key={m.id} className="overflow-hidden rounded-[18px] bg-card shadow-card">
-                  <Link href={`/listing/${l.id}`} className="flex">
+                  <div className="relative">
+                    <Link href={`/listing/${l.id}`} className="absolute inset-0 z-[1]" aria-label="פרטי הדירה" />
+                    <div className="flex">
                     <div className="w-[104px] flex-none bg-card2">
                       {l.imageUrl ? (
                         <Thumb src={l.imageUrl} alt="" className="h-full w-full object-cover" />
@@ -293,16 +295,27 @@ export default async function MatchesPage({ searchParams }: { searchParams: Matc
                       </div>
                       <div className="tnum mt-1 truncate text-[12.5px] text-muted">{facts}</div>
                       {pos[0] && <div className="mt-1 truncate text-[12px] font-semibold text-accent">✓ {hebrewizeCities(pos[0])}</div>}
-                      <div className="mt-1.5 flex items-baseline">
+                      <div className="mt-1.5 flex items-center">
                         <ScoreBadge score={m.score} showWord={false} />
                         <span className="ms-auto flex items-center gap-2 text-[11px] text-muted">
                           {l.userStatus !== "NEW" && <b className="text-accent">{USER_STATUS_HE[l.userStatus]}</b>}
                           {m.alerts[0]?.status === "SENT" && "🔔"}
                           {dateTime(l.createdAt).split(",")[0]}
                         </span>
+                        {l.url && (
+                          <a
+                            href={l.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="relative z-[2] ms-2 inline-flex min-h-[30px] items-center rounded-full bg-card2 px-3 text-[11.5px] font-bold text-ink transition-all active:scale-95"
+                          >
+                            למודעה ↗
+                          </a>
+                        )}
                       </div>
                     </div>
-                  </Link>
+                    </div>
+                  </div>
                   {searchParams.debug === "1" && (
                     <div className="border-t border-line px-3.5 py-2 text-xs">
                       <details className="re-collapse">

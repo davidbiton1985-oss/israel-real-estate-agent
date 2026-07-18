@@ -63,7 +63,8 @@ function Piece({
 }) {
   const placard = placardText ?? (listing.price != null ? <Price value={listing.price} /> : null);
   return (
-    <Link href={`/listing/${listing.id}`} className="rise block overflow-hidden rounded-xl2 bg-card shadow-card">
+    <div className="rise relative overflow-hidden rounded-xl2 bg-card shadow-card">
+      <Link href={`/listing/${listing.id}`} className="absolute inset-0 z-[1]" aria-label={titleLine(listing)} />
       <div className="relative aspect-[16/9] bg-card2">
         {listing.imageUrl ? (
           <Thumb src={listing.imageUrl} alt="" className="h-full w-full object-cover" />
@@ -79,15 +80,25 @@ function Piece({
       <div className="px-4 py-4">
         <div className="text-[19px] font-bold leading-snug">{titleLine(listing)}</div>
         <div className="tnum mt-1 text-[15px] text-muted">{factsLine(listing)}</div>
-        <div className="mt-3 flex items-baseline gap-2">
+        <div className="mt-3 flex items-center gap-2">
           {score != null && <ScoreBadge score={score} />}
           <span className="ms-auto text-[13px] text-muted">
             {SOURCE_HE[listing.source] ?? listing.source}
             {when ? ` · ${when}` : ""}
           </span>
+          {listing.url && (
+            <a
+              href={listing.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="relative z-[2] inline-flex min-h-[34px] items-center rounded-full bg-card2 px-3.5 text-[12.5px] font-bold text-ink transition-all active:scale-95"
+            >
+              למודעה ↗
+            </a>
+          )}
         </div>
       </div>
-    </Link>
+    </div>
   );
 }
 
