@@ -21,8 +21,8 @@ export default function ScoreBadge({
   const large = (size ?? 0) >= 44;
   return (
     <span className="inline-flex items-baseline gap-1.5" title={`ציון ${clamped}/100`}>
-      <span className={`display tnum ${b.cls} ${large ? "text-[26px]" : "text-[18px]"} leading-none`}>{clamped}</span>
-      {showWord && <span className="text-[12px] font-semibold text-muted">{b.word}</span>}
+      <span className={`display tnum ${b.cls} ${large ? "text-[26px]" : "text-[20px]"} leading-none`}>{clamped}</span>
+      {showWord && <span className="text-[13px] font-semibold text-muted">{b.word}</span>}
     </span>
   );
 }

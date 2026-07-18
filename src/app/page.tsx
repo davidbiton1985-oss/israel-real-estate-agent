@@ -63,7 +63,7 @@ function Piece({
   const placard = placardText ?? (listing.price != null ? `${price(listing.price)}` : null);
   return (
     <Link href={`/listing/${listing.id}`} className="rise block overflow-hidden rounded-xl2 bg-card shadow-card">
-      <div className="relative aspect-[16/10] bg-card2">
+      <div className="relative aspect-[16/9] bg-card2">
         {listing.imageUrl ? (
           <Thumb src={listing.imageUrl} alt="" className="h-full w-full object-cover" />
         ) : (
@@ -71,16 +71,16 @@ function Piece({
         )}
         {placard && (
           <div className="placard">
-            <span className="display tnum text-[20px] leading-none">{placard}</span>
+            <span className="display tnum text-[21px] leading-none">{placard}</span>
           </div>
         )}
       </div>
-      <div className="p-4">
-        <div className="text-[16.5px] font-bold">{titleLine(listing)}</div>
-        <div className="tnum mt-0.5 text-[13px] text-muted">{factsLine(listing)}</div>
-        <div className="mt-2.5 flex items-baseline gap-2">
+      <div className="px-4 py-4">
+        <div className="text-[19px] font-bold leading-snug">{titleLine(listing)}</div>
+        <div className="tnum mt-1 text-[15px] text-muted">{factsLine(listing)}</div>
+        <div className="mt-3 flex items-baseline gap-2">
           {score != null && <ScoreBadge score={score} />}
-          <span className="ms-auto text-[11.5px] text-muted">
+          <span className="ms-auto text-[13px] text-muted">
             {SOURCE_HE[listing.source] ?? listing.source}
             {when ? ` · ${when}` : ""}
           </span>
