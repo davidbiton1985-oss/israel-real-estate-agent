@@ -41,11 +41,16 @@ async function main() {
     return console.log("[watchdog] stale but already nudged recently");
   }
 
-  const ageText = ageMin === Infinity ? "אף פעם" : `לפני ${Math.round(ageMin)} דקות`;
+  const fb = await prisma.sourceHealth.findUnique({ where: { source: "FACEBOOK" } });
+  const fAgeMin = fb?.lastSuccessAt ? Math.round((Date.now() - fb.lastSuccessAt.getTime()) / 60000) : null;
+  const ageText = ageMin === Infinity ? "מעולם" : `${Math.round(ageMin)} דקות`;
   const msg = [
-    "⚠️ טאב יד2 לא פעיל",
-    `הקליטה האחרונה מיד2 הייתה ${ageText} — כנראה הטאב הנעוץ סגור.`,
-    "פתח אותו כדי שהסריקה תמשיך (מיון: לפי תאריך):",
+    "⚠️ יד2 שקט — הטאב כנראה סגור או תקוע",
+    `עיוור מיד2 כבר ${ageText}.`,
+    "פתח/רענן את הטאב הנעוץ של יד2 בכרום (החיפוש השמור עם הסינונים שלך).",
+    fAgeMin != null && fAgeMin < 45
+      ? `בינתיים: פייסבוק ממשיך לקלוט (קליטה אחרונה לפני ${fAgeMin} ד׳).`
+      : "שים לב: גם פייסבוק לא מעודכן — ייתכן שכרום או המחשב כבויים.",
     "https://www.yad2.co.il/realestate/rent",
   ].join("\n");
 

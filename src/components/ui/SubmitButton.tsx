@@ -2,6 +2,10 @@
 
 // Submit button with a pending state — server actions take seconds (scans,
 // Twilio sends); the user must see that something is happening.
+// Destructive actions use a TWO-STEP ARM instead of window.confirm: the
+// system dialog renders jarringly in a standalone iOS PWA and users dismiss
+// it on muscle memory; first tap arms ("לחץ שוב לאישור", 4s), second submits.
+import { useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import Icon, { type IconName } from "./Icon";
 
@@ -47,16 +51,32 @@ export default function SubmitButton({
   children: React.ReactNode;
 }) {
   const { pending } = useFormStatus();
+  const [armed, setArmed] = useState(false);
+  const disarmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const iconSize = size === "sm" ? 14 : 16;
+
+  const onClick = confirmText
+    ? (e: React.MouseEvent) => {
+        if (!armed) {
+          e.preventDefault();
+          setArmed(true);
+          if (disarmTimer.current) clearTimeout(disarmTimer.current);
+          disarmTimer.current = setTimeout(() => setArmed(false), 4000);
+        }
+      }
+    : undefined;
+
   return (
     <button
       disabled={pending}
-      title={title}
-      onClick={confirmText ? (e) => !window.confirm(confirmText) && e.preventDefault() : undefined}
-      className={`inline-flex items-center justify-center whitespace-nowrap rounded-badge font-semibold transition-all select-none active:scale-[0.98] disabled:opacity-60 ${VARIANTS[variant]} ${SIZES[size]} ${className}`}
+      title={armed ? confirmText : title}
+      onClick={onClick}
+      className={`inline-flex items-center justify-center whitespace-nowrap rounded-badge font-semibold transition-all select-none active:scale-[0.98] disabled:opacity-60 ${
+        armed ? "border border-transparent bg-crit text-white" : VARIANTS[variant]
+      } ${SIZES[size]} ${className}`}
     >
-      {pending ? <Spinner size={iconSize} /> : icon ? <Icon name={icon} size={iconSize} /> : null}
-      {pending ? (pendingText ?? children) : children}
+      {pending ? <Spinner size={iconSize} /> : icon && !armed ? <Icon name={icon} size={iconSize} /> : null}
+      {pending ? (pendingText ?? children) : armed ? "לחץ שוב לאישור" : children}
     </button>
   );
 }

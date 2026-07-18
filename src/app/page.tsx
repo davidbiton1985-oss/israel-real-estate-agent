@@ -460,13 +460,14 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
                       התראה לנייד מציון {p.whatsappThreshold} · {p.priceDropReAlert ? "התראה חוזרת בירידת מחיר" : "התראה אחת בלבד"}
                     </div>
                   </div>
-                  <div className="flex shrink-0 items-center gap-1">
+                  {/* 44px targets, separated — one of these is irreversible */}
+                  <div className="flex shrink-0 items-center gap-3">
                     <Link
                       href={`/profiles/${p.id}`}
-                      className="rounded-badge p-2 text-muted transition-colors hover:bg-card2 hover:text-ink"
+                      className="grid h-11 w-11 place-items-center rounded-badge text-muted transition-colors hover:bg-card2 hover:text-ink"
                       title="עריכה"
                     >
-                      <Icon name="pencil" size={16} />
+                      <Icon name="pencil" size={18} />
                     </Link>
                     <form action={deleteProfile}>
                       <input type="hidden" name="id" value={p.id} />
@@ -474,6 +475,7 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
                         variant="danger"
                         size="sm"
                         icon="trash"
+                        className="min-h-[44px]"
                         confirmText={`למחוק את הפרופיל "${p.name}"? הפעולה אינה הפיכה.`}
                         pendingText="מוחק…"
                       >

@@ -8,7 +8,7 @@ import Icon, { type IconName } from "./Icon";
 const NAV: { href: string; label: string; icon: IconName }[] = [
   { href: "/", label: "דשבורד", icon: "home" },
   { href: "/matches", label: "התאמות", icon: "spark" },
-  { href: "/profiles/new", label: "פרופיל חדש", icon: "plus" },
+  { href: "/profile", label: "פרופיל", icon: "filter" },
   { href: "/add-listing", label: "הוספה ידנית", icon: "pencil" },
 ];
 

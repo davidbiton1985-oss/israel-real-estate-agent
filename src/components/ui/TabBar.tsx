@@ -10,7 +10,9 @@ import Icon, { type IconName } from "./Icon";
 const TABS: { href: string; label: string; icon: IconName }[] = [
   { href: "/", label: "ראשי", icon: "home" },
   { href: "/matches", label: "התאמות", icon: "spark" },
-  { href: "/profiles/new", label: "פרופיל", icon: "filter" },
+  // /profile redirects to the EXISTING profile's edit page (creation only
+  // when none exists) — a count-of-one entity's tab must not open a blank form.
+  { href: "/profile", label: "פרופיל", icon: "filter" },
   { href: "/add-listing", label: "הוספה", icon: "plus" },
 ];
 

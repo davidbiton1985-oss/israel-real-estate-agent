@@ -56,10 +56,32 @@ export async function buildDailyHeartbeat(): Promise<string> {
   ]);
   const [yAge, fAge] = await Promise.all([ageMin("YAD2_BROWSER"), ageMin("FACEBOOK")]);
   const fmtAge = (m: number | null) => (m == null ? "אף פעם" : `${m} ד'`);
+
+  // The day's CLOSEST MISS — turns a zero-alert day from anxiety into
+  // evidence: "the best thing out there was a 74 over budget" reads as a
+  // quiet market; a 79 with one weakness reads as "maybe lower the bar".
+  const closest = await prisma.match.findFirst({
+    where: { alerted: false, createdAt: { gte: since }, profile: { active: true } },
+    orderBy: { score: "desc" },
+    include: { listing: { select: { city: true, price: true } } },
+  });
+  let closestLine: string | null = null;
+  if (closest && closest.score > 0) {
+    let why = "";
+    try {
+      const neg = JSON.parse(closest.reasonsNegative || "[]");
+      if (Array.isArray(neg) && neg[0]) why = ` (${neg[0]})`;
+    } catch {}
+    closestLine = `הכי קרוב היום: ציון ${closest.score} — ${closest.listing.city ?? "?"} · ${
+      closest.listing.price != null ? `${closest.listing.price.toLocaleString()} ₪` : "מחיר לא צוין"
+    }${why}`;
+  }
+
   const lines = [
-    "✅ RE-Agent פעיל (סיכום 24 שעות)",
+    "✅ בוטון פעיל (סיכום 24 שעות)",
     `נקלטו: Yad2 ${yad2} · פייסבוק ${fb} · מייל ${email}`,
     `התראות שנשלחו: ${alerts} · ממתינות לבדיקה: ${reviewPending}`,
+    ...(closestLine ? [closestLine] : []),
     `חיישנים — קליטה אחרונה: Yad2 ${fmtAge(yAge)} · פייסבוק ${fmtAge(fAge)}`,
   ];
   // "Alive-but-blind" flag: a sensor that's heartbeating (fresh) yet captured

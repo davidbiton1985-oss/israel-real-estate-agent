@@ -88,13 +88,20 @@ async function main() {
     return console.log(`[fb-watchdog] stale ${Math.round(ageMin)}m → auto-reopened reader tab; will escalate next cycle if unresolved`);
   }
 
-  const ageText = ageMin === Infinity ? "אף פעם" : `לפני ${Math.round(ageMin)} דקות`;
+  // Message anatomy (council): line 1 = DIAGNOSIS (becomes the push title),
+  // then what was already tried, then the ONE useful action, then blast
+  // radius — never instruct the user to redo what the self-heal already did.
+  const yad2 = await prisma.sourceHealth.findUnique({ where: { source: "YAD2_BROWSER" } });
+  const yAgeMin = yad2?.lastSuccessAt ? Math.round((Date.now() - yad2.lastSuccessAt.getTime()) / 60000) : null;
+  const ageText = ageMin === Infinity ? "מעולם" : `${Math.round(ageMin)} דקות`;
   const msg = [
-    "⚠️ קורא הפייסבוק לא פעיל",
-    `הקליטה האחרונה מפייסבוק הייתה ${ageText} — כנראה הטאב נסגר או איבד את סימון ה-reader.`,
-    "פתח מחדש את טאב ההתראות עם הסימון בסוף ה-URL (ואז רענן):",
+    "⚠️ פייסבוק חסום — כנראה נדרש אימות",
+    `עיוור מפייסבוק כבר ${ageText}. פתחתי מחדש את הטאב אוטומטית — זה לא עזר.`,
+    "פתח את פייסבוק בכרום במחשב; אם מופיע עמוד אימות — פתור אותו והקורא יתאושש לבד.",
+    yAgeMin != null && yAgeMin < 45
+      ? `בינתיים: יד2 ממשיך לקלוט (קליטה אחרונה לפני ${yAgeMin} ד׳).`
+      : "שים לב: גם יד2 לא מעודכן — ייתכן שכרום או המחשב כבויים.",
     "https://www.facebook.com/notifications#re-agent",
-    "(אם מופיע עמוד אימות — פתור אותו והסריקה תתחדש)",
   ].join("\n");
 
   // System messages share one tag: consecutive nudges coalesce to one card.
