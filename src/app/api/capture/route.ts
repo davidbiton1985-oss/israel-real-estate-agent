@@ -40,6 +40,9 @@ export async function POST(req: NextRequest) {
     bulk?: boolean;
     groupName?: string;
     posts?: { text?: string; url?: string; image?: string }[];
+    /** photo backfill for ALREADY-CAPTURED listings: url→image pairs the
+     * watcher sees on screen right now (fills the gallery retroactively) */
+    imageBackfill?: { url?: string; image?: string }[];
     heartbeat?: string;
   };
   try {
@@ -64,6 +67,36 @@ export async function POST(req: NextRequest) {
       update: { enabled: true, lastCheckAt: new Date(), lastSuccessAt: new Date(), lastError: null, consecutiveErrors: 0 },
     });
     return NextResponse.json({ ok: true, heartbeat: src }, { headers: CORS_HEADERS });
+  }
+
+  // ---- IMAGE BACKFILL: photos for listings we already hold ----------------
+  // The sensors only send NEW cards/posts; existing listings stayed photo-less
+  // ("gallery with empty walls"). The watcher now also reports url→image for
+  // everything visible; we attach photos to known listings that lack one.
+  if (Array.isArray(body.imageBackfill)) {
+    let updated = 0;
+    for (const item of body.imageBackfill.slice(0, 60)) {
+      const iUrl = (item.url ?? "").trim();
+      const img = (item.image ?? "").trim();
+      if (!iUrl || !/^https?:/.test(img)) continue;
+      try {
+        // match by exact url OR by yad2 item id (urls get rewritten)
+        const itemId = iUrl.match(/\/item\/([A-Za-z0-9]+)/)?.[1] ?? null;
+        const listing = await prisma.listing.findFirst({
+          where: {
+            imageUrl: null,
+            OR: [{ url: iUrl }, ...(itemId ? [{ yad2ListingId: itemId }, { url: { contains: `/item/${itemId}` } }] : [])],
+          },
+          select: { id: true },
+        });
+        if (!listing) continue;
+        await prisma.listing.update({ where: { id: listing.id }, data: { imageUrl: img } });
+        maybeLocalizeImage(listing.id, img, img);
+        updated++;
+      } catch {}
+    }
+    if (updated > 0) console.log(`[capture/backfill] attached ${updated} photos to existing listings`);
+    return NextResponse.json({ ok: true, backfill: updated }, { headers: CORS_HEADERS });
   }
 
   // ---- DIAG mode: the FB reader reports what it Sees on each post page ----

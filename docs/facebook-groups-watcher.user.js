@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RE-Agent Facebook Notification Reader
 // @namespace    israel-real-estate-agent
-// @version      12.19
+// @version      12.20
 // @description  Notification-driven reader: one designated tab checks facebook.com/notifications every 7–12 min (randomized, slower overnight); every "posted in group" notification links to the post's own page, which the tab then opens and reads IN FULL — parsed, scored, WhatsApp'd by your local RE-Agent (localhost:3000). It also sweeps one target group's chronological feed per cycle (round-robin, scroll-until-overlap) so posts Facebook never notified about are still caught, and survives browser restarts via a localStorage reader lease. Runs only in your own logged-in browser session — no scraping server, no login/CAPTCHA bypass; if Facebook shows a checkpoint the reader BACKS OFF instead of hammering it. Your other Facebook tabs are untouched (the reader runs only in the tab you start with #re-agent).
 // @match        https://www.facebook.com/*
 // @noframes
@@ -634,6 +634,21 @@
     }
 
     function collectAndSend() {
+      // v12.20: photo backfill for ALREADY-SEEN posts — attach images to
+      // listings captured before image support (the server skips listings
+      // that already have a photo).
+      try {
+        var bf = [];
+        outermostArticles().forEach(function (a) {
+          var lnk = ownPermalink(a);
+          var im = lnk ? ownImage(a) : null;
+          if (lnk && im) bf.push({ url: lnk, image: im });
+        });
+        if (bf.length > 0) {
+          fetch(APP, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ imageBackfill: bf }) }).catch(function () {});
+        }
+      } catch (e) {}
+
       var posts = [];
       outermostArticles().forEach(function (a) {
         var t = postOwnText(a);

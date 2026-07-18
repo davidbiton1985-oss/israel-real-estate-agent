@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RE-Agent Yad2 Tab Watcher
 // @namespace    israel-real-estate-agent
-// @version      1.8
+// @version      1.9
 // @description  Watches YOUR open Yad2 search tab: every 7–10 min (randomized, slower overnight) it re-checks the results and sends new listings to your local Israel Real Estate Agent (localhost:3000), which scores them and WhatsApps you strong matches. Runs only in your own browser session — no CAPTCHA bypass, no fake fingerprints, no login automation. If Yad2 shows a verification page the watcher BACKS OFF and stops hammering it; solve it yourself like normal and it resumes.
 // @match        https://www.yad2.co.il/realestate/*
 // @noframes
@@ -219,7 +219,27 @@
     });
   }
 
+  // v1.9: photo backfill — the app only received images for NEW cards, so
+  // everything captured before v1.8 hangs photo-less. Report url→image for
+  // EVERY visible card each cycle; the server attaches photos to known
+  // listings that lack one (cheap: server ignores already-photographed).
+  function sendImageBackfill(cards) {
+    try {
+      var pairs = [];
+      for (var i = 0; i < cards.length; i++) {
+        if (cards[i].image) pairs.push({ url: cards[i].url, image: cards[i].image });
+      }
+      if (pairs.length === 0) return;
+      fetch(APP, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageBackfill: pairs }),
+      }).catch(function () {});
+    } catch (e) {}
+  }
+
   function handleCards(cards) {
+    sendImageBackfill(cards);
     if (cards.length === 0) {
       if (pageLooksBlocked()) {
         // Verification/blank page — back off, don't hammer, don't bypass.
