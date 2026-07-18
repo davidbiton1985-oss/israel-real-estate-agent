@@ -18,6 +18,17 @@ export function hebrewCity(canonical: string | null): string | null {
   return entry?.aliases.find((a) => /[א-ת]/.test(a)) ?? canonical;
 }
 
+/** Replace canonical English city names inside free text (scorer reason
+ * strings like "עיר מבוקשת: Ganei Tikva") with their Hebrew names. */
+export function hebrewizeCities(text: string): string {
+  let out = text;
+  for (const c of CITIES) {
+    const he = c.aliases.find((a) => /[א-ת]/.test(a));
+    if (he && out.includes(c.canonical)) out = out.split(c.canonical).join(he);
+  }
+  return out;
+}
+
 /** Compact Hebrew summary line: city · rooms · price · broker (omitting unknowns). */
 function summaryLine(listing: Listing): string {
   return [

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { runScanAction, sendTestAlertAction, deleteProfile } from "./actions";
-import { hebrewCity, telegramConfigured, twilioConfigVars } from "@/core/alert";
+import { hebrewCity, hebrewizeCities, telegramConfigured, twilioConfigVars } from "@/core/alert";
 import { emailConfigVars } from "@/core/connectors/email";
 import { ButtonLink } from "@/components/ui/Button";
 import SubmitButton from "@/components/ui/SubmitButton";
@@ -188,7 +188,7 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
   const topReason = (json: string): string | null => {
     try {
       const arr = JSON.parse(json);
-      return Array.isArray(arr) && typeof arr[0] === "string" ? arr[0] : null;
+      return Array.isArray(arr) && typeof arr[0] === "string" ? hebrewizeCities(arr[0]) : null;
     } catch {
       return null;
     }

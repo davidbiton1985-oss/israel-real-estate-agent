@@ -14,7 +14,7 @@ import AutoSubmitOnChange from "@/components/ui/AutoSubmitOnChange";
 import Icon from "@/components/ui/Icon";
 import { Select, Input, inputCls } from "@/components/ui/Field";
 import { SOURCE_HE, STATUS_HE, DEAL_HE, BROKER_HE, OUTCOME_HE, USER_STATUS_HE } from "@/lib/labels";
-import { hebrewCity } from "@/core/alert";
+import { hebrewCity, hebrewizeCities } from "@/core/alert";
 import { price, dateTime } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -357,8 +357,8 @@ export default async function MatchesPage({ searchParams }: { searchParams: Matc
                   <div className="tnum mt-0.5 truncate text-xs text-muted">{facts}</div>
 
                   {/* one reason, one flag — the argument, not the whole file */}
-                  {pos[0] && <div className="mt-1 truncate text-xs font-medium text-[#00854d]">✓ {pos[0]}</div>}
-                  {flags[0] && <div className="mt-0.5 truncate text-xs font-medium text-[#b06000]">🚩 {flags[0]}</div>}
+                  {pos[0] && <div className="mt-1 truncate text-xs font-medium text-[#00854d]">✓ {hebrewizeCities(pos[0])}</div>}
+                  {flags[0] && <div className="mt-0.5 truncate text-xs font-medium text-[#b06000]">🚩 {hebrewizeCities(flags[0])}</div>}
                   {latestAlert?.error && <div className="mt-1 truncate text-xs text-crit">{latestAlert.error}</div>}
 
                   {/* price history — the trend at a glance */}
