@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RE-Agent Facebook Notification Reader
 // @namespace    israel-real-estate-agent
-// @version      12.20
+// @version      12.21
 // @description  Notification-driven reader: one designated tab checks facebook.com/notifications every 7–12 min (randomized, slower overnight); every "posted in group" notification links to the post's own page, which the tab then opens and reads IN FULL — parsed, scored, WhatsApp'd by your local RE-Agent (localhost:3000). It also sweeps one target group's chronological feed per cycle (round-robin, scroll-until-overlap) so posts Facebook never notified about are still caught, and survives browser restarts via a localStorage reader lease. Runs only in your own logged-in browser session — no scraping server, no login/CAPTCHA bypass; if Facebook shows a checkpoint the reader BACKS OFF instead of hammering it. Your other Facebook tabs are untouched (the reader runs only in the tab you start with #re-agent).
 // @match        https://www.facebook.com/*
 // @noframes
@@ -633,17 +633,28 @@
       return false;
     }
 
-    function collectAndSend() {
-      // v12.20: photo backfill for ALREADY-SEEN posts — attach images to
-      // listings captured before image support (the server skips listings
-      // that already have a photo).
+    // v12.21: photo backfill pairs are harvested DURING the scroll steps, not
+    // once at the end — Facebook virtualizes the feed (scrolled-past articles
+    // leave the DOM) and lazy images off-viewport have naturalWidth 0, so an
+    // end-of-sweep pass reliably collected NOTHING (fb backfill never fired).
+    var bfMap = {};
+    function harvestBackfillPairs() {
       try {
-        var bf = [];
         outermostArticles().forEach(function (a) {
           var lnk = ownPermalink(a);
-          var im = lnk ? ownImage(a) : null;
-          if (lnk && im) bf.push({ url: lnk, image: im });
+          if (!lnk || bfMap[lnk]) return;
+          var im = ownImage(a);
+          if (im) bfMap[lnk] = im;
         });
+      } catch (e) {}
+    }
+
+    function collectAndSend() {
+      // photo backfill for ALREADY-SEEN posts — attach images to listings
+      // captured before image support (the server skips already-photographed).
+      harvestBackfillPairs();
+      try {
+        var bf = Object.keys(bfMap).slice(0, 60).map(function (u) { return { url: u, image: bfMap[u] }; });
         if (bf.length > 0) {
           fetch(APP, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ imageBackfill: bf }) }).catch(function () {});
         }
@@ -673,6 +684,7 @@
     // lazy-loading deeper batches each step, then read+send.
     function step(n) {
       expandSeeMore();
+      harvestBackfillPairs(); // images are only readable while their articles are rendered
       // deep sweeps deliberately scroll PAST the overlap — that's the point
       if (!deep && reachedOverlap()) { setTimeout(collectAndSend, 800); return; }
       if (n >= MAX_STEPS) {
