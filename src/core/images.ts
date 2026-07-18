@@ -38,3 +38,61 @@ export function maybeLocalizeImage(listingId: string, current: string | null | u
   if (current?.startsWith("/uploads/")) return;
   void localizeListingImage(listingId, target);
 }
+
+// ---------------------------------------------------------------------------
+// Automatic disk cleanup (runs daily via the heartbeat job). Photos are only
+// worth keeping while the apartment is worth chasing:
+//   pursued (CONTACTED/VIEWING/WON) → keep forever
+//   relevant (strong/possible, not dismissed) → keep 30 days
+//   everything else → keep 7 days
+//   orphan file (listing deleted) → delete now
+// The DB is never weighed down — it only ever holds the short path string.
+// ---------------------------------------------------------------------------
+const KEEP_RELEVANT_DAYS = 30;
+const KEEP_IRRELEVANT_DAYS = 7;
+
+export async function cleanupListingImages(): Promise<{ scanned: number; deleted: number }> {
+  const { readdirSync, unlinkSync, existsSync } = await import("fs");
+  const dir = path.join(process.cwd(), "public", "uploads");
+  const out = { scanned: 0, deleted: 0 };
+  if (!existsSync(dir)) return out;
+  const { prisma } = await import("../lib/db");
+  const now = Date.now();
+
+  for (const file of readdirSync(dir)) {
+    if (!/\.(jpg|png|webp)$/.test(file)) continue;
+    out.scanned++;
+    const id = file.replace(/\.(jpg|png|webp)$/, "");
+    try {
+      const listing = await prisma.listing.findUnique({
+        where: { id },
+        include: { matches: { orderBy: { score: "desc" }, take: 1 } },
+      });
+      let expired = false;
+      if (!listing) {
+        expired = true; // orphan
+      } else {
+        const pursued = ["CONTACTED", "VIEWING", "WON"].includes(listing.userStatus);
+        if (!pursued) {
+          const relevant =
+            listing.userStatus !== "DISMISSED" &&
+            listing.matches[0] != null &&
+            ["strong_match", "possible_match"].includes(listing.matches[0].status);
+          const ageDays = (now - listing.createdAt.getTime()) / 86_400_000;
+          expired = ageDays > (relevant ? KEEP_RELEVANT_DAYS : KEEP_IRRELEVANT_DAYS);
+        }
+      }
+      if (expired) {
+        unlinkSync(path.join(dir, file));
+        out.deleted++;
+        if (listing?.imageUrl === `/uploads/${file}`) {
+          await prisma.listing.update({ where: { id }, data: { imageUrl: null } });
+        }
+      }
+    } catch (e) {
+      console.error("[images] cleanup item failed:", e instanceof Error ? e.message : e);
+    }
+  }
+  if (out.deleted > 0) console.log(`[images] cleanup: deleted ${out.deleted}/${out.scanned} photos`);
+  return out;
+}

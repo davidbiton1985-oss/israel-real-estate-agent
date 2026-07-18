@@ -4,6 +4,7 @@
 import { readFileSync } from "fs";
 import { buildDailyHeartbeat } from "../src/core/systemStatus";
 import { sendAlert } from "../src/core/alert";
+import { cleanupListingImages } from "../src/core/images";
 import { prisma } from "../src/lib/db";
 
 function loadEnv() {
@@ -29,6 +30,11 @@ async function main() {
   // an interruption; its NON-arrival is the real alarm.
   const r = await sendAlert(msg, { ambient: true });
   console.log(`[daily-heartbeat] sent via ${r.channel} (${r.status})`);
+
+  // Daily photo housekeeping: expired/orphan listing photos leave the disk
+  // (pursued apartments keep theirs; DB only ever holds the path string).
+  const clean = await cleanupListingImages();
+  console.log(`[daily-heartbeat] image cleanup: ${clean.deleted}/${clean.scanned} deleted`);
 }
 
 main()
