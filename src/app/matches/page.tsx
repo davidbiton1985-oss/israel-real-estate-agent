@@ -136,7 +136,12 @@ export default async function MatchesPage({ searchParams }: { searchParams: Matc
     // David said "לא רלוונטי" — it leaves the working view (opt back in via checkbox)
     if (m.listing.userStatus === "DISMISSED" && searchParams.dismissed !== "1") return false;
     if (searchParams.profile && m.profileId !== searchParams.profile) return false;
-    if (searchParams.status && m.status !== searchParams.status) return false;
+    // DEFAULT = relevant only (strong+possible). The system's own rejects are
+    // QA material, not user content — they show only when explicitly asked
+    // (status=all / a specific status).
+    if (!searchParams.status) {
+      if (m.status !== "strong_match" && m.status !== "possible_match") return false;
+    } else if (searchParams.status !== "all" && m.status !== searchParams.status) return false;
     if (searchParams.source && m.listing.source !== searchParams.source) return false;
     if (searchParams.broker && m.listing.brokerStatus !== searchParams.broker) return false;
     if (searchParams.alertReason && m.alerts[0]?.reason !== searchParams.alertReason) return false;
@@ -212,11 +217,12 @@ export default async function MatchesPage({ searchParams }: { searchParams: Matc
           <label className="flex flex-col gap-1">
             <span className="text-xs text-muted">סטטוס</span>
             <Select name="status" defaultValue={searchParams.status ?? ""} className="w-auto min-w-28">
-              <option value="">הכל</option>
+              <option value="">רלוונטיות</option>
               <option value="strong_match">חזקה</option>
               <option value="possible_match">אפשרית</option>
               <option value="weak_match">חלשה</option>
               <option value="rejected">נדחו</option>
+              <option value="all">הכל (כולל דחויות)</option>
             </Select>
           </label>
           <label className="flex flex-col gap-1">
