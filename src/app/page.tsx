@@ -8,7 +8,8 @@ import LandingMark from "@/components/ui/LandingMark";
 import Thumb from "@/components/ui/Thumb";
 import PhotoPlaceholder from "@/components/ui/PhotoPlaceholder";
 import { DEAL_HE, BROKER_HE, SOURCE_HE, USER_STATUS_HE } from "@/lib/labels";
-import { price, relTime, minutesSince } from "@/lib/format";
+import Price from "@/components/ui/Price";
+import { relTime, minutesSince } from "@/lib/format";
 import type { Listing, SourceHealth } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -60,7 +61,7 @@ function Piece({
   when?: string;
   placardText?: string;
 }) {
-  const placard = placardText ?? (listing.price != null ? `${price(listing.price)}` : null);
+  const placard = placardText ?? (listing.price != null ? <Price value={listing.price} /> : null);
   return (
     <Link href={`/listing/${listing.id}`} className="rise block overflow-hidden rounded-xl2 bg-card shadow-card">
       <div className="relative aspect-[16/9] bg-card2">

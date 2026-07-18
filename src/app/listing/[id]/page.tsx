@@ -7,9 +7,10 @@ import { hebrewCity, hebrewizeCities } from "@/core/alert";
 import SubmitButton from "@/components/ui/SubmitButton";
 import ScoreBadge from "@/components/ui/ScoreBadge";
 import Thumb from "@/components/ui/Thumb";
+import Price from "@/components/ui/Price";
 import { Input, Textarea } from "@/components/ui/Field";
 import { DEAL_HE, BROKER_HE, SOURCE_HE } from "@/lib/labels";
-import { price, relTime } from "@/lib/format";
+import { relTime } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "דף דירה" };
@@ -72,7 +73,7 @@ export default async function ListingPage({ params }: { params: { id: string } }
             <Thumb src={listing.imageUrl} alt="תמונת הדירה" className="h-full w-full object-cover" />
             {listing.price != null && (
               <div className="placard" style={{ bottom: 42 }}>
-                <span className="display tnum text-[20px] leading-none">{price(listing.price)}</span>
+                <span className="display tnum text-[20px] leading-none"><Price value={listing.price} /></span>
               </div>
             )}
           </div>
@@ -92,7 +93,7 @@ export default async function ListingPage({ params }: { params: { id: string } }
       <div className={`relative -mx-[10px] rounded-t-sheet bg-bg px-[14px] pt-6 sm:mx-0 ${listing.imageUrl ? "-mt-6" : ""}`}>
         {!listing.imageUrl && (
           <div className="display tnum mb-1 text-[26px] leading-none">
-            {listing.price != null ? price(listing.price) : <span className="font-body text-base font-semibold text-muted">מחיר לא צוין</span>}
+            {listing.price != null ? <Price value={listing.price} /> : <span className="font-body text-base font-semibold text-muted">מחיר לא צוין</span>}
           </div>
         )}
         <h1 className="text-[21px] font-bold leading-snug">{title}</h1>

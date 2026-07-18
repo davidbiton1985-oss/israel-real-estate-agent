@@ -8,12 +8,13 @@ import ScoreBadge from "@/components/ui/ScoreBadge";
 import FlashBanner from "@/components/ui/FlashBanner";
 import AutoSubmitOnChange from "@/components/ui/AutoSubmitOnChange";
 import Thumb from "@/components/ui/Thumb";
+import Price from "@/components/ui/Price";
 import PhotoPlaceholder from "@/components/ui/PhotoPlaceholder";
 import Icon from "@/components/ui/Icon";
 import { Select, Input, inputCls } from "@/components/ui/Field";
 import { SOURCE_HE, DEAL_HE, BROKER_HE, OUTCOME_HE, USER_STATUS_HE } from "@/lib/labels";
 import { hebrewCity, hebrewizeCities } from "@/core/alert";
-import { price, dateTime } from "@/lib/format";
+import { dateTime } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "כל ההתאמות" };
@@ -288,7 +289,7 @@ export default async function MatchesPage({ searchParams }: { searchParams: Matc
                         {[hebrewCity(l.city), l.neighborhood ?? l.street].filter(Boolean).join(" · ") || "מיקום לא ידוע"}
                       </div>
                       <div className="display tnum mt-1 text-[17px] leading-none">
-                        {l.price != null ? price(l.price) : <span className="font-body text-[13px] font-semibold text-muted">מחיר לא צוין</span>}
+                        {l.price != null ? <Price value={l.price} /> : <span className="font-body text-[13px] font-semibold text-muted">מחיר לא צוין</span>}
                       </div>
                       <div className="tnum mt-1 truncate text-[12.5px] text-muted">{facts}</div>
                       {pos[0] && <div className="mt-1 truncate text-[12px] font-semibold text-accent">✓ {hebrewizeCities(pos[0])}</div>}
