@@ -13,20 +13,7 @@ import FlashBanner from "@/components/ui/FlashBanner";
 import AutoSubmitOnChange from "@/components/ui/AutoSubmitOnChange";
 import Icon from "@/components/ui/Icon";
 import { Select, Input, inputCls } from "@/components/ui/Field";
-import {
-  SOURCE_HE,
-  STATUS_HE,
-  STATUS_TONE,
-  DEAL_HE,
-  BROKER_HE,
-  FEE_HE,
-  CONFIDENCE_HE,
-  FB_SURFACE_HE,
-  OUTCOME_HE,
-  ALERT_REASON_HE,
-  ALERT_STATUS_HE,
-  ALERT_STATUS_TONE,
-} from "@/lib/labels";
+import { SOURCE_HE, STATUS_HE, DEAL_HE, BROKER_HE, OUTCOME_HE, USER_STATUS_HE } from "@/lib/labels";
 import { hebrewCity } from "@/core/alert";
 import { price, dateTime } from "@/lib/format";
 
@@ -88,11 +75,6 @@ function parsePriceHistory(s: string): { amount: number; seenAt: string }[] {
     return [];
   }
 }
-
-const ACTION_STRIP: Record<string, string> = {
-  strong_match: "bg-good-soft text-good",
-  possible_match: "bg-warn-soft text-warn",
-};
 
 /** "היום" / "אתמול" / "השבוע" / "מוקדם יותר" — freshness is the primary grouping. */
 function dayGroup(d: Date): string {
@@ -161,8 +143,6 @@ export default async function MatchesPage({ searchParams }: { searchParams: Matc
     groups.get(g)!.push(m);
   }
   for (const g of Array.from(groups.values())) g.sort((a, b) => b.score - a.score);
-
-  let prevAction = "";
 
   const activeFilters = [
     searchParams.profile,
@@ -328,133 +308,110 @@ export default async function MatchesPage({ searchParams }: { searchParams: Matc
             {groupName}
             <span className="tnum text-xs font-medium text-muted">{groups.get(groupName)!.length}</span>
           </div>
-          <div className="space-y-3">
+          {/* joined board rows, one container per day-group — same visual
+              language as the dashboard; the deep details live on דף דירה */}
+          <div className="overflow-hidden rounded-xl2 border border-line bg-card shadow-card">
             {groups.get(groupName)!.map((m) => {
               const pos = parseArr(m.reasonsPositive);
-              const neg = parseArr(m.reasonsNegative);
-              const missing = parseArr(m.missingFields);
               const flags = parseArr(m.redFlags);
               const l = m.listing;
               const history = parsePriceHistory(l.priceHistory);
               const sparkValues = l.price != null ? [...history.map((h) => h.amount), l.price] : history.map((h) => h.amount);
               const latestAlert = m.alerts[0];
-              const showStrip = (m.status === "strong_match" || m.status === "possible_match") && m.recommendedAction !== prevAction;
-              prevAction = m.recommendedAction;
+              const strip =
+                l.userStatus === "DISMISSED"
+                  ? "bg-[#c4c4c4]"
+                  : m.status === "strong_match"
+                    ? "bg-good"
+                    : m.status === "possible_match"
+                      ? "bg-warn"
+                      : "bg-[#c4c4c4]";
+              const facts = [
+                l.rooms != null ? `${l.rooms} חד׳` : null,
+                l.sizeSqm != null ? `${l.sizeSqm} מ״ר` : null,
+                l.dealType ? DEAL_HE[l.dealType] : null,
+                BROKER_HE[l.brokerStatus] === "לא ידוע" ? null : BROKER_HE[l.brokerStatus],
+                SOURCE_HE[l.source] ?? l.source,
+                dateTime(l.createdAt),
+              ]
+                .filter(Boolean)
+                .join(" · ");
               return (
-                <Card key={m.id} className="p-4">
-                  {/* Top row: score · facts · open */}
-                  <div className="flex items-start gap-3">
-                    <ScoreBadge score={m.score} size={48} />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-                        <span className="tnum font-display text-xl font-bold">
-                          {l.price != null ? price(l.price) : "מחיר לא צוין"}
-                        </span>
-                        <span className="flex items-center gap-1 text-sm text-muted">
-                          <Icon name="pin" size={13} />
-                          {[hebrewCity(l.city), l.neighborhood, l.street].filter(Boolean).join(", ") || "מיקום לא ידוע"}
-                        </span>
-                        {l.rooms != null && <span className="tnum text-sm text-muted">{l.rooms} חד׳</span>}
-                        {l.sizeSqm != null && <span className="tnum text-sm text-muted">{l.sizeSqm} מ״ר</span>}
-                        {l.dealType && <span className="text-sm text-muted">{DEAL_HE[l.dealType]}</span>}
-                      </div>
-                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                        <Badge tone={STATUS_TONE[m.status] ?? "neutral"}>{STATUS_HE[m.status] ?? m.status}</Badge>
-                        <Badge tone="neutral">{SOURCE_HE[l.source] ?? l.source}</Badge>
-                        {l.source === "FACEBOOK" && l.fbSourceName && (
-                          <Badge tone="neutral">
-                            {FB_SURFACE_HE[l.fbSurface ?? "UNKNOWN"]}: {l.fbSourceName}
-                          </Badge>
-                        )}
-                        {l.isDuplicateOf && (
-                          <Link href={`/listing/${l.isDuplicateOf}`} title="פתח את המודעה המקורית">
-                            <Badge tone="warn" icon="flag">
-                              כפילות — למקור ←
-                            </Badge>
-                          </Link>
-                        )}
-                        {latestAlert && (
-                          <Badge tone={ALERT_STATUS_TONE[latestAlert.status] ?? "neutral"} icon="bell">
-                            {ALERT_STATUS_HE[latestAlert.status] ?? latestAlert.status}
-                            {latestAlert.reason && ALERT_REASON_HE[latestAlert.reason]
-                              ? ` · ${ALERT_REASON_HE[latestAlert.reason]}`
-                              : ""}
-                          </Badge>
-                        )}
-                        <span className="text-xs text-faint">
-                          תיווך: {BROKER_HE[l.brokerStatus]}
-                          {l.brokerStatus !== "UNKNOWN" ? ` (${CONFIDENCE_HE[l.brokerConfidence]})` : ""} · {FEE_HE[l.brokerFeeStatus]}
-                        </span>
-                        {latestAlert?.sentAt && (
-                          <span className="tnum text-xs text-faint">· נשלחה {dateTime(latestAlert.sentAt)}</span>
-                        )}
-                      </div>
-                      {history.length > 0 && sparkValues.length >= 2 && (
-                        <div className="mt-1.5 flex items-center gap-2 text-xs text-faint">
-                          <Sparkline values={sparkValues} width={90} height={24} />
-                          <span className="tnum" dir="ltr">
-                            {sparkValues.map((v) => v.toLocaleString("en-US")).join(" → ")} ₪
-                          </span>
-                        </div>
-                      )}
-                      {latestAlert?.error && <div className="mt-1 text-xs text-warn">{latestAlert.error}</div>}
+                <div key={m.id} className="relative border-b border-line p-3 pe-4 ps-[18px] last:border-b-0">
+                  <span className={`absolute inset-y-0 start-0 w-[6px] ${strip}`} aria-hidden="true" />
+
+                  {/* title … price */}
+                  <div className="flex items-baseline justify-between gap-3">
+                    <Link
+                      href={`/listing/${l.id}`}
+                      className="min-w-0 truncate text-[15px] font-bold transition-colors hover:text-accent"
+                    >
+                      {[hebrewCity(l.city), l.neighborhood, l.street].filter(Boolean).join(" · ") || "מיקום לא ידוע"}
+                    </Link>
+                    <div className="tnum figtree flex-none text-[17px] font-bold">
+                      {l.price != null ? price(l.price) : <span className="text-sm font-medium text-muted">מחיר לא צוין</span>}
                     </div>
-                    <div className="flex shrink-0 flex-col gap-1.5">
+                  </div>
+
+                  {/* facts */}
+                  <div className="tnum mt-0.5 truncate text-xs text-muted">{facts}</div>
+
+                  {/* one reason, one flag — the argument, not the whole file */}
+                  {pos[0] && <div className="mt-1 truncate text-xs font-medium text-[#00854d]">✓ {pos[0]}</div>}
+                  {flags[0] && <div className="mt-0.5 truncate text-xs font-medium text-[#b06000]">🚩 {flags[0]}</div>}
+                  {latestAlert?.error && <div className="mt-1 truncate text-xs text-crit">{latestAlert.error}</div>}
+
+                  {/* price history — the trend at a glance */}
+                  {history.length > 0 && sparkValues.length >= 2 && (
+                    <div className="mt-1 flex items-center gap-2 text-xs text-faint">
+                      <Sparkline values={sparkValues} width={80} height={20} />
+                      <span className="tnum" dir="ltr">
+                        {sparkValues.map((v) => v.toLocaleString("en-US")).join(" → ")} ₪
+                      </span>
+                    </div>
+                  )}
+
+                  {/* chips + actions */}
+                  <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                    <ScoreBadge score={m.score} />
+                    {(m.status === "weak_match" || m.status === "rejected") && (
+                      <Badge tone="neutral">{STATUS_HE[m.status] ?? m.status}</Badge>
+                    )}
+                    {l.userStatus !== "NEW" && <Badge tone="accent">{USER_STATUS_HE[l.userStatus]}</Badge>}
+                    {latestAlert?.status === "SENT" && (
+                      <Badge tone="neutral" icon="bell">
+                        נשלחה
+                      </Badge>
+                    )}
+                    {l.isDuplicateOf && (
+                      <Link href={`/listing/${l.isDuplicateOf}`} title="פתח את המודעה המקורית">
+                        <Badge tone="warn" icon="flag">
+                          כפילות
+                        </Badge>
+                      </Link>
+                    )}
+                    <span className="ms-auto flex gap-2">
+                      {l.phone && (
+                        <a
+                          href={`tel:${l.phone}`}
+                          className="inline-flex items-center justify-center rounded-badge border border-accent bg-card px-3 py-1.5 text-xs font-semibold text-accent transition-all hover:bg-accent-soft active:scale-[0.98]"
+                        >
+                          📞
+                        </a>
+                      )}
                       <ButtonLink href={`/listing/${l.id}`} variant="primary" size="sm">
                         דף דירה
                       </ButtonLink>
                       {l.url && (
                         <ButtonLink href={l.url} external variant="secondary" size="sm" icon="external">
-                          פתח מודעה
+                          מודעה
                         </ButtonLink>
                       )}
-                    </div>
+                    </span>
                   </div>
 
-                  {/* Recommended action — only when it adds information */}
-                  {showStrip && (
-                    <div className={`mt-3 flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium ${ACTION_STRIP[m.status]}`}>
-                      <Icon name="spark" size={14} />
-                      {m.recommendedAction}
-                    </div>
-                  )}
-
-                  {/* Reasons — compact inline summary */}
-                  {(pos.length > 0 || neg.length > 0 || missing.length > 0 || flags.length > 0) && (
-                    <div className="mt-3 grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
-                      <div className="space-y-2">
-                        {pos.length > 0 && (
-                          <div>
-                            <span className="me-1 font-medium text-good">✓ למה התאים:</span>
-                            <span className="text-muted">{pos.join(" · ")}</span>
-                          </div>
-                        )}
-                        {neg.length > 0 && (
-                          <div>
-                            <span className="me-1 font-medium text-crit">✗ חולשות:</span>
-                            <span className="text-muted">{neg.join(" · ")}</span>
-                          </div>
-                        )}
-                      </div>
-                      <div className="space-y-2">
-                        {missing.length > 0 && (
-                          <div>
-                            <span className="me-1 font-medium text-muted">? לברר בשיחה:</span>
-                            <span className="text-muted">{missing.join(" · ")}</span>
-                          </div>
-                        )}
-                        {flags.length > 0 && (
-                          <div>
-                            <span className="me-1 font-medium text-warn">🚩 דגלים:</span>
-                            <span className="text-muted">{flags.join(" · ")}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Quiet inline details — an open one expands to full width */}
-                  <div className="mt-3 flex flex-wrap items-start gap-x-5 gap-y-1 border-t border-line pt-2 text-xs">
+                  {/* quiet extras — QA tooling only in debug mode */}
+                  <div className="mt-2 flex flex-wrap items-start gap-x-5 gap-y-1 text-xs">
                     <details className="re-collapse open:basis-full">
                       <summary className="inline-flex items-center gap-1 text-faint transition-colors hover:text-ink">
                         <span className="chev inline-flex">
@@ -462,47 +419,49 @@ export default async function MatchesPage({ searchParams }: { searchParams: Matc
                         </span>
                         הפוסט המקורי
                       </summary>
-                      <pre dir="auto" className="mt-2 whitespace-pre-wrap rounded-lg bg-card2/60 p-3 text-xs text-muted">
+                      <pre dir="auto" className="mt-2 whitespace-pre-wrap rounded-badge bg-card2/60 p-3 text-xs text-muted">
                         {l.rawText}
                       </pre>
                     </details>
                     {searchParams.debug === "1" && (
-                      <details className="re-collapse open:basis-full">
-                        <summary className="inline-flex items-center gap-1 text-faint transition-colors hover:text-ink">
-                          <span className="chev inline-flex">
-                            <Icon name="chevron" size={10} />
-                          </span>
-                          שדות מפוענחים
-                        </summary>
-                        <pre dir="ltr" className="tnum mt-2 whitespace-pre-wrap rounded-lg bg-card2/60 p-3 text-start font-mono text-xs text-muted">
-                          {debugFieldsText(l)}
-                        </pre>
-                      </details>
+                      <>
+                        <details className="re-collapse open:basis-full">
+                          <summary className="inline-flex items-center gap-1 text-faint transition-colors hover:text-ink">
+                            <span className="chev inline-flex">
+                              <Icon name="chevron" size={10} />
+                            </span>
+                            שדות מפוענחים
+                          </summary>
+                          <pre dir="ltr" className="tnum mt-2 whitespace-pre-wrap rounded-badge bg-card2/60 p-3 text-start font-mono text-xs text-muted">
+                            {debugFieldsText(l)}
+                          </pre>
+                        </details>
+                        <details className="re-collapse open:basis-full" open={Boolean(l.qaNotes)}>
+                          <summary className="inline-flex items-center gap-1 text-faint transition-colors hover:text-ink">
+                            <span className="chev inline-flex">
+                              <Icon name="chevron" size={10} />
+                            </span>
+                            הערות QA{l.qaNotes ? " ●" : ""}
+                          </summary>
+                          <form action={saveListingNotes} className="mt-2 flex items-start gap-2">
+                            <input type="hidden" name="listingId" value={l.id} />
+                            <textarea
+                              name="qaNotes"
+                              dir="auto"
+                              rows={2}
+                              defaultValue={l.qaNotes ?? ""}
+                              placeholder="למשל: המחיר פוענח לא נכון · העיר לא זוהתה · לא אמור להיות כפילות"
+                              className={`${inputCls} flex-1 text-xs`}
+                            />
+                            <Button size="sm" variant="secondary">
+                              שמור
+                            </Button>
+                          </form>
+                        </details>
+                      </>
                     )}
-                    <details className="re-collapse open:basis-full" open={Boolean(l.qaNotes)}>
-                      <summary className="inline-flex items-center gap-1 text-faint transition-colors hover:text-ink">
-                        <span className="chev inline-flex">
-                          <Icon name="chevron" size={10} />
-                        </span>
-                        הערות QA{l.qaNotes ? " ●" : ""}
-                      </summary>
-                      <form action={saveListingNotes} className="mt-2 flex items-start gap-2">
-                        <input type="hidden" name="listingId" value={l.id} />
-                        <textarea
-                          name="qaNotes"
-                          dir="auto"
-                          rows={2}
-                          defaultValue={l.qaNotes ?? ""}
-                          placeholder="למשל: המחיר פוענח לא נכון · העיר לא זוהתה · לא אמור להיות כפילות"
-                          className={`${inputCls} flex-1 text-xs`}
-                        />
-                        <Button size="sm" variant="secondary">
-                          שמור
-                        </Button>
-                      </form>
-                    </details>
                   </div>
-                </Card>
+                </div>
               );
             })}
           </div>
