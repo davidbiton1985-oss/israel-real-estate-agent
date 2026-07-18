@@ -12,6 +12,7 @@ import Icon from "@/components/ui/Icon";
 import PushToggle from "@/components/ui/PushToggle";
 import FlashBanner from "@/components/ui/FlashBanner";
 import LandingMark from "@/components/ui/LandingMark";
+import Thumb from "@/components/ui/Thumb";
 import { DEAL_HE, BROKER_HE, SOURCE_HE, USER_STATUS_HE } from "@/lib/labels";
 import { price, relTime, minutesSince } from "@/lib/format";
 import type { SourceHealth } from "@prisma/client";
@@ -45,29 +46,38 @@ function greeting(): string {
   return "לילה טוב, דוד 🌙";
 }
 
-/** monday board row: colored side-strip, title/price, facts, blocks + actions. */
+/** monday board row: colored side-strip, photo, title/price, facts, blocks + actions. */
 function BoardRow({
   strip,
   title,
   priceText,
   sub,
+  image,
   children,
 }: {
   strip: string;
   title: string;
   priceText: string | null;
   sub: string;
+  image?: string | null;
   children?: React.ReactNode;
 }) {
   return (
-    <div className="relative grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 border-b border-line p-3 pe-4 ps-[18px] last:border-b-0">
+    <div className="relative flex gap-3 border-b border-line p-3 pe-4 ps-[18px] last:border-b-0">
       <span className={`absolute inset-y-0 start-0 w-[6px] ${strip}`} aria-hidden="true" />
-      <div className="min-w-0 text-[15px] font-bold">{title}</div>
-      <div className="tnum figtree text-start text-[17px] font-bold">
-        {priceText ?? <span className="text-sm font-medium text-muted">מחיר לא צוין</span>}
+      {image && (
+        <Thumb src={image} alt="" className="h-[64px] w-[64px] flex-none rounded-badge border border-line object-cover" />
+      )}
+      <div className="min-w-0 flex-1">
+        <div className="flex items-baseline justify-between gap-3">
+          <div className="min-w-0 truncate text-[15px] font-bold">{title}</div>
+          <div className="tnum figtree flex-none text-[17px] font-bold">
+            {priceText ?? <span className="text-sm font-medium text-muted">מחיר לא צוין</span>}
+          </div>
+        </div>
+        <div className="tnum mt-0.5 text-xs text-muted">{sub}</div>
+        {children && <div className="mt-2 flex flex-wrap items-center gap-2">{children}</div>}
       </div>
-      <div className="tnum col-start-1 text-xs text-muted">{sub}</div>
-      {children && <div className="col-span-2 mt-2 flex flex-wrap items-center gap-2">{children}</div>}
     </div>
   );
 }
@@ -273,6 +283,7 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
               <BoardRow
                 key={l.id}
                 strip="bg-special"
+                  image={l.imageUrl}
                 title={rowTitle(l)}
                 priceText={l.price != null ? price(l.price) : null}
                 sub={[
@@ -320,6 +331,7 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
                 <BoardRow
                   key={m.id}
                   strip="bg-accent"
+                  image={l.imageUrl}
                   title={rowTitle(l)}
                   priceText={l.price != null ? price(l.price) : null}
                   sub={rowSub(l)}
@@ -369,6 +381,7 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
                 <BoardRow
                   key={m.id}
                   strip="bg-warn"
+                  image={l.imageUrl}
                   title={rowTitle(l)}
                   priceText={l.price != null ? price(l.price) : null}
                   sub={rowSub(l)}

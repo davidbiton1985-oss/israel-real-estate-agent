@@ -76,6 +76,7 @@ model Listing {
   brokerFeeStatus String   @default("UNKNOWN") // NONE | EXISTS | UNKNOWN
   brokerFeeText   String?
   // The decide→act loop (UX council Wave 2):
+  imageUrl        String? // apartment photo: /uploads/<id>.jpg once localized, else the source CDN url
   phone           String? // lister phone extracted from rawText, E.164 (+972…)
   userStatus      String   @default("NEW") // NEW | CONTACTED | VIEWING | DISMISSED | WON
   userNote        String? // David's pursuit note ("callback after 18:00")

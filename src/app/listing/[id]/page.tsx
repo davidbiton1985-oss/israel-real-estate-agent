@@ -10,6 +10,7 @@ import Badge from "@/components/ui/Badge";
 import ScoreBadge from "@/components/ui/ScoreBadge";
 import Icon from "@/components/ui/Icon";
 import { Input, Textarea } from "@/components/ui/Field";
+import Thumb from "@/components/ui/Thumb";
 import { DEAL_HE, BROKER_HE, SOURCE_HE, USER_STATUS_HE } from "@/lib/labels";
 import { price, relTime } from "@/lib/format";
 
@@ -93,6 +94,9 @@ export default async function ListingPage({ params }: { params: { id: string } }
 
       {/* ===== the apartment — board-row anatomy, expanded ===== */}
       <section className="overflow-hidden rounded-xl2 border border-line bg-card shadow-card">
+        {listing.imageUrl && (
+          <Thumb src={listing.imageUrl} alt="תמונת הדירה" className="h-52 w-full border-b border-line object-cover" />
+        )}
         <div className="relative p-4 ps-[20px]">
           <span className={`absolute inset-y-0 start-0 w-[6px] ${strip}`} aria-hidden="true" />
 

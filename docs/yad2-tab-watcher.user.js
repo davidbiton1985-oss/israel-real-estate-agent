@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RE-Agent Yad2 Tab Watcher
 // @namespace    israel-real-estate-agent
-// @version      1.7
+// @version      1.8
 // @description  Watches YOUR open Yad2 search tab: every 7–10 min (randomized, slower overnight) it re-checks the results and sends new listings to your local Israel Real Estate Agent (localhost:3000), which scores them and WhatsApps you strong matches. Runs only in your own browser session — no CAPTCHA bypass, no fake fingerprints, no login automation. If Yad2 shows a verification page the watcher BACKS OFF and stops hammering it; solve it yourself like normal and it resumes.
 // @match        https://www.yad2.co.il/realestate/*
 // @noframes
@@ -168,7 +168,18 @@
         node = parent;
       }
       var text = (node.innerText || "").replace(/\s+\n/g, "\n").trim();
-      if (text.length >= 25) found[id] = { id: id, url: href, text: text.slice(0, 1200) };
+      // v1.8: grab the card's apartment photo (first real-size <img>) —
+      // the app localizes it and shows it on rows and the listing page.
+      var image = null;
+      var imgs = node.querySelectorAll("img");
+      for (var k = 0; k < imgs.length; k++) {
+        var src = imgs[k].currentSrc || imgs[k].src || "";
+        if (!/^https?:/.test(src)) continue;
+        if ((imgs[k].naturalWidth || imgs[k].width || 0) < 120) continue; // icons/avatars
+        image = src;
+        break;
+      }
+      if (text.length >= 25) found[id] = { id: id, url: href, text: text.slice(0, 1200), image: image };
     }
     return Object.keys(found).map(function (k) {
       return found[k];
@@ -255,7 +266,7 @@
       fetch(APP, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: c.text, url: c.url, title: document.title }),
+        body: JSON.stringify({ text: c.text, url: c.url, title: document.title, image: c.image || undefined }),
         signal: ctrl.signal,
       })
         .then(function (r) {

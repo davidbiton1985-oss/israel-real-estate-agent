@@ -17,6 +17,7 @@ import { ingestAndMatch } from "@/core/pipeline";
 import { classifyCaptureSource, looksLikeMergedYad2Cards } from "@/core/capture";
 import { classifyFbUrl } from "@/core/connectors/facebook";
 import { listingCandidates, groupContext, extractListingFromPost } from "@/core/bulkExtract";
+import { maybeLocalizeImage } from "@/core/images";
 import { prisma } from "@/lib/db";
 
 const CORS_HEADERS = {
@@ -35,9 +36,10 @@ export async function POST(req: NextRequest) {
     text?: string;
     url?: string;
     title?: string;
+    image?: string;
     bulk?: boolean;
     groupName?: string;
-    posts?: { text?: string; url?: string }[];
+    posts?: { text?: string; url?: string; image?: string }[];
     heartbeat?: string;
   };
   try {
@@ -92,7 +94,12 @@ export async function POST(req: NextRequest) {
       if (seenSig.has(sig)) continue;
       seenSig.add(sig);
       try {
-        const result = await ingestAndMatch(cand.text, "FACEBOOK", pUrl, { fbSurface, fbSourceName: body.groupName ?? null });
+        const result = await ingestAndMatch(cand.text, "FACEBOOK", pUrl, {
+          fbSurface,
+          fbSourceName: body.groupName ?? null,
+          imageUrl: post.image?.trim() || null,
+        });
+        maybeLocalizeImage(result.listing.id, result.listing.imageUrl, post.image?.trim() || null);
         ingested++;
         if (result.isNew) newCount++;
         alertsSent += result.alertsSent;
@@ -175,7 +182,9 @@ export async function POST(req: NextRequest) {
   }
 
   const rawText = title && !text.includes(title) ? `${title}\n${text}` : text;
-  const result = await ingestAndMatch(rawText, source, url, meta);
+  const capturedImage = (body.image ?? "").trim() || null;
+  const result = await ingestAndMatch(rawText, source, url, { ...meta, imageUrl: capturedImage });
+  maybeLocalizeImage(result.listing.id, result.listing.imageUrl, capturedImage);
 
   // Credit the capture in the right SourceHealth row so the dashboard reflects activity.
   if (healthSource) {

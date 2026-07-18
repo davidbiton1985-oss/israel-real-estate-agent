@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RE-Agent Facebook Notification Reader
 // @namespace    israel-real-estate-agent
-// @version      12.18
+// @version      12.19
 // @description  Notification-driven reader: one designated tab checks facebook.com/notifications every 7–12 min (randomized, slower overnight); every "posted in group" notification links to the post's own page, which the tab then opens and reads IN FULL — parsed, scored, WhatsApp'd by your local RE-Agent (localhost:3000). It also sweeps one target group's chronological feed per cycle (round-robin, scroll-until-overlap) so posts Facebook never notified about are still caught, and survives browser restarts via a localStorage reader lease. Runs only in your own logged-in browser session — no scraping server, no login/CAPTCHA bypass; if Facebook shows a checkpoint the reader BACKS OFF instead of hammering it. Your other Facebook tabs are untouched (the reader runs only in the tab you start with #re-agent).
 // @match        https://www.facebook.com/*
 // @noframes
@@ -405,6 +405,20 @@
     }
     return null;
   }
+  // v12.19: the post's OWN photo (same nesting rule as text/permalink) — the
+  // app localizes it and shows it on rows and the listing page. Width guard
+  // keeps avatars/reaction icons out.
+  function ownImage(article) {
+    var imgs = article.querySelectorAll('img[src*="scontent"], img[src*="fbcdn"]');
+    for (var i = 0; i < imgs.length; i++) {
+      var im = imgs[i];
+      var host = im.closest ? im.closest('[role="article"]') : null;
+      if (host !== article) continue;
+      if ((im.naturalWidth || im.width || 0) < 200) continue;
+      return im.currentSrc || im.src || null;
+    }
+    return null;
+  }
   // FB truncates long posts behind a "see more" toggle; if it isn't clicked the
   // body is only a ~95-char preview and the parser can't read rooms/price/city.
   // Match the SHORT toggle label (length-guarded so we never click a paragraph
@@ -544,8 +558,13 @@
           return;
         }
         sendDiag(item, { ready: true, identity: true, via: probe2.via, len: text.length, hooks: probe2.hooks, arts: outermostArticles().length });
+        // v12.19: photo from the post page — first own-article image, falling
+        // back to the page's first large content image.
+        var pageImage = null;
+        var arts0 = outermostArticles();
+        for (var ai = 0; ai < arts0.length && !pageImage; ai++) pageImage = ownImage(arts0[ai]);
         postToApp(
-          { posts: [{ text: text, url: item.url }], groupName: item.group || (document.title || ""), url: item.url },
+          { posts: [{ text: text, url: item.url, image: pageImage || undefined }], groupName: item.group || (document.title || ""), url: item.url },
           function (d) {
             if (d && d.ok) { finishItem(item, "✓ sent " + text.length + " chars"); return; }
             // Transient send failure (server restarting / 500 / timeout): do NOT
@@ -625,7 +644,7 @@
         if (!link) return;
         var pid = postIdOf(link);
         if (pid && seen.indexOf(pid) !== -1) return; // already handled → skip (dedupe re-sends)
-        posts.push({ text: t.slice(0, 3000), url: link });
+        posts.push({ text: t.slice(0, 3000), url: link, image: ownImage(a) || undefined });
       });
       if (posts.length === 0) { finishItem(item); return; }
       postToApp({ posts: posts, groupName: item.group || (document.title || ""), url: item.url }, function (d) {

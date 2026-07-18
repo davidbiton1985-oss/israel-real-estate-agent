@@ -11,6 +11,7 @@ import Sparkline from "@/components/ui/Sparkline";
 import EmptyState from "@/components/ui/EmptyState";
 import FlashBanner from "@/components/ui/FlashBanner";
 import AutoSubmitOnChange from "@/components/ui/AutoSubmitOnChange";
+import Thumb from "@/components/ui/Thumb";
 import Icon from "@/components/ui/Icon";
 import { Select, Input, inputCls } from "@/components/ui/Field";
 import { SOURCE_HE, STATUS_HE, DEAL_HE, BROKER_HE, OUTCOME_HE, USER_STATUS_HE } from "@/lib/labels";
@@ -340,21 +341,30 @@ export default async function MatchesPage({ searchParams }: { searchParams: Matc
                 <div key={m.id} className="relative border-b border-line p-3 pe-4 ps-[18px] last:border-b-0">
                   <span className={`absolute inset-y-0 start-0 w-[6px] ${strip}`} aria-hidden="true" />
 
-                  {/* title … price */}
-                  <div className="flex items-baseline justify-between gap-3">
-                    <Link
-                      href={`/listing/${l.id}`}
-                      className="min-w-0 truncate text-[15px] font-bold transition-colors hover:text-accent"
-                    >
-                      {[hebrewCity(l.city), l.neighborhood, l.street].filter(Boolean).join(" · ") || "מיקום לא ידוע"}
-                    </Link>
-                    <div className="tnum figtree flex-none text-[17px] font-bold">
-                      {l.price != null ? price(l.price) : <span className="text-sm font-medium text-muted">מחיר לא צוין</span>}
+                  <div className="flex gap-3">
+                    {l.imageUrl && (
+                      <Link href={`/listing/${l.id}`} className="flex-none">
+                        <Thumb src={l.imageUrl} alt="" className="h-[64px] w-[64px] rounded-badge border border-line object-cover" />
+                      </Link>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      {/* title … price */}
+                      <div className="flex items-baseline justify-between gap-3">
+                        <Link
+                          href={`/listing/${l.id}`}
+                          className="min-w-0 truncate text-[15px] font-bold transition-colors hover:text-accent"
+                        >
+                          {[hebrewCity(l.city), l.neighborhood, l.street].filter(Boolean).join(" · ") || "מיקום לא ידוע"}
+                        </Link>
+                        <div className="tnum figtree flex-none text-[17px] font-bold">
+                          {l.price != null ? price(l.price) : <span className="text-sm font-medium text-muted">מחיר לא צוין</span>}
+                        </div>
+                      </div>
+
+                      {/* facts */}
+                      <div className="tnum mt-0.5 truncate text-xs text-muted">{facts}</div>
                     </div>
                   </div>
-
-                  {/* facts */}
-                  <div className="tnum mt-0.5 truncate text-xs text-muted">{facts}</div>
 
                   {/* one reason, one flag — the argument, not the whole file */}
                   {pos[0] && <div className="mt-1 truncate text-xs font-medium text-[#00854d]">✓ {hebrewizeCities(pos[0])}</div>}

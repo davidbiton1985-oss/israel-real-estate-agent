@@ -14,6 +14,8 @@ export interface IngestMeta {
   fbSurface?: string | null;
   fbSourceName?: string | null;
   fbAuthor?: string | null;
+  /** apartment photo captured by the browser sensor (source CDN url) */
+  imageUrl?: string | null;
 }
 
 export interface IngestResult {
@@ -47,6 +49,7 @@ export async function ingestListing(rawText: string, source: Source, url: string
     fbSurface: meta.fbSurface ?? null,
     fbSourceName: meta.fbSourceName ?? null,
     fbAuthor: meta.fbAuthor ?? null,
+    imageUrl: meta.imageUrl ?? null,
   };
   const parsedData = {
     dealType: parsed.dealType,
@@ -147,6 +150,8 @@ export async function ingestListing(rawText: string, source: Source, url: string
       ...parsedData,
       // a repost without the number must not erase a phone we already found
       phone: parsedData.phone ?? existing.phone,
+      // never downgrade a localized photo; keep any photo over none
+      imageUrl: existing.imageUrl?.startsWith("/uploads/") ? existing.imageUrl : (metaData.imageUrl ?? existing.imageUrl),
     },
   });
 
