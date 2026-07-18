@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RE-Agent Facebook Notification Reader
 // @namespace    israel-real-estate-agent
-// @version      12.17
+// @version      12.18
 // @description  Notification-driven reader: one designated tab checks facebook.com/notifications every 7–12 min (randomized, slower overnight); every "posted in group" notification links to the post's own page, which the tab then opens and reads IN FULL — parsed, scored, WhatsApp'd by your local RE-Agent (localhost:3000). It also sweeps one target group's chronological feed per cycle (round-robin, scroll-until-overlap) so posts Facebook never notified about are still caught, and survives browser restarts via a localStorage reader lease. Runs only in your own logged-in browser session — no scraping server, no login/CAPTCHA bypass; if Facebook shows a checkpoint the reader BACKS OFF instead of hammering it. Your other Facebook tabs are untouched (the reader runs only in the tab you start with #re-agent).
 // @match        https://www.facebook.com/*
 // @noframes
@@ -61,6 +61,7 @@
   var SWEPT_KEY = "reAgentSweptGroups_v12"; // localStorage: groups discovered from posts
   var SWEEP_IDX_KEY = "reAgentSweepIdx_v12"; // localStorage: round-robin cursor
   var RESWEEP_KEY = "reAgentReSweep_v12"; // localStorage: a group that overflowed its last sweep
+  var DEEP_KEY = "reAgentDeepSweep_v12"; // localStorage: {date, gids} — one DEEP sweep per group per day
 
   // ---- reader-tab designation: a localStorage LEASE (survives restart) -------
   // The old design kept the role only in sessionStorage, which the browser wipes
@@ -577,6 +578,25 @@
     var seen = loadSeen();
     var gid = groupIdOf(item.url);
 
+    // v12.18: once a day per group, sweep DEEP. Admin-approved-late posts land
+    // in the chronological feed at their ORIGINAL posted time — i.e. BELOW
+    // posts we've already seen — so the normal stop-at-overlap sweep can never
+    // reach them. A deep sweep ignores the overlap stop and scrolls further;
+    // collectAndSend still skips seen post ids, so no re-sends. Not before
+    // 10:00 (approvals happen during the day; also keeps overnight quiet).
+    var deep = false;
+    try {
+      var today = new Date().toISOString().slice(0, 10);
+      var rec = JSON.parse(localStorage.getItem(DEEP_KEY) || "{}");
+      if (rec.date !== today) rec = { date: today, gids: {} };
+      if (gid && !rec.gids[gid] && new Date().getHours() >= 10) {
+        deep = true;
+        rec.gids[gid] = 1;
+        localStorage.setItem(DEEP_KEY, JSON.stringify(rec)); // mark up-front: a crashed deep sweep must not retry-loop all day
+      }
+    } catch (e) {}
+    if (deep) { MAX_STEPS = 14; setBadge("DEEP sweep: " + (item.group || "")); }
+
     // Overlap = K CONSECUTIVE already-seen posts in feed order. A single seen post
     // must NOT stop the sweep: a PINNED already-seen post sits at the top of the
     // chronological feed on every sweep and would short-circuit at step 0 (the new
@@ -619,8 +639,10 @@
     // lazy-loading deeper batches each step, then read+send.
     function step(n) {
       expandSeeMore();
-      if (reachedOverlap()) { setTimeout(collectAndSend, 800); return; }
+      // deep sweeps deliberately scroll PAST the overlap — that's the point
+      if (!deep && reachedOverlap()) { setTimeout(collectAndSend, 800); return; }
       if (n >= MAX_STEPS) {
+        if (deep) { setTimeout(collectAndSend, 800); return; } // deep cap is by depth, not overlap — no resweep flag
         // Hit the scroll cap WITHOUT reaching overlap → this group had more new
         // posts than we scrolled. Flag it to be re-swept next cycle instead of
         // rotating past it, else the overflow is silently lost until the cursor
@@ -630,7 +652,7 @@
         setTimeout(collectAndSend, 800);
         return;
       }
-      setBadge("group sweep: " + (item.group || "") + " · scroll " + (n + 1));
+      setBadge((deep ? "DEEP sweep: " : "group sweep: ") + (item.group || "") + " · scroll " + (n + 1));
       try { window.scrollBy(0, 1600); } catch {}
       setTimeout(function () { step(n + 1); }, 1400); // let the next batch render
     }
