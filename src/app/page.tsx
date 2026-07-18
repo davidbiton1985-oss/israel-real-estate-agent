@@ -6,6 +6,7 @@ import ScoreBadge from "@/components/ui/ScoreBadge";
 import FlashBanner from "@/components/ui/FlashBanner";
 import LandingMark from "@/components/ui/LandingMark";
 import Thumb from "@/components/ui/Thumb";
+import SourceMark from "@/components/ui/SourceMark";
 import PhotoPlaceholder from "@/components/ui/PhotoPlaceholder";
 import { DEAL_HE, BROKER_HE, SOURCE_HE, USER_STATUS_HE } from "@/lib/labels";
 import Price from "@/components/ui/Price";
@@ -82,17 +83,18 @@ function Piece({
         <div className="tnum mt-1 text-[15px] text-muted">{factsLine(listing)}</div>
         <div className="mt-3 flex items-center gap-2">
           {score != null && <ScoreBadge score={score} />}
-          <span className="ms-auto text-[13px] text-muted">
-            {SOURCE_HE[listing.source] ?? listing.source}
-            {when ? ` · ${when}` : ""}
+          <span className="ms-auto inline-flex items-center gap-1.5 text-[13px] text-muted">
+            {!listing.url && <SourceMark source={listing.source} size={15} />}
+            {when}
           </span>
           {listing.url && (
             <a
               href={listing.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="relative z-[2] inline-flex min-h-[34px] items-center rounded-full bg-card2 px-3.5 text-[12.5px] font-bold text-ink transition-all active:scale-95"
+              className="relative z-[2] inline-flex min-h-[34px] items-center gap-1.5 rounded-full bg-card2 px-3.5 text-[12.5px] font-bold text-ink transition-all active:scale-95"
             >
+              <SourceMark source={listing.source} size={15} />
               למודעה ↗
             </a>
           )}

@@ -8,6 +8,7 @@ import ScoreBadge from "@/components/ui/ScoreBadge";
 import FlashBanner from "@/components/ui/FlashBanner";
 import AutoSubmitOnChange from "@/components/ui/AutoSubmitOnChange";
 import Thumb from "@/components/ui/Thumb";
+import SourceMark from "@/components/ui/SourceMark";
 import Price from "@/components/ui/Price";
 import PhotoPlaceholder from "@/components/ui/PhotoPlaceholder";
 import Icon from "@/components/ui/Icon";
@@ -307,8 +308,9 @@ export default async function MatchesPage({ searchParams }: { searchParams: Matc
                             href={l.url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="relative z-[2] ms-2 inline-flex min-h-[30px] items-center rounded-full bg-card2 px-3 text-[11.5px] font-bold text-ink transition-all active:scale-95"
+                            className="relative z-[2] ms-2 inline-flex min-h-[30px] items-center gap-1 rounded-full bg-card2 px-3 text-[11.5px] font-bold text-ink transition-all active:scale-95"
                           >
+                            <SourceMark source={l.source} size={13} />
                             למודעה ↗
                           </a>
                         )}

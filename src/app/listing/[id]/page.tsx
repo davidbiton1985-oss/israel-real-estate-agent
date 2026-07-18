@@ -7,6 +7,7 @@ import { hebrewCity, hebrewizeCities } from "@/core/alert";
 import SubmitButton from "@/components/ui/SubmitButton";
 import ScoreBadge from "@/components/ui/ScoreBadge";
 import Thumb from "@/components/ui/Thumb";
+import SourceMark from "@/components/ui/SourceMark";
 import Price from "@/components/ui/Price";
 import { Input, Textarea } from "@/components/ui/Field";
 import { DEAL_HE, BROKER_HE, SOURCE_HE } from "@/lib/labels";
@@ -231,9 +232,9 @@ export default async function ListingPage({ params }: { params: { id: string } }
                 target="_blank"
                 rel="noopener noreferrer"
                 title="המודעה המקורית"
-                className="inline-flex h-[52px] w-[52px] items-center justify-center rounded-full bg-card text-[17px] shadow-card active:scale-95"
+                className="inline-flex h-[52px] w-[52px] items-center justify-center rounded-full bg-card shadow-card active:scale-95"
               >
-                ↗
+                <SourceMark source={listing.source} size={22} />
               </a>
             )}
           </>
@@ -242,8 +243,9 @@ export default async function ListingPage({ params }: { params: { id: string } }
             href={listing.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex min-h-[52px] flex-1 items-center justify-center rounded-full bg-accent text-[15px] font-bold text-white active:scale-[0.97]"
+            className="inline-flex min-h-[52px] flex-1 items-center justify-center gap-2 rounded-full bg-accent text-[15px] font-bold text-white active:scale-[0.97]"
           >
+            <SourceMark source={listing.source} size={18} />
             פתח מודעה — הטלפון בפוסט המקורי
           </a>
         ) : (

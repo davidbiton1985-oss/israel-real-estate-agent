@@ -75,18 +75,23 @@ export async function POST(req: NextRequest) {
   // everything visible; we attach photos to known listings that lack one.
   if (Array.isArray(body.imageBackfill)) {
     let updated = 0;
+    let pairs = 0;
     for (const item of body.imageBackfill.slice(0, 60)) {
       const iUrl = (item.url ?? "").trim();
       const img = (item.image ?? "").trim();
       if (!iUrl || !/^https?:/.test(img)) continue;
+      pairs++;
       try {
-        // match by exact url OR by yad2 item id (urls get rewritten)
+        // Exact-url match is too brittle — Yad2 rewrites item urls and FB
+        // serves the same group as numeric id OR vanity name — so also match
+        // by the stable ids: yad2 item id / fb post id.
         const itemId = iUrl.match(/\/item\/([A-Za-z0-9]+)/)?.[1] ?? null;
+        const fbPid = iUrl.match(/\/(?:posts|permalink)\/([A-Za-z0-9]+)/)?.[1] ?? null;
+        const or: object[] = [{ url: iUrl }];
+        if (itemId) or.push({ yad2ListingId: itemId }, { url: { contains: `/item/${itemId}` } });
+        if (fbPid) or.push({ url: { contains: `/posts/${fbPid}` } }, { url: { contains: `/permalink/${fbPid}` } });
         const listing = await prisma.listing.findFirst({
-          where: {
-            imageUrl: null,
-            OR: [{ url: iUrl }, ...(itemId ? [{ yad2ListingId: itemId }, { url: { contains: `/item/${itemId}` } }] : [])],
-          },
+          where: { imageUrl: null, OR: or },
           select: { id: true },
         });
         if (!listing) continue;
@@ -95,7 +100,7 @@ export async function POST(req: NextRequest) {
         updated++;
       } catch {}
     }
-    if (updated > 0) console.log(`[capture/backfill] attached ${updated} photos to existing listings`);
+    if (pairs > 0) console.log(`[capture/backfill] pairs=${pairs} attached=${updated}`);
     return NextResponse.json({ ok: true, backfill: updated }, { headers: CORS_HEADERS });
   }
 

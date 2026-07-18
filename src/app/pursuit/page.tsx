@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { hebrewCity } from "@/core/alert";
 import ScoreBadge from "@/components/ui/ScoreBadge";
 import Thumb from "@/components/ui/Thumb";
+import SourceMark from "@/components/ui/SourceMark";
 import PhotoPlaceholder from "@/components/ui/PhotoPlaceholder";
 import { USER_STATUS_HE } from "@/lib/labels";
 import { price } from "@/lib/format";
@@ -72,8 +73,9 @@ export default async function PursuitPage() {
                         href={l.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="relative z-[2] ms-2 inline-flex min-h-[30px] items-center rounded-full bg-card2 px-3 text-[11.5px] font-bold text-ink transition-all active:scale-95"
+                        className="relative z-[2] ms-2 inline-flex min-h-[30px] items-center gap-1 rounded-full bg-card2 px-3 text-[11.5px] font-bold text-ink transition-all active:scale-95"
                       >
+                        <SourceMark source={l.source} size={13} />
                         למודעה ↗
                       </a>
                     )}
