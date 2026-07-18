@@ -1,23 +1,28 @@
-// Score as a monday status block: solid color, white bold number — the same
-// visual grammar as a board status. ≥80 green (strong) · 60–79 orange
-// (possible) · below gray. Color never stands alone; the number always shows.
-function bandCls(score: number): string {
-  if (score >= 80) return "bg-good";
-  if (score >= 60) return "bg-warn";
-  return "bg-[#c4c4c4]";
+// V3: the score is TYPOGRAPHY, not a chip — a Secular One numeral in the
+// band color with a quiet word beside it. ≥80 landed green · 60–79 amber ·
+// below stone. The number always shows; color never stands alone.
+function band(score: number): { cls: string; word: string } {
+  if (score >= 80) return { cls: "text-accent", word: "התאמה גבוהה" };
+  if (score >= 60) return { cls: "text-warn", word: "שווה מבט" };
+  return { cls: "text-faint", word: "התאמה נמוכה" };
 }
 
-export default function ScoreBadge({ score, size }: { score: number; size?: number }) {
+export default function ScoreBadge({
+  score,
+  size,
+  showWord = true,
+}: {
+  score: number;
+  size?: number;
+  showWord?: boolean;
+}) {
   const clamped = Math.max(0, Math.min(100, Math.round(score)));
+  const b = band(clamped);
   const large = (size ?? 0) >= 44;
   return (
-    <span
-      title={`ציון ${clamped}/100`}
-      className={`tnum inline-grid shrink-0 place-items-center rounded-badge font-bold text-white ${bandCls(clamped)} ${
-        large ? "h-[34px] min-w-[56px] px-3 text-[16px]" : "h-[26px] min-w-[44px] px-2 text-[13px]"
-      }`}
-    >
-      {clamped}
+    <span className="inline-flex items-baseline gap-1.5" title={`ציון ${clamped}/100`}>
+      <span className={`display tnum ${b.cls} ${large ? "text-[26px]" : "text-[18px]"} leading-none`}>{clamped}</span>
+      {showWord && <span className="text-[12px] font-semibold text-muted">{b.word}</span>}
     </span>
   );
 }

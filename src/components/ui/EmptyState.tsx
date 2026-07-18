@@ -12,11 +12,11 @@ export default function EmptyState({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center gap-2 rounded-xl2 border border-dashed border-line bg-card2/40 px-6 py-12 text-center">
+    <div className="flex flex-col items-center gap-2 rounded-xl2 bg-card px-6 py-12 text-center shadow-card">
       <div className="rounded-full bg-card p-3 text-faint shadow-card">
         <Icon name={icon} size={24} />
       </div>
-      <div className="font-display text-lg font-semibold">{title}</div>
+      <div className="text-[16px] font-bold">{title}</div>
       {children && <div className="max-w-md text-sm text-muted">{children}</div>}
       {action && <div className="mt-2">{action}</div>}
     </div>

@@ -1,25 +1,25 @@
 import type { Metadata, Viewport } from "next";
 import Link from "next/link";
-import { Heebo, Figtree } from "next/font/google";
+import { Assistant, Secular_One } from "next/font/google";
 import "./globals.css";
 import NavLinks from "@/components/ui/NavLinks";
-import TabBar from "@/components/ui/TabBar";
+import Dock from "@/components/ui/Dock";
 import AutoRefresh from "@/components/ui/AutoRefresh";
 import SwNavigate from "@/components/ui/SwNavigate";
 import LandingMark from "@/components/ui/LandingMark";
 
-// monday-style pairing: Heebo carries the Hebrew UI, Figtree carries the
-// Latin wordmark and numerals.
-const heebo = Heebo({
+// V3 "הגלריה" pairing: Assistant carries the Hebrew UI; Secular One is the
+// display voice — prices, scores, titles — used sparingly and never small.
+const assistant = Assistant({
   subsets: ["hebrew", "latin"],
-  weight: ["400", "500", "700"],
+  weight: ["400", "600", "700"],
   variable: "--font-body",
   display: "swap",
 });
-const figtree = Figtree({
-  subsets: ["latin"],
-  weight: ["400", "600", "700"],
-  variable: "--font-latin",
+const secular = Secular_One({
+  subsets: ["hebrew", "latin"],
+  weight: "400",
+  variable: "--font-display",
   display: "swap",
 });
 
@@ -38,34 +38,34 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  viewportFit: "cover", // draw under the iPhone home indicator; TabBar pads via safe-area
-  themeColor: "#f6f7fb",
+  viewportFit: "cover",
+  themeColor: "#f6f5f2",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="he" dir="rtl" className={`${heebo.variable} ${figtree.variable}`}>
+    <html lang="he" dir="rtl" className={`${assistant.variable} ${secular.variable}`}>
       <body className="min-h-screen">
         <AutoRefresh />
         <SwNavigate />
-        {/* Desktop-only slim header; on the phone the dashboard hero carries
-            the brand and the TabBar carries navigation. */}
-        <header className="sticky top-0 z-20 border-b border-line bg-card/95 backdrop-blur max-sm:hidden">
-          <div className="mx-auto flex min-h-[52px] max-w-6xl items-center gap-5 px-6 py-2">
-            <Link href="/" className="flex items-center gap-2">
-              <LandingMark size={26} />
-              <span className="figtree text-[19px] font-bold tracking-tight" dir="ltr">
+        {/* Desktop-only slim header; on the phone the gallery carries the
+            brand and the floating dock carries navigation. */}
+        <header className="sticky top-0 z-20 bg-bg/90 backdrop-blur max-sm:hidden">
+          <div className="mx-auto flex min-h-[54px] max-w-6xl items-center gap-5 px-6 py-2">
+            <Link href="/" className="flex items-center gap-2.5">
+              <LandingMark size={24} />
+              <span className="display text-[19px]" dir="ltr">
                 Boton
               </span>
             </Link>
             <NavLinks />
           </div>
         </header>
-        <main className="mx-auto max-w-6xl px-4 py-5 pb-24 sm:px-6 sm:py-8 sm:pb-8">{children}</main>
-        <footer className="mx-auto max-w-6xl px-6 pb-24 pt-4 text-center text-xs text-faint sm:pb-8">
-          Boton · בוט אמריקאי מבית ביטון · סורק כל 5 דקות · התראות בטלגרם ולמסך הנעילה
+        <main className="mx-auto max-w-6xl px-[18px] pb-32 pt-2 sm:px-6 sm:py-8">{children}</main>
+        <footer className="mx-auto max-w-6xl px-6 pb-32 pt-4 text-center text-xs text-faint sm:pb-8">
+          Boton · בוט אמריקאי מבית ביטון · סורק כל 5 דקות
         </footer>
-        <TabBar />
+        <Dock />
       </body>
     </html>
   );

@@ -4,18 +4,18 @@ export function Card({
   children,
 }: {
   className?: string;
-  /** Passthrough for CSS custom properties. */
   style?: React.CSSProperties;
   children: React.ReactNode;
 }) {
+  // V3: cards float on ambient shadow — no borders, generous radius.
   return (
-    <div className={`rounded-xl2 border border-line bg-card shadow-card ${className}`} style={style}>
+    <div className={`rounded-xl2 bg-card shadow-card ${className}`} style={style}>
       {children}
     </div>
   );
 }
 
-/** Section eyebrow with optional trailing action — quiet label over content. */
+/** Quiet gallery wayfinding label with optional trailing action. */
 export function SectionTitle({
   children,
   action,
@@ -24,8 +24,8 @@ export function SectionTitle({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="mb-2.5 flex items-baseline justify-between gap-4">
-      <h2 className="text-xs font-medium tracking-[0.08em] text-faint">{children}</h2>
+    <div className="mb-3 flex items-baseline justify-between gap-4 px-1">
+      <h2 className="whisper">{children}</h2>
       {action}
     </div>
   );

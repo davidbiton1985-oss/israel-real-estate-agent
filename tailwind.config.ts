@@ -1,7 +1,6 @@
 import type { Config } from "tailwindcss";
 
-// Semantic classes map to the "Boton on monday" tokens in globals.css.
-// Component class names stay stable; only token values changed.
+// Semantic classes map to the V3 "הגלריה" tokens in globals.css.
 const config: Config = {
   content: [
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
@@ -18,7 +17,6 @@ const config: Config = {
         muted: "var(--muted)",
         faint: "var(--faint)",
         line: "var(--line)",
-        linestrong: "var(--line-strong)",
         accent: {
           DEFAULT: "var(--accent)",
           strong: "var(--accent-strong)",
@@ -28,21 +26,19 @@ const config: Config = {
         good: { DEFAULT: "var(--good)", soft: "var(--good-soft)" },
         warn: { DEFAULT: "var(--warn)", soft: "var(--warn-soft)" },
         crit: { DEFAULT: "var(--crit)", soft: "var(--crit-soft)" },
-        special: { DEFAULT: "var(--special)", soft: "var(--special-soft)" },
-        myellow: "var(--yellow)",
       },
       fontFamily: {
-        body: ["var(--font-body)", "Heebo", "sans-serif"],
-        display: ["var(--font-body)", "Heebo", "sans-serif"],
-        latin: ["var(--font-latin)", "Figtree", "sans-serif"],
+        body: ["var(--font-body)", "Assistant", "sans-serif"],
+        display: ["var(--font-display)", "Secular One", "serif"],
       },
       borderRadius: {
-        badge: "4px",
-        xl2: "8px", // monday card radius
+        badge: "10px",
+        xl2: "20px", // gallery card radius
+        sheet: "26px",
       },
       boxShadow: {
-        card: "var(--shadow-sm)",
-        lift: "var(--shadow-md)",
+        card: "var(--shadow-ambient)",
+        lift: "var(--shadow-dock)",
       },
     },
   },

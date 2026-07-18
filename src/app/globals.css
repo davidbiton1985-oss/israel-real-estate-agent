@@ -3,54 +3,44 @@
 @tailwind utilities;
 
 /* ---------------------------------------------------------------------------
-   Design tokens — "Boton" on monday.com's design language (Vibe values),
-   approved 2026-07-17. LIGHT-ONLY by design (like monday): airy #f6f7fb
-   ground, white surfaces, blue #0073ea primary, the monday status colors as
-   solid blocks. Components style through tokens only, never raw colors.
+   Design tokens — Boton V3 "הגלריה" (approved 2026-07-18, docs/DESIGN_V3_PLAN.md).
+   Porcelain & ink: photography carries the interface; type speaks only where
+   a decision lives; ONE deep green (the logo's settled dot) marks the primary
+   action and a strong match. Depth via soft ambient shadow and space — never
+   bordered boxes. Components style through tokens only.
 --------------------------------------------------------------------------- */
 :root {
   color-scheme: light;
 
-  /* surfaces */
-  --bg: #f6f7fb;
-  --card: #ffffff;
-  --card-2: #f6f7fb;      /* inset fields / hover surface */
+  --bg: #f6f5f2;          /* porcelain ground */
+  --card: #ffffff;        /* surface */
+  --card-2: #efeeea;      /* inset */
+  --ink: #16181b;
+  --muted: #75787e;       /* stone */
+  --faint: #a5a8ae;
+  --line: #eae8e4;        /* the few unavoidable hairlines */
 
-  /* text */
-  --ink: #323338;
-  --muted: #676879;
-  --faint: #9699a6;
-
-  /* lines */
-  --line: #e6e9ef;
-  --line-strong: #d0d4e4;
-
-  /* primary (monday blue) */
-  --accent: #0073ea;
-  --accent-strong: #0060b9;
-  --accent-soft: #e5f0ff;
+  --accent: #0b7a55;      /* landed green — THE color */
+  --accent-strong: #075c40;
+  --accent-soft: #e7f2ed;
   --accent-ink: #ffffff;
 
-  /* monday status colors — used as SOLID blocks with white text */
-  --good: #00c875;
-  --good-soft: #e6f9f1;
-  --warn: #fdab3d;
-  --warn-soft: #fff3e2;
-  --crit: #e2445c;
-  --crit-soft: #fcebee;
-  --special: #a25ddc;      /* purple — pursuits / in-progress */
-  --special-soft: #f3ebfb;
-  --yellow: #ffcb00;
+  --good: #0b7a55;
+  --good-soft: #e7f2ed;
+  --warn: #a16207;
+  --warn-soft: #f6efde;
+  --crit: #be4040;
+  --crit-soft: #f7e9e9;
 
-  /* shadows */
-  --shadow-sm: 0 4px 8px rgba(0, 0, 0, 0.06);
-  --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.1);
+  --glass: rgba(255, 255, 255, 0.84);
+  --shadow-ambient: 0 8px 30px rgba(22, 24, 27, 0.08);
+  --shadow-dock: 0 10px 34px rgba(22, 24, 27, 0.16);
 }
 
 body {
   background: var(--bg);
   color: var(--ink);
-  font-family: var(--font-body), "Heebo", -apple-system, "Segoe UI", sans-serif;
+  font-family: var(--font-body), "Assistant", -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   -webkit-tap-highlight-color: transparent;
@@ -60,9 +50,11 @@ h1, h2, h3 {
   text-wrap: balance;
 }
 
-/* Latin brand/numeral face (Figtree) — Hebrew text falls back to Heebo */
-.figtree {
-  font-family: var(--font-latin), var(--font-body), sans-serif;
+/* Display voice — Secular One: prices, scores, screen titles. Never small. */
+.display {
+  font-family: var(--font-display), "Secular One", serif;
+  font-weight: 400;
+  letter-spacing: 0.01em;
 }
 
 /* Numbers line up in columns everywhere data is shown */
@@ -70,27 +62,56 @@ h1, h2, h3 {
   font-variant-numeric: tabular-nums;
 }
 
+/* whisper section label — the gallery's quiet wayfinding */
+.whisper {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+}
+
+/* THE PLACARD — glass price label on every photo (the brand gesture) */
+.placard {
+  position: absolute;
+  bottom: 12px;
+  inset-inline-start: 12px;
+  background: var(--glass);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-radius: 12px;
+  padding: 7px 14px;
+  box-shadow: 0 3px 14px rgba(22, 24, 27, 0.18);
+}
+
+/* gallery pieces rise once on load */
+.rise {
+  opacity: 0;
+  transform: translateY(10px);
+  animation: rise 0.5s ease-out forwards;
+}
+.rise:nth-child(2) { animation-delay: 0.07s; }
+.rise:nth-child(3) { animation-delay: 0.14s; }
+.rise:nth-child(4) { animation-delay: 0.21s; }
+.rise:nth-child(5) { animation-delay: 0.28s; }
+@keyframes rise { to { opacity: 1; transform: none; } }
+
 /* Visible keyboard focus */
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-  border-radius: 4px;
+  border-radius: 8px;
 }
 
-/* The dashboard hero band — monday-style soft gradient */
-.hero-grad {
-  background: linear-gradient(160deg, #e9f1fe 0%, #f4eefe 55%, #fdeef3 100%);
-}
-
-/* Live status LED pulse — disabled for reduced-motion users */
+/* Live status LED pulse */
 @keyframes led-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(0, 200, 117, 0.4); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(11, 122, 85, 0.35); }
   60% { box-shadow: 0 0 0 5px transparent; }
 }
-.led-live { animation: led-pulse 2.4s ease-out infinite; }
+.led-live { animation: led-pulse 2.6s ease-out infinite; }
 
 @media (prefers-reduced-motion: reduce) {
   .led-live { animation: none; }
+  .rise { animation: none; opacity: 1; transform: none; }
   * { transition-duration: 0.01ms !important; }
 }
 

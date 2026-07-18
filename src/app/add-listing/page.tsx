@@ -11,7 +11,7 @@ export default function AddListingPage({ searchParams }: { searchParams: { urlSa
   return (
     <div className="mx-auto max-w-3xl space-y-5">
       <div>
-        <h1 className="font-display text-3xl font-bold">הוספה ידנית</h1>
+        <h1 className="display pt-3 text-[24px]">הוספה ידנית</h1>
         <p className="mt-1 text-sm text-muted">
           המסלול הרגיל הוא אוטומטי — הסורקים קולטים מודעות לבד. השתמש בדף הזה למודעה שהגיעה אליך
           בערוץ אחר (הודעת וואטסאפ ממתווך, פוסט שלא נקלט) או לבדיקת הפענוח על טקסט מסוים.

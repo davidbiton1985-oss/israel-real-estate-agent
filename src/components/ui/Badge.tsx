@@ -4,13 +4,13 @@ import Icon, { type IconName } from "./Icon";
 // where it matters) — never color alone (dataviz rule).
 export type BadgeTone = "good" | "warn" | "crit" | "accent" | "neutral";
 
-// monday soft labels: tinted fill, saturated text, no heavy borders.
+// V3 quiet labels: soft tint pills, saturated text, no borders.
 const TONES: Record<BadgeTone, string> = {
-  good: "bg-good-soft text-[#00854d]",
-  warn: "bg-warn-soft text-[#b06000]",
+  good: "bg-good-soft text-good",
+  warn: "bg-warn-soft text-warn",
   crit: "bg-crit-soft text-crit",
   accent: "bg-accent-soft text-accent",
-  neutral: "bg-card2 text-muted border border-line",
+  neutral: "bg-card2 text-muted",
 };
 
 export default function Badge({

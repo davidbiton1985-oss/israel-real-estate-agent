@@ -2,10 +2,10 @@
 // These are presentation-only wrappers: the `name` attributes flowing to the
 // server actions are supplied by callers and must never change here.
 
-// 16px on mobile prevents iOS zoom-on-focus; monday field: white, gray border,
-// blue focus.
+// 16px on mobile prevents iOS zoom-on-focus; V3 field: white pill-ish surface
+// on ambient shadow, landed-green focus ring.
 export const inputCls =
-  "w-full rounded-badge border border-linestrong bg-card px-3 py-2 text-base sm:text-sm text-ink placeholder:text-faint transition-all hover:border-faint focus:border-accent focus:outline-none focus:shadow-[0_0_0_3px_rgba(0,115,234,0.12)]";
+  "w-full rounded-[14px] bg-card px-4 py-2.5 text-base sm:text-sm text-ink shadow-card placeholder:text-faint transition-all focus:outline-none focus:shadow-[0_0_0_3px_rgba(11,122,85,0.18)]";
 
 export function Field({
   label,
@@ -62,9 +62,9 @@ export function FormSection({
   children: React.ReactNode;
 }) {
   return (
-    <fieldset className="rounded-xl2 border border-line bg-card shadow-card">
-      <div className="border-b border-line px-5 py-3">
-        <span className="font-display text-base font-semibold">{legend}</span>
+    <fieldset className="rounded-xl2 bg-card shadow-card">
+      <div className="border-b border-line px-5 py-3.5">
+        <span className="text-[15px] font-bold">{legend}</span>
       </div>
       <div className="p-5">{children}</div>
     </fieldset>

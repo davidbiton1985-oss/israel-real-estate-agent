@@ -10,14 +10,14 @@ import { useFormStatus } from "react-dom";
 import Icon, { type IconName } from "./Icon";
 
 const VARIANTS = {
-  primary: "bg-accent text-accent-ink border border-transparent hover:bg-accent-strong",
-  secondary: "bg-card text-ink border border-linestrong hover:bg-card2",
-  danger: "bg-transparent text-crit border border-transparent hover:bg-crit-soft",
+  primary: "bg-accent text-accent-ink hover:bg-accent-strong",
+  secondary: "bg-card text-ink shadow-card hover:bg-card2",
+  danger: "bg-transparent text-crit hover:bg-crit-soft",
 } as const;
 
 const SIZES = {
-  sm: "px-3 py-1.5 text-xs gap-1.5",
-  md: "px-4 py-2 text-sm gap-2",
+  sm: "min-h-[40px] px-4 text-[13.5px] gap-1.5",
+  md: "min-h-[48px] px-6 text-[15px] gap-2",
 } as const;
 
 function Spinner({ size }: { size: number }) {
@@ -71,8 +71,8 @@ export default function SubmitButton({
       disabled={pending}
       title={armed ? confirmText : title}
       onClick={onClick}
-      className={`inline-flex items-center justify-center whitespace-nowrap rounded-badge font-semibold transition-all select-none active:scale-[0.98] disabled:opacity-60 ${
-        armed ? "border border-transparent bg-crit text-white" : VARIANTS[variant]
+      className={`inline-flex items-center justify-center whitespace-nowrap rounded-full font-bold transition-all select-none active:scale-[0.97] disabled:opacity-60 ${
+        armed ? "bg-crit text-white" : VARIANTS[variant]
       } ${SIZES[size]} ${className}`}
     >
       {pending ? <Spinner size={iconSize} /> : icon && !armed ? <Icon name={icon} size={iconSize} /> : null}
