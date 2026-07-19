@@ -261,7 +261,7 @@
         ? "⚠ Facebook rate-limit — standing down " + Math.round(wait / 60000) + "m (do NOT retry manually)"
         : "⚠ Facebook checkpoint/login — solve it in THIS tab · retrying in " + Math.round(wait / 60000) + "m"
     );
-    setTimeout(function () { location.href = NOTIF_URL; }, wait);
+    setTimeout(function () { recordNav(); location.href = NOTIF_URL; }, wait);
   }
 
   // Canonical post URL: strip query/hash so ?notif_id=… variants dedupe.
@@ -297,20 +297,51 @@
   var NOTIF_URL = "https://www.facebook.com/notifications";
   var lastFound = ""; // shown in the idle badge so "+0" scans are visible
 
+  // ---- GLOBAL RATE GOVERNOR (v12.23) ----------------------------------------
+  // The single hard guarantee against another "going too fast" block: no matter
+  // how many notifications, sweeps or deep-sweeps pile up, the reader opens at
+  // most NAV_CAP_HOUR Facebook pages per rolling hour. A human casually browsing
+  // FB loads far more than this, so the cap sits comfortably under FB's
+  // tolerance while still draining the queue. Every deliberate reader navigation
+  // is stamped in a rolling localStorage log; goNext refuses to navigate while
+  // the last-hour count is at the cap and simply waits in place (no page load)
+  // until the window decays.
+  var NAV_LOG_KEY = "reAgentNavLog_v12";
+  var NAV_CAP_HOUR = 22;
+  function navLog() {
+    var now = Date.now();
+    try { return JSON.parse(localStorage.getItem(NAV_LOG_KEY) || "[]").filter(function (t) { return now - t < 3600000; }); }
+    catch (e) { return []; }
+  }
+  function recordNav() {
+    try { var l = navLog(); l.push(Date.now()); localStorage.setItem(NAV_LOG_KEY, JSON.stringify(l.slice(-300))); } catch (e) {}
+  }
+  function navsLastHour() { return navLog().length; }
+
   // `msg` (e.g. "✓ sent 480 chars") stays on the badge during the pacing pause
   // so progress is actually visible — the old code overwrote it instantly.
   function goNext(msg) {
+    // Governor: at the cap, hold in place (NO navigation) and re-check after a
+    // cooldown — the rolling window decays, then we resume. This throttles every
+    // path (notifications, sweeps, deep sweeps) through one ceiling.
+    if (navsLastHour() >= NAV_CAP_HOUR) {
+      var cool = 12 * 60000 + Math.floor(Math.random() * 6 * 60000);
+      setBadge((msg ? msg + " · " : "") + "⏸ rate cap " + navsLastHour() + "/hr — cooling " + Math.round(cool / 60000) + "m (protects the account)");
+      setTimeout(function () { goNext(msg); }, cool);
+      return;
+    }
     var q = loadQueue();
     if (q.length > 0) {
       setBadge((msg ? msg + " · " : "") + q.length + " left in queue");
       setTimeout(function () {
         setBadge("opening post (" + q.length + " left)…");
+        recordNav();
         location.href = q[0].url;
       }, 6000 + Math.random() * 4000); // gentle pacing (v12.23: slower — rate limit)
     } else {
       var d = nextDelayMs();
-      setBadge((msg ? msg + " · " : "") + "idle" + (lastFound ? " · last scan: " + lastFound : "") + " · next check in ~" + Math.round(d / 60000) + "m");
-      setTimeout(function () { location.href = NOTIF_URL; }, d);
+      setBadge((msg ? msg + " · " : "") + "idle" + (lastFound ? " · last scan: " + lastFound : "") + " · " + navsLastHour() + "/" + NAV_CAP_HOUR + " loads/hr · next check ~" + Math.round(d / 60000) + "m");
+      setTimeout(function () { recordNav(); location.href = NOTIF_URL; }, d);
     }
   }
 
@@ -628,13 +659,20 @@
     try {
       var today = new Date().toISOString().slice(0, 10);
       var rec = JSON.parse(localStorage.getItem(DEEP_KEY) || "{}");
-      if (rec.date !== today) rec = { date: today, gids: {} };
-      // v12.23: at most one deep sweep per 45min — 9 back-to-back deep sweeps
-      // in one morning is what tripped Facebook's "going too fast" block.
+      if (rec.date !== today) rec = { date: today, gids: {}, count: 0 };
+      // v12.23: deep sweeps are the heaviest action (a long scroll each), and
+      // doing all groups in one morning is exactly what tripped FB's block. Two
+      // gates now bound them: at most DEEP_BUDGET per DAY (so all groups are
+      // covered over a few days, never in one burst), and ≥45min apart.
+      var DEEP_BUDGET = 3;
       var lastDeep = Number(localStorage.getItem("reAgentDeepLast") || 0);
-      if (gid && !rec.gids[gid] && new Date().getHours() >= 10 && Date.now() - lastDeep > 45 * 60000) {
+      if (
+        gid && !rec.gids[gid] && new Date().getHours() >= 10 &&
+        (rec.count || 0) < DEEP_BUDGET && Date.now() - lastDeep > 45 * 60000
+      ) {
         deep = true;
         rec.gids[gid] = 1;
+        rec.count = (rec.count || 0) + 1;
         localStorage.setItem(DEEP_KEY, JSON.stringify(rec)); // mark up-front: a crashed deep sweep must not retry-loop all day
         try { localStorage.setItem("reAgentDeepLast", String(Date.now())); } catch (e2) {}
       }
