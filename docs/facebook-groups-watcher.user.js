@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RE-Agent Facebook Notification Reader
 // @namespace    israel-real-estate-agent
-// @version      12.22
+// @version      12.23
 // @description  Notification-driven reader: one designated tab checks facebook.com/notifications every 7–12 min (randomized, slower overnight); every "posted in group" notification links to the post's own page, which the tab then opens and reads IN FULL — parsed, scored, WhatsApp'd by your local RE-Agent (localhost:3000). It also sweeps one target group's chronological feed per cycle (round-robin, scroll-until-overlap) so posts Facebook never notified about are still caught, and survives browser restarts via a localStorage reader lease. Runs only in your own logged-in browser session — no scraping server, no login/CAPTCHA bypass; if Facebook shows a checkpoint the reader BACKS OFF instead of hammering it. Your other Facebook tabs are untouched (the reader runs only in the tab you start with #re-agent).
 // @match        https://www.facebook.com/*
 // @noframes
@@ -229,10 +229,22 @@
   // (a backoff = missed apartments), so we only trust unambiguous checkpoint
   // signals — the /checkpoint|login|… URL Facebook redirects to, or an actual
   // captcha widget. NOT a bare password field (present in unrelated FB DOM).
+  // v12.23: FB showed "You're Temporarily Blocked … going too fast" after a
+  // morning of deep sweeps. That dialog must be treated as a hard stand-down —
+  // retrying into a rate-limit extends the penalty.
+  function isRateLimited() {
+    try {
+      var t = ((document.body && document.body.innerText) || "").slice(0, 6000);
+      return /Temporarily Blocked|misusing this feature|going too fast|נחסמת (?:באופן )?זמני|נחסם זמנית/i.test(t);
+    } catch (e) {
+      return false;
+    }
+  }
   function looksBlocked() {
     var u = location.href;
     if (/\/(checkpoint|login|two_factor|recover|confirmemail)(\/|\?|$)/i.test(u)) return true;
     if (document.querySelector('input[name="captcha_response"], iframe[src*="captcha"], iframe[title*="captcha" i]')) return true;
+    if (isRateLimited()) return true;
     return false;
   }
   function getBlockStreak() { return Number(localStorage.getItem(BLOCK_KEY) || "0"); }
@@ -240,9 +252,15 @@
   function handleBlocked() {
     var n = getBlockStreak() + 1;
     setBlockStreak(n);
-    var wait = n >= 3 ? 30 * 60000 : 20 * 60000;
+    // Rate-limit ("going too fast") needs HOURS of quiet, not minutes.
+    var rate = isRateLimited();
+    var wait = rate ? 150 * 60000 + Math.floor(Math.random() * 30 * 60000) : n >= 3 ? 30 * 60000 : 20 * 60000;
     // No heartbeat: a blocked reader is NOT healthy — let its freshness go stale.
-    setBadge("⚠ Facebook checkpoint/login — solve it in THIS tab · retrying in " + Math.round(wait / 60000) + "m");
+    setBadge(
+      rate
+        ? "⚠ Facebook rate-limit — standing down " + Math.round(wait / 60000) + "m (do NOT retry manually)"
+        : "⚠ Facebook checkpoint/login — solve it in THIS tab · retrying in " + Math.round(wait / 60000) + "m"
+    );
     setTimeout(function () { location.href = NOTIF_URL; }, wait);
   }
 
@@ -273,7 +291,7 @@
   function nextDelayMs() {
     var h = new Date().getHours();
     if (h < 7) return 30 * 60000 + Math.floor(Math.random() * 5 * 60000); // 30–35m
-    return 7 * 60000 + Math.floor(Math.random() * 5 * 60000); // 7–12m
+    return 15 * 60000 + Math.floor(Math.random() * 7 * 60000); // 15–22m (v12.23: 7–12m tripped FB's rate limit)
   }
 
   var NOTIF_URL = "https://www.facebook.com/notifications";
@@ -288,7 +306,7 @@
       setTimeout(function () {
         setBadge("opening post (" + q.length + " left)…");
         location.href = q[0].url;
-      }, 2500 + Math.random() * 2000); // gentle pacing
+      }, 6000 + Math.random() * 4000); // gentle pacing (v12.23: slower — rate limit)
     } else {
       var d = nextDelayMs();
       setBadge((msg ? msg + " · " : "") + "idle" + (lastFound ? " · last scan: " + lastFound : "") + " · next check in ~" + Math.round(d / 60000) + "m");
@@ -611,13 +629,17 @@
       var today = new Date().toISOString().slice(0, 10);
       var rec = JSON.parse(localStorage.getItem(DEEP_KEY) || "{}");
       if (rec.date !== today) rec = { date: today, gids: {} };
-      if (gid && !rec.gids[gid] && new Date().getHours() >= 10) {
+      // v12.23: at most one deep sweep per 45min — 9 back-to-back deep sweeps
+      // in one morning is what tripped Facebook's "going too fast" block.
+      var lastDeep = Number(localStorage.getItem("reAgentDeepLast") || 0);
+      if (gid && !rec.gids[gid] && new Date().getHours() >= 10 && Date.now() - lastDeep > 45 * 60000) {
         deep = true;
         rec.gids[gid] = 1;
         localStorage.setItem(DEEP_KEY, JSON.stringify(rec)); // mark up-front: a crashed deep sweep must not retry-loop all day
+        try { localStorage.setItem("reAgentDeepLast", String(Date.now())); } catch (e2) {}
       }
     } catch (e) {}
-    if (deep) { MAX_STEPS = 14; setBadge("DEEP sweep: " + (item.group || "")); }
+    if (deep) { MAX_STEPS = 8; setBadge("DEEP sweep: " + (item.group || "")); }
 
     // Overlap = K CONSECUTIVE already-seen posts in feed order. A single seen post
     // must NOT stop the sweep: a PINNED already-seen post sits at the top of the
@@ -703,7 +725,7 @@
       }
       setBadge((deep ? "DEEP sweep: " : "group sweep: ") + (item.group || "") + " · scroll " + (n + 1));
       try { window.scrollBy(0, 1600); } catch {}
-      setTimeout(function () { step(n + 1); }, 1400); // let the next batch render
+      setTimeout(function () { step(n + 1); }, 2600); // let the next batch render (v12.23: slower scroll — rate limit)
     }
 
     setTimeout(function () { step(0); }, 8000); // initial group-page render
