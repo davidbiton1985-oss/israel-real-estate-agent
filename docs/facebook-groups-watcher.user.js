@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RE-Agent Facebook Notification Reader
 // @namespace    israel-real-estate-agent
-// @version      12.21
+// @version      12.22
 // @description  Notification-driven reader: one designated tab checks facebook.com/notifications every 7–12 min (randomized, slower overnight); every "posted in group" notification links to the post's own page, which the tab then opens and reads IN FULL — parsed, scored, WhatsApp'd by your local RE-Agent (localhost:3000). It also sweeps one target group's chronological feed per cycle (round-robin, scroll-until-overlap) so posts Facebook never notified about are still caught, and survives browser restarts via a localStorage reader lease. Runs only in your own logged-in browser session — no scraping server, no login/CAPTCHA bypass; if Facebook shows a checkpoint the reader BACKS OFF instead of hammering it. Your other Facebook tabs are untouched (the reader runs only in the tab you start with #re-agent).
 // @match        https://www.facebook.com/*
 // @noframes
@@ -35,7 +35,10 @@
 (function () {
   "use strict";
 
-  var VERSION = "12.16";
+  // Read the real installed version from Tampermonkey — a hardcoded constant
+  // here drifted (badge said v12.16 while @version was 12.21) and made it
+  // impossible to tell which version is actually running.
+  var VERSION = (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "?";
   var APP = "http://localhost:3000/api/capture";
   var SEEN_KEY = "reAgentSeenFbPosts_v12"; // localStorage: post URLs already ingested
   var SEEN_MAX = 1200;
