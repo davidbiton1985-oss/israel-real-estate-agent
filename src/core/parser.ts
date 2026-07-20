@@ -76,6 +76,17 @@ export const CITIES: { canonical: string; aliases: string[] }[] = [
   { canonical: "Glil Yam", aliases: ["גליל ים", "גליל-ים", "glil yam", "galil yam"] },
 ];
 
+// Defining landmarks that sit unambiguously inside one city. A post that cites
+// one AS ITS location is in that city even if the poster typed a different city
+// name — posters mislabel (seen live: a Petah Tikva flat "across from Schneider
+// and Beilinson" posted as "Ganei Tikva"). These OVERRIDE a conflicting alias.
+// Keep the list strict: only landmarks with a single, certain city (the Rabin
+// Medical Center hospitals are squarely in Petah Tikva). No ambiguous ones
+// (e.g. BSR straddles the Bnei Brak border; "קפלן" is a street in many towns).
+export const CITY_LANDMARKS: { canonical: string; landmarks: string[] }[] = [
+  { canonical: "Petah Tikva", landmarks: ["בלינסון", "בילינסון", "שניידר", "מרכז רפואי רבין"] },
+];
+
 // ---------------------------------------------------------------------------
 // Phrase matching with Hebrew "word boundaries": a Hebrew letter must not be
 // glued directly before/after the phrase. Prevents e.g. פרטי matching לפרטים,
@@ -300,6 +311,14 @@ function extractDealType(text: string): "RENT" | "SALE" | null {
 
 function extractCity(text: string): string | null {
   const norm = normalizeQuotes(text);
+  // A defining landmark wins over a written city name — it fixes mislabeled
+  // posts (a wrong city label must not sneak a listing past that city's
+  // neighborhood restriction).
+  for (const c of CITY_LANDMARKS) {
+    for (const lm of c.landmarks) {
+      if (prefixedPhraseRegex(normalizeQuotes(lm)).test(norm)) return c.canonical;
+    }
+  }
   for (const c of CITIES) {
     for (const alias of c.aliases) {
       if (prefixedPhraseRegex(normalizeQuotes(alias)).test(norm)) return c.canonical;

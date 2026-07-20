@@ -208,6 +208,14 @@ describe("city / neighborhood / street / deal type", () => {
     expect(parseListing("להשכרה דירת 3 חדרים").dealType).toBe("RENT");
     expect(parseListing("למכירה! דירת 4 חדרים").dealType).toBe("SALE");
   });
+  it("a defining landmark overrides a mislabeled city (Beilinson/Schneider ⇒ Petah Tikva)", () => {
+    const real =
+      "להשכרה Ganei Tikva להשכרה !!! דירת 4.5 חדרים ברחוב קפלן, מעבר כביש מבתי החולים שניידר ובלינסון, במרחק הליכה ממתחם BSR";
+    expect(parseListing(real).city).toBe("Petah Tikva");
+  });
+  it("landmark override does not fire without the landmark", () => {
+    expect(parseListing("להשכרה בגני תקווה דירת 4 חדרים").city).toBe("Ganei Tikva");
+  });
 });
 
 describe("Yad2 ID extraction", () => {
