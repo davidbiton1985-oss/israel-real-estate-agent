@@ -183,7 +183,7 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
           <div className="display text-[34px] leading-none" dir="ltr">
             Boton
           </div>
-          <div className="mt-1.5 text-[12.5px] font-semibold text-muted" dir="rtl" style={{ letterSpacing: ".04em" }}>
+          <div className="mt-1.5 text-[14.5px] font-semibold text-muted" dir="rtl" style={{ letterSpacing: ".03em" }}>
             בוט אמריקאי מבית ביטון
           </div>
         </div>
