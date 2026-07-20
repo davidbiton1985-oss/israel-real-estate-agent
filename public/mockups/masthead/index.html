@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Boton · כותרת חדשה</title>
+<link rel="stylesheet" href="/mockups/v3/v3.css" />
+<style>
+  :root{
+    --porcelain:#f6f5f2; --white:#fff; --ink:#16181b; --stone:#75787e;
+    --faint:#a5a8ae; --green:#0b7a55; --green-deep:#0a6a4a;
+    --shadow:0 10px 30px -12px rgba(20,22,27,.18), 0 2px 8px -3px rgba(20,22,27,.10);
+  }
+  *{box-sizing:border-box; margin:0; padding:0}
+  body{
+    background:#e9e8e3; color:var(--ink);
+    font-family:'Assistant',system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased; padding:22px 14px 60px;
+  }
+  .display{font-family:'Secular One',system-ui,sans-serif; font-weight:400}
+  .lead{max-width:430px; margin:0 auto 22px; text-align:center}
+  .lead h1{font-size:19px; font-weight:700}
+  .lead p{font-size:13.5px; color:var(--stone); margin-top:6px; line-height:1.5}
+
+  .stage{max-width:430px; margin:0 auto 30px}
+  .tag{
+    display:flex; align-items:center; gap:8px; margin:0 4px 10px; font-size:12px;
+    font-weight:700; letter-spacing:.03em; color:var(--stone);
+  }
+  .tag b{
+    font-family:'Secular One'; font-size:15px; color:var(--ink);
+    background:var(--white); width:26px; height:26px; border-radius:9px;
+    display:grid; place-items:center; box-shadow:var(--shadow);
+  }
+  /* the phone frame — a slice of the app: masthead + greeting + one card */
+  .phone{
+    background:var(--porcelain); border-radius:26px; overflow:hidden;
+    box-shadow:var(--shadow); padding-bottom:16px;
+  }
+  .mast{ text-align:center; padding:30px 24px 26px }
+  .mast .wm{ font-size:38px; line-height:1; margin-top:14px; direction:ltr }
+  .mast .sub{ font-size:14px; margin-top:8px; font-weight:600 }
+  .body{ padding:18px 14px 0 }
+  .greet{ font-size:14.5px; color:var(--stone); text-align:center; line-height:1.5 }
+  .greet b{ color:var(--ink); font-weight:700 }
+  .whisper{
+    font-size:11px; font-weight:700; letter-spacing:.12em; color:var(--faint);
+    margin:20px 6px 10px;
+  }
+  .card{ background:var(--white); border-radius:20px; box-shadow:var(--shadow); overflow:hidden }
+  .photo{ aspect-ratio:16/9; background:linear-gradient(135deg,#dfe4e1,#cbd3ce) }
+  .cinfo{ padding:14px 16px }
+  .cinfo .city{ font-size:18px; font-weight:700 }
+  .cinfo .facts{ font-size:14px; color:var(--stone); margin-top:3px }
+  .cinfo .row{ display:flex; align-items:center; margin-top:12px }
+  .cinfo .score{ font-family:'Secular One'; font-size:20px; color:var(--green) }
+  .cinfo .score span{ font-family:'Assistant'; font-size:13px; color:var(--stone); font-weight:600; margin-inline-start:6px }
+  .cinfo .price{ font-family:'Secular One'; font-size:16px; margin-inline-start:auto }
+  .cinfo .price i{ font-family:'Assistant'; font-style:normal; font-size:.78em; font-weight:700 }
+
+  /* ---- Concept 1 · Midnight (ink band + green coin) ---- */
+  .m-ink{ background:var(--ink);
+    background-image:radial-gradient(120% 90% at 50% -10%, #23262c 0%, #16181b 62%); }
+  .m-ink .wm{ color:var(--porcelain) }
+  .m-ink .sub{ color:#9a9da3 }
+
+  /* ---- Concept 2 · Meadow (green band + white mark) ---- */
+  .m-green{ background:linear-gradient(160deg,var(--green) 0%, var(--green-deep) 100%) }
+  .m-green .wm{ color:#fff }
+  .m-green .sub{ color:#bfe6d6 }
+
+  /* ---- Concept 3 · Porcelain (warm greige + ink line mark) ---- */
+  .m-porc{ background:linear-gradient(180deg,#ffffff 0%, #ecece6 100%);
+    border-bottom:1px solid rgba(20,22,27,.06) }
+  .m-porc .wm{ color:var(--ink) }
+  .m-porc .sub{ color:var(--stone) }
+
+  svg{display:block; margin:0 auto}
+</style>
+</head>
+<body>
+
+  <div class="lead">
+    <h1>שלושה כיוונים לכותרת Boton</h1>
+    <p>כל כיוון עם רקע חדש ולוגו חדש שתפור לו. גלול, ואז שלח לי מספר: <b>1</b>, <b>2</b> או <b>3</b>.</p>
+  </div>
+
+  <!-- ============ CONCEPT 1 · MIDNIGHT ============ -->
+  <div class="stage">
+    <div class="tag"><b>1</b> חצות — דיו כהה, מטבע ירוק</div>
+    <div class="phone">
+      <div class="mast m-ink">
+        <!-- green coin with a white house -->
+        <svg width="64" height="64" viewBox="0 0 64 64" aria-hidden="true">
+          <circle cx="32" cy="32" r="30" fill="#0b7a55"/>
+          <circle cx="32" cy="32" r="30" fill="none" stroke="#f6f5f2" stroke-width="1.6" opacity=".55"/>
+          <path d="M19 33.5 L32 22 L45 33.5" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M23 32 v13 h18 v-13" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="32" cy="39.5" r="3.4" fill="#fff"/>
+        </svg>
+        <div class="wm display">Boton</div>
+        <div class="sub">בוט אמריקאי מבית ביטון</div>
+      </div>
+      <div class="body">
+        <div class="greet">בוקר טוב דוד — <b>דירה חדשה אחת מחכה לך היום.</b></div>
+        <div class="whisper">דירות חדשות שמתאימות לך</div>
+        <div class="card">
+          <div class="photo"></div>
+          <div class="cinfo">
+            <div class="city">קרית אונו</div>
+            <div class="facts">3 חד׳ · 94 מ״ר · השכרה</div>
+            <div class="row">
+              <span class="score">98<span>התאמה גבוהה</span></span>
+              <span class="price">7,400 <i>₪</i></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ CONCEPT 2 · MEADOW ============ -->
+  <div class="stage">
+    <div class="tag"><b>2</b> אחו — ירוק המותג, לוגו לבן</div>
+    <div class="phone">
+      <div class="mast m-green">
+        <svg width="64" height="64" viewBox="0 0 64 64" aria-hidden="true">
+          <path d="M15 33 L32 17 L49 33" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M20 31 v17 h24 v-17" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="32" cy="40" r="4.6" fill="#fff"/>
+        </svg>
+        <div class="wm display">Boton</div>
+        <div class="sub">בוט אמריקאי מבית ביטון</div>
+      </div>
+      <div class="body">
+        <div class="greet">בוקר טוב דוד — <b>דירה חדשה אחת מחכה לך היום.</b></div>
+        <div class="whisper">דירות חדשות שמתאימות לך</div>
+        <div class="card">
+          <div class="photo"></div>
+          <div class="cinfo">
+            <div class="city">קרית אונו</div>
+            <div class="facts">3 חד׳ · 94 מ״ר · השכרה</div>
+            <div class="row">
+              <span class="score">98<span>התאמה גבוהה</span></span>
+              <span class="price">7,400 <i>₪</i></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ CONCEPT 3 · PORCELAIN ============ -->
+  <div class="stage">
+    <div class="tag"><b>3</b> פורצלן — בהיר ומעודן, נקודה ירוקה</div>
+    <div class="phone">
+      <div class="mast m-porc">
+        <svg width="64" height="64" viewBox="0 0 64 64" aria-hidden="true">
+          <path d="M15 33 L32 17 L49 33" fill="none" stroke="#16181b" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M20 31 v17 h24 v-17" fill="none" stroke="#16181b" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="32" cy="40" r="4.6" fill="#0b7a55"/>
+        </svg>
+        <div class="wm display">Boton</div>
+        <div class="sub">בוט אמריקאי מבית ביטון</div>
+      </div>
+      <div class="body">
+        <div class="greet">בוקר טוב דוד — <b>דירה חדשה אחת מחכה לך היום.</b></div>
+        <div class="whisper">דירות חדשות שמתאימות לך</div>
+        <div class="card">
+          <div class="photo"></div>
+          <div class="cinfo">
+            <div class="city">קרית אונו</div>
+            <div class="facts">3 חד׳ · 94 מ״ר · השכרה</div>
+            <div class="row">
+              <span class="score">98<span>התאמה גבוהה</span></span>
+              <span class="price">7,400 <i>₪</i></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>
