@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RE-Agent Facebook Notification Reader
 // @namespace    israel-real-estate-agent
-// @version      12.23
+// @version      12.24
 // @description  Notification-driven reader: one designated tab checks facebook.com/notifications every 7–12 min (randomized, slower overnight); every "posted in group" notification links to the post's own page, which the tab then opens and reads IN FULL — parsed, scored, WhatsApp'd by your local RE-Agent (localhost:3000). It also sweeps one target group's chronological feed per cycle (round-robin, scroll-until-overlap) so posts Facebook never notified about are still caught, and survives browser restarts via a localStorage reader lease. Runs only in your own logged-in browser session — no scraping server, no login/CAPTCHA bypass; if Facebook shows a checkpoint the reader BACKS OFF instead of hammering it. Your other Facebook tabs are untouched (the reader runs only in the tab you start with #re-agent).
 // @match        https://www.facebook.com/*
 // @noframes
@@ -712,7 +712,20 @@
       } catch (e) {}
     }
 
+    // v12.24: expand truncated posts BEFORE reading. Posts revealed in the
+    // final scroll were read still collapsed — rawText ended in "See more" and
+    // the parser got only city+rooms (no price/size/floor). Click every
+    // remaining toggle, let it render, click again, THEN read.
     function collectAndSend() {
+      expandSeeMore();
+      setTimeout(function () { expandSeeMore(); setTimeout(doCollectAndSend, 750); }, 750);
+    }
+    // a post still showing a "see more" tail after expansion is truncated —
+    // strip the trailing marker so we never ingest a fake "…עוד" word, and if
+    // the body is still just a short preview, skip it (retried next sweep with
+    // the toggle already open) rather than store a listing missing its price.
+    var SEE_MORE_TAIL = /\s*(?:See more|ראה עוד|ראו עוד|הצג עוד)\s*$/;
+    function doCollectAndSend() {
       // photo backfill for ALREADY-SEEN posts — attach images to listings
       // captured before image support (the server skips already-photographed).
       harvestBackfillPairs();
@@ -726,7 +739,12 @@
       var posts = [];
       outermostArticles().forEach(function (a) {
         var t = postOwnText(a);
+        var truncated = SEE_MORE_TAIL.test(t);
+        t = t.replace(SEE_MORE_TAIL, "").trim();
         if (t.length < 40) return;
+        // Still truncated AND thin → let the next sweep read it fully instead of
+        // storing a bare listing (don't mark seen: it will be retried).
+        if (truncated && t.length < 140) return;
         var link = ownPermalink(a); // v12.17: never a nested share's permalink
         // No own permalink → cannot attribute reliably → drop (attribution must
         // never guess; a wrong link is worse than a missed capture).
