@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RE-Agent Yad2 Tab Watcher
 // @namespace    israel-real-estate-agent
-// @version      1.13
+// @version      1.14
 // @description  Watches YOUR open Yad2 search tab: every 7–10 min (randomized, slower overnight) it re-checks the results and sends new listings to your local Israel Real Estate Agent (localhost:3000), which scores them and WhatsApps you strong matches. Runs only in your own browser session — no CAPTCHA bypass, no fake fingerprints, no login automation. If Yad2 shows a verification page the watcher BACKS OFF and stops hammering it; solve it yourself like normal and it resumes.
 // @match        https://www.yad2.co.il/realestate/*
 // @noframes
@@ -284,6 +284,44 @@
     }
   }
 
+  // v1.14: PAGINATION. Yad2 shows 20 results/page and fills the top with
+  // PROMOTED broker ads, burying genuinely new PRIVATE listings on later pages —
+  // reading only page 1 missed them entirely (proven: a live Kiryat Ono rental
+  // was never seen). Each cycle now walks pages 1..MAX_PAGES (paced), collecting
+  // new listings from every page, then waits the normal cadence and restarts
+  // from page 1. Covers ~100 listings without narrowing the search.
+  var MAX_PAGES = 5;
+  var PAGE_PACE_MS = 12000; // gap between page loads within a sweep (gentle)
+  function baseSearchUrl() {
+    var u = location.href.split("#")[0].replace(/([?&])page=\d+/, "$1").replace(/[?&]+$/, "").replace(/([?&])&+/g, "$1");
+    return u.replace(/[?&]$/, "");
+  }
+  function currentPage() { var m = location.href.match(/[?&]page=(\d+)/); return m ? parseInt(m[1], 10) : 1; }
+  function gotoPage(n, delayMs) {
+    var b = baseSearchUrl();
+    var url = b + (b.indexOf("?") !== -1 ? "&" : "?") + "page=" + n;
+    setTimeout(function () { location.href = url; }, delayMs);
+  }
+  // Called after a page is read: continue to the next page, or finish the sweep
+  // and wait the normal cadence before restarting from page 1.
+  function afterPage(hadResults) {
+    setEmptyStreak(0); // a readable results page (or clean end-of-results) is healthy
+    var pg = currentPage();
+    if (hadResults && pg < MAX_PAGES) {
+      try { clearTimeout(fallbackTimer); } catch (e) {}
+      setBadge("סורק עמוד " + (pg + 1) + "/" + MAX_PAGES + "…");
+      gotoPage(pg + 1, PAGE_PACE_MS + Math.floor(Math.random() * 5000));
+      return;
+    }
+    // Longer gap BETWEEN full sweeps than the old single-page cadence — a sweep
+    // is 5 page loads, so pace sweeps ~20–28 min apart to keep the hourly load
+    // safely under Yad2's rate limit (a single sweep bursts, then goes quiet).
+    var d = inQuietHours() ? quietInterval() : 20 * 60000 + Math.floor(Math.random() * 8 * 60000);
+    try { clearTimeout(fallbackTimer); } catch (e) {}
+    setBadge("watching · סבב מלא הושלם · הבא בעוד ~" + Math.round(d / 60000) + "m · " + new Date().toLocaleTimeString());
+    setTimeout(function () { gotoPage(1, 0); }, d); // restart the sweep from page 1
+  }
+
   function handleCards(cards) {
     sendImageBackfill(cards);
     if (cards.length === 0) {
@@ -298,12 +336,12 @@
         // Verification/blank page — back off, don't hammer, don't bypass.
         planNext("empty"); // sets its own badge; NO heartbeat (unreadable ≠ healthy)
       } else {
-        // Genuinely empty results on a healthy page (or still-thin render): report
-        // alive so the watchdog doesn't false-alarm, and keep the normal cadence.
+        // Healthy empty page = we've walked past the last result page. Report
+        // alive and END the sweep (wait the normal cadence, restart at page 1).
         heartbeat();
         setEmptyStreak(0);
-        setBadge("watching · 0 listings · " + new Date().toLocaleTimeString());
-        scheduleReload(inQuietHours() ? quietInterval() : randInterval());
+        setBadge("watching · 0 listings (סוף התוצאות) · " + new Date().toLocaleTimeString());
+        afterPage(false);
       }
       return;
     }
@@ -314,7 +352,7 @@
     if (fresh.length === 0) {
       heartbeat();
       setBadge("watching · " + cards.length + " listings · nothing new " + new Date().toLocaleTimeString());
-      planNext("ok");
+      afterPage(true);
       return;
     }
     setBadge("sending " + fresh.length + " new listing(s)…");
@@ -327,7 +365,7 @@
         seen = seen.concat(okIds);
         saveSeen(seen);
         setBadge("sent " + sent + "/" + fresh.length + " new · " + alerts + " alert(s) 📱 · " + new Date().toLocaleTimeString());
-        planNext("ok");
+        afterPage(true);
         return;
       }
       var c = fresh[idx];
