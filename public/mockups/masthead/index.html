@@ -3,180 +3,179 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>Boton · כותרת חדשה</title>
+<title>Boton · זהות חדשה</title>
 <link rel="stylesheet" href="/mockups/v3/v3.css" />
 <style>
   :root{
-    --porcelain:#f6f5f2; --white:#fff; --ink:#16181b; --stone:#75787e;
-    --faint:#a5a8ae; --green:#0b7a55; --green-deep:#0a6a4a;
-    --shadow:0 10px 30px -12px rgba(20,22,27,.18), 0 2px 8px -3px rgba(20,22,27,.10);
+    --porcelain:#f6f5f2; --ink:#15181a; --stone:#75787e; --faint:#a5a8ae;
+    --green:#0b7a55; --green-deep:#095f43; --brass:#c6a253; --brass-soft:#d8bd82;
+    --shadow:0 16px 40px -18px rgba(20,22,27,.28), 0 3px 10px -4px rgba(20,22,27,.12);
   }
   *{box-sizing:border-box; margin:0; padding:0}
   body{
-    background:#e9e8e3; color:var(--ink);
-    font-family:'Assistant',system-ui,sans-serif;
-    -webkit-font-smoothing:antialiased; padding:22px 14px 60px;
+    background:#e7e5df; color:var(--ink);
+    font-family:'Assistant',system-ui,sans-serif; -webkit-font-smoothing:antialiased;
+    padding:26px 14px 64px; line-height:1.5;
   }
   .display{font-family:'Secular One',system-ui,sans-serif; font-weight:400}
-  .lead{max-width:430px; margin:0 auto 22px; text-align:center}
-  .lead h1{font-size:19px; font-weight:700}
-  .lead p{font-size:13.5px; color:var(--stone); margin-top:6px; line-height:1.5}
+  .mk{font-family:'Secular One',system-ui,sans-serif} /* the B monogram, geometric */
 
-  .stage{max-width:430px; margin:0 auto 30px}
-  .tag{
-    display:flex; align-items:center; gap:8px; margin:0 4px 10px; font-size:12px;
-    font-weight:700; letter-spacing:.03em; color:var(--stone);
+  .lead{max-width:440px; margin:0 auto 26px; text-align:center}
+  .lead .kick{font-size:11px; font-weight:700; letter-spacing:.22em; color:var(--green); margin-bottom:9px}
+  .lead h1{font-size:21px; font-weight:700; letter-spacing:-.01em; direction:ltr}
+  .lead p{font-size:13.5px; color:var(--stone); margin-top:8px}
+  .lead p b{color:var(--ink)}
+
+  .stage{max-width:440px; margin:0 auto 34px}
+  .tag{display:flex; align-items:baseline; gap:9px; margin:0 4px 11px}
+  .tag .n{
+    font-family:'Secular One'; font-size:14px; color:var(--ink); background:#fff;
+    width:27px; height:27px; border-radius:9px; display:grid; place-items:center;
+    box-shadow:var(--shadow); flex:none; transform:translateY(4px);
   }
-  .tag b{
-    font-family:'Secular One'; font-size:15px; color:var(--ink);
-    background:var(--white); width:26px; height:26px; border-radius:9px;
-    display:grid; place-items:center; box-shadow:var(--shadow);
+  .tag .nm{font-family:'Secular One'; font-size:16px}
+  .tag .ds{font-size:12.5px; color:var(--stone)}
+
+  .phone{background:var(--porcelain); border-radius:28px; overflow:hidden; box-shadow:var(--shadow); padding-bottom:18px}
+  .body{padding:19px 15px 0}
+  .greet{font-size:14.5px; color:var(--stone); text-align:center}
+  .greet b{color:var(--ink); font-weight:700}
+  .whisper{font-size:11px; font-weight:700; letter-spacing:.13em; color:var(--faint); margin:20px 6px 11px}
+  .card{background:#fff; border-radius:20px; box-shadow:0 10px 26px -16px rgba(20,22,27,.22); overflow:hidden}
+  .photo{aspect-ratio:16/9; background:linear-gradient(135deg,#e0e5e2,#ccd4cf)}
+  .cinfo{padding:14px 16px}
+  .cinfo .city{font-size:18px; font-weight:700}
+  .cinfo .facts{font-size:14px; color:var(--stone); margin-top:3px}
+  .cinfo .row{display:flex; align-items:center; margin-top:12px}
+  .cinfo .score{font-family:'Secular One'; font-size:20px; color:var(--green)}
+  .cinfo .score em{font-family:'Assistant'; font-style:normal; font-size:13px; color:var(--stone); font-weight:600; margin-inline-start:6px}
+  .cinfo .price{font-family:'Secular One'; font-size:16px; margin-inline-start:auto}
+  .cinfo .price i{font-family:'Assistant'; font-style:normal; font-size:.78em; font-weight:700}
+
+  /* ============ 1 · The Seal — ink + brass ============ */
+  .mast1{
+    background:radial-gradient(130% 100% at 50% -20%, #22262b 0%, #15181a 66%);
+    text-align:center; padding:32px 24px 28px;
   }
-  /* the phone frame — a slice of the app: masthead + greeting + one card */
-  .phone{
-    background:var(--porcelain); border-radius:26px; overflow:hidden;
-    box-shadow:var(--shadow); padding-bottom:16px;
+  .seal{
+    width:82px; height:82px; border-radius:50%; margin:0 auto;
+    display:grid; place-items:center; position:relative;
+    background:radial-gradient(120% 120% at 50% 25%, #1e2226 0%, #121417 100%);
+    box-shadow:inset 0 0 0 1.5px rgba(198,162,83,.55), inset 0 2px 10px rgba(0,0,0,.5), 0 8px 22px -10px rgba(0,0,0,.6);
   }
-  .mast{ text-align:center; padding:30px 24px 26px }
-  .mast .wm{ font-size:38px; line-height:1; margin-top:14px; direction:ltr }
-  .mast .sub{ font-size:14px; margin-top:8px; font-weight:600 }
-  .body{ padding:18px 14px 0 }
-  .greet{ font-size:14.5px; color:var(--stone); text-align:center; line-height:1.5 }
-  .greet b{ color:var(--ink); font-weight:700 }
-  .whisper{
-    font-size:11px; font-weight:700; letter-spacing:.12em; color:var(--faint);
-    margin:20px 6px 10px;
+  .seal .mk{font-size:46px; color:var(--brass); transform:translateY(-1px); direction:ltr}
+  .seal .dot{position:absolute; width:9px; height:9px; border-radius:50%; background:var(--green);
+    right:24px; bottom:25px; box-shadow:0 0 0 2px rgba(21,24,26,.9)}
+  .mast1 .wm{font-size:38px; line-height:1; color:var(--porcelain); margin-top:16px; direction:ltr; letter-spacing:.5px}
+  .mast1 .rule{width:38px; height:1px; background:var(--brass); opacity:.6; margin:11px auto 10px}
+  .mast1 .cap{font-size:11.5px; letter-spacing:.16em; color:#9a9da3; font-weight:600}
+
+  /* ============ 2 · The Placard — warm porcelain, horizontal lockup ============ */
+  .mast2{
+    background:linear-gradient(178deg,#f5f3ec 0%, #e9e6dd 100%);
+    border-bottom:1px solid rgba(21,24,26,.07);
+    padding:26px 22px 24px;
+    display:flex; align-items:center; justify-content:center; gap:15px; direction:ltr;
   }
-  .card{ background:var(--white); border-radius:20px; box-shadow:var(--shadow); overflow:hidden }
-  .photo{ aspect-ratio:16/9; background:linear-gradient(135deg,#dfe4e1,#cbd3ce) }
-  .cinfo{ padding:14px 16px }
-  .cinfo .city{ font-size:18px; font-weight:700 }
-  .cinfo .facts{ font-size:14px; color:var(--stone); margin-top:3px }
-  .cinfo .row{ display:flex; align-items:center; margin-top:12px }
-  .cinfo .score{ font-family:'Secular One'; font-size:20px; color:var(--green) }
-  .cinfo .score span{ font-family:'Assistant'; font-size:13px; color:var(--stone); font-weight:600; margin-inline-start:6px }
-  .cinfo .price{ font-family:'Secular One'; font-size:16px; margin-inline-start:auto }
-  .cinfo .price i{ font-family:'Assistant'; font-style:normal; font-size:.78em; font-weight:700 }
+  .tile{
+    width:56px; height:56px; border-radius:16px; flex:none; position:relative;
+    display:grid; place-items:center; background:var(--ink);
+    box-shadow:0 8px 18px -8px rgba(21,24,26,.5);
+  }
+  .tile .mk{font-size:32px; color:var(--porcelain); direction:ltr}
+  .tile .dot{position:absolute; width:7px; height:7px; border-radius:50%; background:var(--green);
+    right:15px; bottom:16px}
+  .mast2 .lock{text-align:left}
+  .mast2 .wm{font-size:33px; line-height:1; color:var(--ink); direction:ltr}
+  .mast2 .cap{font-size:11px; letter-spacing:.14em; color:var(--stone); font-weight:600; margin-top:6px; direction:rtl}
 
-  /* ---- Concept 1 · Midnight (ink band + green coin) ---- */
-  .m-ink{ background:var(--ink);
-    background-image:radial-gradient(120% 90% at 50% -10%, #23262c 0%, #16181b 62%); }
-  .m-ink .wm{ color:var(--porcelain) }
-  .m-ink .sub{ color:#9a9da3 }
-
-  /* ---- Concept 2 · Meadow (green band + white mark) ---- */
-  .m-green{ background:linear-gradient(160deg,var(--green) 0%, var(--green-deep) 100%) }
-  .m-green .wm{ color:#fff }
-  .m-green .sub{ color:#bfe6d6 }
-
-  /* ---- Concept 3 · Porcelain (warm greige + ink line mark) ---- */
-  .m-porc{ background:linear-gradient(180deg,#ffffff 0%, #ecece6 100%);
-    border-bottom:1px solid rgba(20,22,27,.06) }
-  .m-porc .wm{ color:var(--ink) }
-  .m-porc .sub{ color:var(--stone) }
-
-  svg{display:block; margin:0 auto}
+  /* ============ 3 · The Letter — oversized B on green field ============ */
+  .mast3{
+    position:relative; overflow:hidden;
+    background:linear-gradient(158deg,var(--green) 0%, var(--green-deep) 100%);
+    padding:34px 26px 30px; text-align:center;
+  }
+  .mast3 .ghost{position:absolute; inset:0; display:grid; place-items:center; pointer-events:none}
+  .mast3 .ghost .mk{font-size:220px; color:rgba(255,255,255,.09); line-height:1; direction:ltr}
+  .mast3 .fore{position:relative}
+  .mast3 .mono2{position:relative; display:inline-block}
+  .mast3 .mono2 .mk{font-size:74px; color:#fff; line-height:1; direction:ltr}
+  .mast3 .mono2 .dot{position:absolute; width:12px; height:12px; border-radius:50%; background:var(--brass-soft);
+    right:8px; bottom:16px}
+  .mast3 .wm{font-size:34px; line-height:1; color:#fff; margin-top:12px; direction:ltr; letter-spacing:.5px}
+  .mast3 .cap{font-size:11.5px; letter-spacing:.15em; color:#bfe6d6; font-weight:600; margin-top:9px}
 </style>
 </head>
 <body>
 
   <div class="lead">
-    <h1>שלושה כיוונים לכותרת Boton</h1>
-    <p>כל כיוון עם רקע חדש ולוגו חדש שתפור לו. גלול, ואז שלח לי מספר: <b>1</b>, <b>2</b> או <b>3</b>.</p>
+    <div class="kick">זהות חדשה · BOTON</div>
+    <h1>The mark: a monogram B</h1>
+    <p>מונוגרמה על ה־<b>B</b> של Boton, והנקודה הירוקה נחתה לצידה — הבוט מצא לך מקום. שלוש פרשנויות. גלול ושלח <b>1 / 2 / 3</b>.</p>
   </div>
 
-  <!-- ============ CONCEPT 1 · MIDNIGHT ============ -->
+  <!-- 1 · The Seal -->
   <div class="stage">
-    <div class="tag"><b>1</b> חצות — דיו כהה, מטבע ירוק</div>
+    <div class="tag"><span class="n">1</span><span><span class="nm">החותם</span> <span class="ds">— דיו כהה ופליז, חותם יוקרה</span></span></div>
     <div class="phone">
-      <div class="mast m-ink">
-        <!-- green coin with a white house -->
-        <svg width="64" height="64" viewBox="0 0 64 64" aria-hidden="true">
-          <circle cx="32" cy="32" r="30" fill="#0b7a55"/>
-          <circle cx="32" cy="32" r="30" fill="none" stroke="#f6f5f2" stroke-width="1.6" opacity=".55"/>
-          <path d="M19 33.5 L32 22 L45 33.5" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M23 32 v13 h18 v-13" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
-          <circle cx="32" cy="39.5" r="3.4" fill="#fff"/>
-        </svg>
+      <div class="mast1">
+        <div class="seal"><span class="mk">B</span><span class="dot"></span></div>
         <div class="wm display">Boton</div>
-        <div class="sub">בוט אמריקאי מבית ביטון</div>
+        <div class="rule"></div>
+        <div class="cap">בוט אמריקאי מבית ביטון</div>
       </div>
       <div class="body">
         <div class="greet">בוקר טוב דוד — <b>דירה חדשה אחת מחכה לך היום.</b></div>
         <div class="whisper">דירות חדשות שמתאימות לך</div>
-        <div class="card">
-          <div class="photo"></div>
-          <div class="cinfo">
-            <div class="city">קרית אונו</div>
-            <div class="facts">3 חד׳ · 94 מ״ר · השכרה</div>
-            <div class="row">
-              <span class="score">98<span>התאמה גבוהה</span></span>
-              <span class="price">7,400 <i>₪</i></span>
-            </div>
-          </div>
-        </div>
+        <div class="card"><div class="photo"></div><div class="cinfo">
+          <div class="city">קרית אונו</div><div class="facts">3 חד׳ · 94 מ״ר · השכרה</div>
+          <div class="row"><span class="score">98<em>התאמה גבוהה</em></span><span class="price">7,400 <i>₪</i></span></div>
+        </div></div>
       </div>
     </div>
   </div>
 
-  <!-- ============ CONCEPT 2 · MEADOW ============ -->
+  <!-- 2 · The Placard -->
   <div class="stage">
-    <div class="tag"><b>2</b> אחו — ירוק המותג, לוגו לבן</div>
+    <div class="tag"><span class="n">2</span><span><span class="nm">הכריכה</span> <span class="ds">— פורצלן חמים, לוקאפ אופקי</span></span></div>
     <div class="phone">
-      <div class="mast m-green">
-        <svg width="64" height="64" viewBox="0 0 64 64" aria-hidden="true">
-          <path d="M15 33 L32 17 L49 33" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M20 31 v17 h24 v-17" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-          <circle cx="32" cy="40" r="4.6" fill="#fff"/>
-        </svg>
-        <div class="wm display">Boton</div>
-        <div class="sub">בוט אמריקאי מבית ביטון</div>
+      <div class="mast2">
+        <div class="tile"><span class="mk">B</span><span class="dot"></span></div>
+        <div class="lock">
+          <div class="wm display">Boton</div>
+          <div class="cap">בוט אמריקאי מבית ביטון</div>
+        </div>
       </div>
       <div class="body">
         <div class="greet">בוקר טוב דוד — <b>דירה חדשה אחת מחכה לך היום.</b></div>
         <div class="whisper">דירות חדשות שמתאימות לך</div>
-        <div class="card">
-          <div class="photo"></div>
-          <div class="cinfo">
-            <div class="city">קרית אונו</div>
-            <div class="facts">3 חד׳ · 94 מ״ר · השכרה</div>
-            <div class="row">
-              <span class="score">98<span>התאמה גבוהה</span></span>
-              <span class="price">7,400 <i>₪</i></span>
-            </div>
-          </div>
-        </div>
+        <div class="card"><div class="photo"></div><div class="cinfo">
+          <div class="city">קרית אונו</div><div class="facts">3 חד׳ · 94 מ״ר · השכרה</div>
+          <div class="row"><span class="score">98<em>התאמה גבוהה</em></span><span class="price">7,400 <i>₪</i></span></div>
+        </div></div>
       </div>
     </div>
   </div>
 
-  <!-- ============ CONCEPT 3 · PORCELAIN ============ -->
+  <!-- 3 · The Letter -->
   <div class="stage">
-    <div class="tag"><b>3</b> פורצלן — בהיר ומעודן, נקודה ירוקה</div>
+    <div class="tag"><span class="n">3</span><span><span class="nm">אות</span> <span class="ds">— ה־B כאדריכלות, שדה ירוק</span></span></div>
     <div class="phone">
-      <div class="mast m-porc">
-        <svg width="64" height="64" viewBox="0 0 64 64" aria-hidden="true">
-          <path d="M15 33 L32 17 L49 33" fill="none" stroke="#16181b" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
-          <path d="M20 31 v17 h24 v-17" fill="none" stroke="#16181b" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
-          <circle cx="32" cy="40" r="4.6" fill="#0b7a55"/>
-        </svg>
-        <div class="wm display">Boton</div>
-        <div class="sub">בוט אמריקאי מבית ביטון</div>
+      <div class="mast3">
+        <div class="ghost"><span class="mk">B</span></div>
+        <div class="fore">
+          <span class="mono2"><span class="mk">B</span><span class="dot"></span></span>
+          <div class="wm display">Boton</div>
+          <div class="cap">בוט אמריקאי מבית ביטון</div>
+        </div>
       </div>
       <div class="body">
         <div class="greet">בוקר טוב דוד — <b>דירה חדשה אחת מחכה לך היום.</b></div>
         <div class="whisper">דירות חדשות שמתאימות לך</div>
-        <div class="card">
-          <div class="photo"></div>
-          <div class="cinfo">
-            <div class="city">קרית אונו</div>
-            <div class="facts">3 חד׳ · 94 מ״ר · השכרה</div>
-            <div class="row">
-              <span class="score">98<span>התאמה גבוהה</span></span>
-              <span class="price">7,400 <i>₪</i></span>
-            </div>
-          </div>
-        </div>
+        <div class="card"><div class="photo"></div><div class="cinfo">
+          <div class="city">קרית אונו</div><div class="facts">3 חד׳ · 94 מ״ר · השכרה</div>
+          <div class="row"><span class="score">98<em>התאמה גבוהה</em></span><span class="price">7,400 <i>₪</i></span></div>
+        </div></div>
       </div>
     </div>
   </div>
