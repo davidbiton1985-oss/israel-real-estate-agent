@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RE-Agent Facebook Notification Reader
 // @namespace    israel-real-estate-agent
-// @version      12.24
+// @version      12.25
 // @description  Notification-driven reader: one designated tab checks facebook.com/notifications every 7–12 min (randomized, slower overnight); every "posted in group" notification links to the post's own page, which the tab then opens and reads IN FULL — parsed, scored, WhatsApp'd by your local RE-Agent (localhost:3000). It also sweeps one target group's chronological feed per cycle (round-robin, scroll-until-overlap) so posts Facebook never notified about are still caught, and survives browser restarts via a localStorage reader lease. Runs only in your own logged-in browser session — no scraping server, no login/CAPTCHA bypass; if Facebook shows a checkpoint the reader BACKS OFF instead of hammering it. Your other Facebook tabs are untouched (the reader runs only in the tab you start with #re-agent).
 // @match        https://www.facebook.com/*
 // @noframes
@@ -460,16 +460,44 @@
   // v12.19: the post's OWN photo (same nesting rule as text/permalink) — the
   // app localizes it and shows it on rows and the listing page. Width guard
   // keeps avatars/reaction icons out.
+  // v12.25: size by the RENDERED box, not just naturalWidth — a post photo is
+  // laid out large immediately, but its bitmap may not have decoded yet when we
+  // read (naturalWidth still 0), which was dropping real photos. Pick the
+  // LARGEST qualifying image, not the first.
+  function imgSize(im) {
+    var r = im.getBoundingClientRect ? im.getBoundingClientRect() : { width: 0, height: 0 };
+    return {
+      w: Math.max(im.naturalWidth || 0, r.width || 0, im.width || 0),
+      h: Math.max(im.naturalHeight || 0, r.height || 0, im.height || 0),
+    };
+  }
   function ownImage(article) {
     var imgs = article.querySelectorAll('img[src*="scontent"], img[src*="fbcdn"]');
+    var best = null, bestArea = 0;
     for (var i = 0; i < imgs.length; i++) {
       var im = imgs[i];
       var host = im.closest ? im.closest('[role="article"]') : null;
       if (host !== article) continue;
-      if ((im.naturalWidth || im.width || 0) < 200) continue;
-      return im.currentSrc || im.src || null;
+      var s = imgSize(im);
+      if (s.w < 200) continue; // avatars / reaction icons
+      var area = s.w * s.h;
+      if (area > bestArea) { bestArea = area; best = im.currentSrc || im.src || null; }
     }
-    return null;
+    return best;
+  }
+  // A permalink page shows exactly ONE post, so the largest scontent photo on
+  // it IS that post's photo — used when the article-scoped ownImage misses it
+  // (permalink pages sometimes render the photo outside the [role=article]).
+  function postPageImage() {
+    var imgs = document.querySelectorAll('img[src*="scontent"], img[src*="fbcdn"]');
+    var best = null, bestArea = 0;
+    for (var i = 0; i < imgs.length; i++) {
+      var s = imgSize(imgs[i]);
+      if (s.w < 200 || s.h < 150) continue; // real photo, not avatar/emoji/banner sliver
+      var area = s.w * s.h;
+      if (area > bestArea) { bestArea = area; best = imgs[i].currentSrc || imgs[i].src || null; }
+    }
+    return best;
   }
   // FB truncates long posts behind a "see more" toggle; if it isn't clicked the
   // body is only a ~95-char preview and the parser can't read rooms/price/city.
@@ -615,6 +643,7 @@
         var pageImage = null;
         var arts0 = outermostArticles();
         for (var ai = 0; ai < arts0.length && !pageImage; ai++) pageImage = ownImage(arts0[ai]);
+        if (!pageImage) pageImage = postPageImage(); // v12.25: permalink-page fallback
         postToApp(
           { posts: [{ text: text, url: item.url, image: pageImage || undefined }], groupName: item.group || (document.title || ""), url: item.url },
           function (d) {
@@ -751,7 +780,7 @@
         if (!link) return;
         var pid = postIdOf(link);
         if (pid && seen.indexOf(pid) !== -1) return; // already handled → skip (dedupe re-sends)
-        posts.push({ text: t.slice(0, 3000), url: link, image: ownImage(a) || undefined });
+        posts.push({ text: t.slice(0, 3000), url: link, image: ownImage(a) || bfMap[link] || undefined });
       });
       if (posts.length === 0) { finishItem(item); return; }
       postToApp({ posts: posts, groupName: item.group || (document.title || ""), url: item.url }, function (d) {
