@@ -162,8 +162,10 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
 
   const greeting =
     checkedToday > 0
-      ? `${greetWord()} דוד — היום עברתי על ${checkedToday} דירות וסיננתי בשבילך; ${
-          passedToday === 0 ? "אף אחת לא עברה את הקריטריונים עדיין" : passedToday === 1 ? "אחת עברה את הקריטריונים שלך" : `${passedToday} עברו את הקריטריונים שלך`
+      ? `${greetWord()} דוד — המערכת סיננה לך ${checkedToday} דירות היום${
+          passedToday === 0
+            ? ", אף אחת מהן עדיין לא עברה את הקריטריונים שלך"
+            : `, ומתוכן ${passedToday === 1 ? "אחת עברה" : `${passedToday} עברו`} את הקריטריונים שלך`
         }.`
       : `${greetWord()} דוד — שקט בינתיים, הבוט סורק כל 5 דקות.`;
 
