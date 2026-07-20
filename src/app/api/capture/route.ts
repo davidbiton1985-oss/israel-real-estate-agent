@@ -69,18 +69,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, heartbeat: src }, { headers: CORS_HEADERS });
   }
 
-  // ---- IMAGE BACKFILL: photos for listings we already hold ----------------
-  // The sensors only send NEW cards/posts; existing listings stayed photo-less
-  // ("gallery with empty walls"). The watcher now also reports url→image for
-  // everything visible; we attach photos to known listings that lack one.
+  // ---- IMAGE BACKFILL + "seen today" ping ---------------------------------
+  // The watcher reports url→image for EVERYTHING visible each cycle (not only
+  // new cards). We use it for two things: (1) attach a photo to a known listing
+  // that lacks one, and (2) stamp lastSeenAt on EVERY listing we ran past — so
+  // "how many apartments the bot checked today" counts re-seen listings, not
+  // just newly-captured ones (Yad2's standing inventory is mostly already-seen).
   if (Array.isArray(body.imageBackfill)) {
-    let updated = 0;
-    let pairs = 0;
-    for (const item of body.imageBackfill.slice(0, 60)) {
+    let touched = 0;
+    let attached = 0;
+    for (const item of body.imageBackfill.slice(0, 80)) {
       const iUrl = (item.url ?? "").trim();
       const img = (item.image ?? "").trim();
-      if (!iUrl || !/^https?:/.test(img)) continue;
-      pairs++;
+      if (!iUrl) continue;
       try {
         // Exact-url match is too brittle — Yad2 rewrites item urls and FB
         // serves the same group as numeric id OR vanity name — so also match
@@ -90,18 +91,17 @@ export async function POST(req: NextRequest) {
         const or: object[] = [{ url: iUrl }];
         if (itemId) or.push({ yad2ListingId: itemId }, { url: { contains: `/item/${itemId}` } });
         if (fbPid) or.push({ url: { contains: `/posts/${fbPid}` } }, { url: { contains: `/permalink/${fbPid}` } });
-        const listing = await prisma.listing.findFirst({
-          where: { imageUrl: null, OR: or },
-          select: { id: true },
-        });
+        const listing = await prisma.listing.findFirst({ where: { OR: or }, select: { id: true, imageUrl: true } });
         if (!listing) continue;
-        await prisma.listing.update({ where: { id: listing.id }, data: { imageUrl: img } });
-        maybeLocalizeImage(listing.id, img, img);
-        updated++;
+        const data: { lastSeenAt: Date; imageUrl?: string } = { lastSeenAt: new Date() };
+        if (!listing.imageUrl && /^https?:/.test(img)) data.imageUrl = img;
+        await prisma.listing.update({ where: { id: listing.id }, data });
+        if (data.imageUrl) { maybeLocalizeImage(listing.id, img, img); attached++; }
+        touched++;
       } catch {}
     }
-    if (pairs > 0) console.log(`[capture/backfill] pairs=${pairs} attached=${updated}`);
-    return NextResponse.json({ ok: true, backfill: updated }, { headers: CORS_HEADERS });
+    if (body.imageBackfill.length > 0) console.log(`[capture/backfill] seen=${touched} photos=${attached}`);
+    return NextResponse.json({ ok: true, seen: touched, backfill: attached }, { headers: CORS_HEADERS });
   }
 
   // ---- DIAG mode: the FB reader reports what it Sees on each post page ----
