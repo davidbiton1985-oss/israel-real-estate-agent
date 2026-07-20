@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RE-Agent Yad2 Tab Watcher
 // @namespace    israel-real-estate-agent
-// @version      1.11
+// @version      1.12
 // @description  Watches YOUR open Yad2 search tab: every 7–10 min (randomized, slower overnight) it re-checks the results and sends new listings to your local Israel Real Estate Agent (localhost:3000), which scores them and WhatsApps you strong matches. Runs only in your own browser session — no CAPTCHA bypass, no fake fingerprints, no login automation. If Yad2 shows a verification page the watcher BACKS OFF and stops hammering it; solve it yourself like normal and it resumes.
 // @match        https://www.yad2.co.il/realestate/*
 // @noframes
@@ -45,6 +45,28 @@
   // be re-sent once with correct text↔URL pairing. Rotating the key does that.
   var SEEN_KEY = "reAgentSeenYad2Ids_v2";
   var SEEN_MAX = 800;
+
+  // v1.12: single-instance lease. TWO Yad2 tabs each running this script both
+  // reload the results page on their own cadence → double the request rate,
+  // which soft-throttled the session (this actually happened — a forgotten
+  // second tab in another window). A localStorage lease (Yad2 does NOT prune
+  // it) elects ONE active watcher; other tabs stay fully passive (zero Yad2
+  // requests) and take over only if the active tab's lease goes stale.
+  var LEASE_KEY = "reAgentYad2Lease"; // { id, at }
+  var LEASE_STALE_MS = MAX_MS + 10 * 60000; // owner silent this long → presumed closed
+  var TAB_ID = (function () {
+    var k = "reAgentYad2TabId";
+    var v = sessionStorage.getItem(k);
+    if (!v) { v = Math.random().toString(36).slice(2) + Date.now().toString(36); try { sessionStorage.setItem(k, v); } catch (e) {} }
+    return v;
+  })();
+  function readLease() { try { return JSON.parse(localStorage.getItem(LEASE_KEY) || "null"); } catch (e) { return null; } }
+  function renewLease() { try { localStorage.setItem(LEASE_KEY, JSON.stringify({ id: TAB_ID, at: Date.now() })); } catch (e) {} }
+  function iAmWatcher() {
+    var l = readLease();
+    if (!l || l.id === TAB_ID) return true; // no owner, or already mine (survives my own reloads via sessionStorage TAB_ID)
+    return Date.now() - l.at > LEASE_STALE_MS; // a silent owner (closed tab) → I may take over
+  }
 
   // --- tiny status badge (bottom-right) ------------------------------------
   var badge = document.createElement("div");
@@ -346,6 +368,18 @@
   // reload timer here anymore — that was what kept reloading the verification
   // page every 5 minutes and escalated the block.
   setTimeout(function () {
+    // Single-instance guard: if another tab is the active watcher, stay fully
+    // passive — no scan, NO reload (zero Yad2 requests) — and just poll the
+    // lease so we can take over if that tab is closed.
+    if (!iAmWatcher()) {
+      try { clearTimeout(fallbackTimer); } catch (e) {} // a passive tab must NOT reload
+      setBadge("passive · טאב אחר של יד2 הוא החיישן הפעיל");
+      setInterval(function () {
+        if (iAmWatcher()) { renewLease(); location.reload(); } // owner gone → take over
+      }, 3 * 60000);
+      return;
+    }
+    renewLease(); // claim/refresh ownership for this cycle
     // Guard the synchronous entry: if processPage throws before scheduling, the
     // fallback timer (armed above) still reloads, but back it off explicitly too.
     try { processPage(); } catch (e) { scheduleReload(BACKOFF_MS); }
