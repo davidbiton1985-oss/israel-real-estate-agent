@@ -4,7 +4,7 @@ import { hebrewCity, telegramConfigured } from "@/core/alert";
 import { emailConfigVars } from "@/core/connectors/email";
 import ScoreBadge from "@/components/ui/ScoreBadge";
 import FlashBanner from "@/components/ui/FlashBanner";
-import LandingMark from "@/components/ui/LandingMark";
+import BotonMark from "@/components/ui/BotonMark";
 import Thumb from "@/components/ui/Thumb";
 import SourceMark from "@/components/ui/SourceMark";
 import PhotoPlaceholder from "@/components/ui/PhotoPlaceholder";
@@ -168,13 +168,25 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
 
   return (
     <div>
-      {/* masthead — its own band so the brand is set apart from the feed below */}
-      <div className="-mx-[10px] -mt-2 flex flex-col items-center rounded-b-[30px] bg-card px-6 pb-7 pt-8 text-center shadow-card">
-        <LandingMark size={62} />
-        <div className="display mt-3.5 text-[40px] leading-none" dir="ltr">
-          Boton
+      {/* masthead — the "placard": a warm porcelain band, ink monogram tile
+          next to the wordmark, set apart from the porcelain feed below */}
+      <div
+        className="-mx-[10px] -mt-2 flex items-center justify-center gap-4 px-6 pb-6 pt-8"
+        style={{
+          background: "linear-gradient(178deg,#f5f3ec 0%,#e9e6dd 100%)",
+          borderBottom: "1px solid rgba(21,24,26,.07)",
+          direction: "ltr",
+        }}
+      >
+        <BotonMark size={58} />
+        <div className="text-left">
+          <div className="display text-[34px] leading-none" dir="ltr">
+            Boton
+          </div>
+          <div className="mt-1.5 text-[12.5px] font-semibold text-muted" dir="rtl" style={{ letterSpacing: ".04em" }}>
+            בוט אמריקאי מבית ביטון
+          </div>
         </div>
-        <div className="mt-2 text-[14.5px] font-semibold text-muted">בוט אמריקאי מבית ביטון</div>
       </div>
 
       {/* greeting */}

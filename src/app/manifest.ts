@@ -1,7 +1,8 @@
 import type { MetadataRoute } from "next";
 
 // Web app manifest — lets iOS/Android install the dashboard as a standalone
-// app ("Add to Home Screen"). Icons come from scripts/generate-pwa-icons.mjs.
+// app ("Add to Home Screen"). Icons in public/icons/* are the Boton mark
+// (ink tile + monogram B + green dot), rendered from the same design.
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Boton — בוט אמריקאי מבית ביטון",

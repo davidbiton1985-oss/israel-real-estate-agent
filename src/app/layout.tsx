@@ -6,7 +6,7 @@ import NavLinks from "@/components/ui/NavLinks";
 import Dock from "@/components/ui/Dock";
 import AutoRefresh from "@/components/ui/AutoRefresh";
 import SwNavigate from "@/components/ui/SwNavigate";
-import LandingMark from "@/components/ui/LandingMark";
+import BotonMark from "@/components/ui/BotonMark";
 
 // V3 "הגלריה" pairing: Assistant carries the Hebrew UI; Secular One is the
 // display voice — prices, scores, titles — used sparingly and never small.
@@ -53,7 +53,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <header className="sticky top-0 z-20 bg-bg/90 backdrop-blur max-sm:hidden">
           <div className="mx-auto flex min-h-[54px] max-w-6xl items-center gap-5 px-6 py-2">
             <Link href="/" className="flex items-center gap-2.5">
-              <LandingMark size={24} />
+              <BotonMark size={28} />
               <span className="display text-[19px]" dir="ltr">
                 Boton
               </span>
