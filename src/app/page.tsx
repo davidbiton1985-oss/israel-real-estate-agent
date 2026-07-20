@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
-import { hebrewCity, telegramConfigured } from "@/core/alert";
-import { emailConfigVars } from "@/core/connectors/email";
+import { hebrewCity } from "@/core/alert";
 import ScoreBadge from "@/components/ui/ScoreBadge";
 import FlashBanner from "@/components/ui/FlashBanner";
 import BotonMark from "@/components/ui/BotonMark";
@@ -10,20 +9,10 @@ import SourceMark from "@/components/ui/SourceMark";
 import PhotoPlaceholder from "@/components/ui/PhotoPlaceholder";
 import { DEAL_HE, BROKER_HE, SOURCE_HE, USER_STATUS_HE } from "@/lib/labels";
 import Price from "@/components/ui/Price";
-import { relTime, minutesSince } from "@/lib/format";
-import type { Listing, SourceHealth } from "@prisma/client";
+import { relTime } from "@/lib/format";
+import type { Listing } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
-
-type DotState = "live" | "stale" | "off";
-function freshness(h: SourceHealth | null | undefined): DotState {
-  if (!h?.lastSuccessAt) return "off";
-  const mins = minutesSince(h.lastSuccessAt);
-  if (mins == null) return "off";
-  if (mins < 12 && h.consecutiveErrors === 0) return "live";
-  if (mins < 360) return "stale";
-  return "off";
-}
 
 function greetWord(): string {
   const h = new Date().getHours();
@@ -107,12 +96,8 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
   const dayStart = new Date();
   dayStart.setHours(0, 0, 0, 0);
 
-  const [latestTestAlert, emailHealth, fbHealth, yad2Health, checkedToday, passedToday, heroMatches, reviewMatches, pursuits] =
+  const [checkedToday, passedToday, heroMatches, reviewMatches, pursuits] =
     await Promise.all([
-      prisma.alert.findFirst({ where: { kind: "TEST_ALERT" }, orderBy: { createdAt: "desc" } }),
-      prisma.sourceHealth.findUnique({ where: { source: "EMAIL" } }),
-      prisma.sourceHealth.findUnique({ where: { source: "FACEBOOK" } }),
-      prisma.sourceHealth.findUnique({ where: { source: "YAD2_BROWSER" } }),
       // how many distinct apartments the bot ran past today (new OR re-seen)…
       prisma.listing.count({ where: { lastSeenAt: { gte: dayStart } } }),
       // …and how many of those cleared your criteria (a strong match)
@@ -151,15 +136,6 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
       }),
     ]);
 
-  const email = emailConfigVars();
-  const sensors: DotState[] = [
-    freshness(yad2Health),
-    freshness(fbHealth),
-    email.configured ? freshness(emailHealth) : "off",
-    telegramConfigured() ? (latestTestAlert?.status === "FAILED" ? "off" : "live") : "off",
-  ];
-  const problem = sensors.some((s) => s !== "live");
-
   const greeting =
     checkedToday > 0
       ? `${greetWord()} דוד — המערכת סיננה לך ${checkedToday} דירות היום${
@@ -197,12 +173,6 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
         <span className="text-muted">{greeting.split("—")[0]}— </span>
         <span className="text-ink">{greeting.split("—")[1]}</span>
       </p>
-      {problem && (
-        <Link href="/profile" className="mt-2 block px-0.5 text-[12.5px] font-semibold text-warn">
-          אחד החיישנים לא מעודכן — לפרטים ←
-        </Link>
-      )}
-
       {searchParams.testAlert && (
         <FlashBanner clear={["testAlert"]}>
           <div className="mt-3 rounded-xl2 bg-card p-3.5 text-sm font-semibold shadow-card">
@@ -218,7 +188,7 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
       {/* the gallery */}
       {heroMatches.length > 0 && (
         <>
-          <div className="-mx-[10px] mt-6 mb-1 px-5 py-2.5 text-[14px] font-bold text-muted bg-[linear-gradient(178deg,#f5f3ec,#e9e6dd)]">דירות חדשות שמתאימות לך</div>
+          <div className="mt-7 mb-1 px-0.5 text-[14px] font-bold text-muted">דירות חדשות שמתאימות לך</div>
           <div className="mt-3 space-y-[18px]">
             {heroMatches.map((m) => (
               <Piece key={m.id} listing={m.listing} score={m.score} when={relTime(m.listing.createdAt)} />
@@ -229,7 +199,7 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
 
       {reviewMatches.length > 0 && (
         <>
-          <div className="-mx-[10px] mt-6 mb-1 px-5 py-2.5 text-[14px] font-bold text-muted bg-[linear-gradient(178deg,#f5f3ec,#e9e6dd)]">לבדיקה</div>
+          <div className="mt-7 mb-1 px-0.5 text-[14px] font-bold text-muted">לבדיקה</div>
           <div className="mt-3 space-y-[18px]">
             {reviewMatches.map((m) => (
               <Piece key={m.id} listing={m.listing} score={m.score} when={relTime(m.listing.createdAt)} />
@@ -240,7 +210,7 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
 
       {pursuits.length > 0 && (
         <>
-          <div className="-mx-[10px] mt-6 mb-1 px-5 py-2.5 text-[14px] font-bold text-muted bg-[linear-gradient(178deg,#f5f3ec,#e9e6dd)]">בטיפול</div>
+          <div className="mt-7 mb-1 px-0.5 text-[14px] font-bold text-muted">בטיפול</div>
           <div className="mt-3 space-y-[18px]">
             {pursuits.map((l) => (
               <Piece
