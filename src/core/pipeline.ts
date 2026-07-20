@@ -117,7 +117,7 @@ export async function ingestListing(rawText: string, source: Source, url: string
     }
 
     const listing = await prisma.listing.create({
-      data: { source, url, rawText, fingerprint: fp, isDuplicateOf: fuzzyDuplicateOf, priceHistory: "[]", ...metaData, ...parsedData },
+      data: { source, url, rawText, fingerprint: fp, isDuplicateOf: fuzzyDuplicateOf, priceHistory: "[]", lastSeenAt: new Date(), ...metaData, ...parsedData },
     });
     return { listing, isNew: true, priceChanged: false, oldPrice: null };
   }
@@ -141,6 +141,7 @@ export async function ingestListing(rawText: string, source: Source, url: string
       source,
       url: url ?? existing.url,
       rawText,
+      lastSeenAt: new Date(), // touched on every sighting → powers "checked today"
       priceHistory: JSON.stringify(history),
       scanned: false, // force re-match so price-drop/material-change can be evaluated
       // keep earlier FB metadata if the re-paste lacks it

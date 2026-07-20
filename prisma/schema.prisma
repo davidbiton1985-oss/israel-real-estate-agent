@@ -92,6 +92,10 @@ model Listing {
   // fingerprint (Yad2 ID / URL / content) arrives with a different price.
   priceHistory    String   @default("[]")
   scanned         Boolean  @default(false) // processed by matching pipeline
+  // Touched on EVERY sighting (new or re-seen), so "how many apartments did the
+  // bot check today" = listings with lastSeenAt >= start of day. Nullable (no
+  // default) so the 400+ pre-existing rows aren't back-dated to now on push.
+  lastSeenAt      DateTime?
   // Free-text notes from manual real-world QA, e.g. "price parsed wrong",
   // "should not be duplicate" — not used by any scoring/matching logic.
   qaNotes         String?

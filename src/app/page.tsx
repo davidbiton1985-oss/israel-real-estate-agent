@@ -107,18 +107,19 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
   const dayStart = new Date();
   dayStart.setHours(0, 0, 0, 0);
 
-  const [latestTestAlert, emailHealth, fbHealth, yad2Health, listingsToday, strongTodayCount, heroMatches, reviewMatches, pursuits] =
+  const [latestTestAlert, emailHealth, fbHealth, yad2Health, checkedToday, passedToday, heroMatches, reviewMatches, pursuits] =
     await Promise.all([
       prisma.alert.findFirst({ where: { kind: "TEST_ALERT" }, orderBy: { createdAt: "desc" } }),
       prisma.sourceHealth.findUnique({ where: { source: "EMAIL" } }),
       prisma.sourceHealth.findUnique({ where: { source: "FACEBOOK" } }),
       prisma.sourceHealth.findUnique({ where: { source: "YAD2_BROWSER" } }),
-      prisma.listing.count({ where: { createdAt: { gte: dayStart }, isDuplicateOf: null } }),
-      prisma.match.count({
+      // how many distinct apartments the bot ran past today (new OR re-seen)…
+      prisma.listing.count({ where: { lastSeenAt: { gte: dayStart } } }),
+      // …and how many of those cleared your criteria (a strong match)
+      prisma.listing.count({
         where: {
-          status: "strong_match",
-          profile: { active: true },
-          listing: { createdAt: { gte: dayStart }, isDuplicateOf: null, userStatus: { notIn: ["DISMISSED", "WON"] } },
+          lastSeenAt: { gte: dayStart },
+          matches: { some: { status: "strong_match", profile: { active: true } } },
         },
       }),
       prisma.match.findMany({
@@ -160,11 +161,11 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
   const problem = sensors.some((s) => s !== "live");
 
   const greeting =
-    strongTodayCount > 0
-      ? `${greetWord()} דוד — ${strongTodayCount === 1 ? "דירה חדשה אחת מחכה לך" : `${strongTodayCount} דירות חדשות מחכות לך`} היום.`
-      : listingsToday > 0
-        ? `${greetWord()} דוד — ${listingsToday} מודעות נסרקו היום, אף אחת לא עברה את הרף.`
-        : `${greetWord()} דוד — שקט בינתיים, הבוט סורק כל 5 דקות.`;
+    checkedToday > 0
+      ? `${greetWord()} דוד — היום עברתי על ${checkedToday} דירות וסיננתי בשבילך; ${
+          passedToday === 0 ? "אף אחת לא עברה את הקריטריונים עדיין" : passedToday === 1 ? "אחת עברה את הקריטריונים שלך" : `${passedToday} עברו את הקריטריונים שלך`
+        }.`
+      : `${greetWord()} דוד — שקט בינתיים, הבוט סורק כל 5 דקות.`;
 
   return (
     <div>
