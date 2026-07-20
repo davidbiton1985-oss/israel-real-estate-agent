@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RE-Agent Yad2 Tab Watcher
 // @namespace    israel-real-estate-agent
-// @version      1.10
+// @version      1.11
 // @description  Watches YOUR open Yad2 search tab: every 7–10 min (randomized, slower overnight) it re-checks the results and sends new listings to your local Israel Real Estate Agent (localhost:3000), which scores them and WhatsApps you strong matches. Runs only in your own browser session — no CAPTCHA bypass, no fake fingerprints, no login automation. If Yad2 shows a verification page the watcher BACKS OFF and stops hammering it; solve it yourself like normal and it resumes.
 // @match        https://www.yad2.co.il/realestate/*
 // @noframes
@@ -20,8 +20,12 @@
   // [MIN,MAX] — e.g. 7m05s, then 8m31s, then 9m48s — never a round, repeating
   // number. This isn't evasion: a well-behaved client backs off and jitters;
   // we still never touch the CAPTCHA itself.
-  var MIN_MS = 7 * 60 * 1000; // never refresh faster than every 7 min
-  var MAX_MS = 10 * 60 * 1000; // …nor slower than every 10 min when healthy
+  // v1.11: slower cadence — 7–10 min was ~7 full page loads/hour, which soft-
+  // throttled the browser session (Yad2 served its error page; verified Yad2
+  // itself was fine via a phone on cellular). New listings don't appear every
+  // 8 min, so 12–18 min still catches them while roughly halving our footprint.
+  var MIN_MS = 12 * 60 * 1000;
+  var MAX_MS = 18 * 60 * 1000;
   // When the page shows nothing readable — still loading, OR a "prove you're
   // human" checkpoint — do NOT keep reloading on the normal cadence. A human
   // stuck on a CAPTCHA doesn't refresh every few minutes, and reloading a
