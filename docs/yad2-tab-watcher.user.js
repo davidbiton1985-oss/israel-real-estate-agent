@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RE-Agent Yad2 Tab Watcher
 // @namespace    israel-real-estate-agent
-// @version      1.18
+// @version      1.19
 // @description  Watches YOUR open Yad2 search tab: every 7–10 min (randomized, slower overnight) it re-checks the results and sends new listings to your local Israel Real Estate Agent (localhost:3000), which scores them and WhatsApps you strong matches. Runs only in your own browser session — no CAPTCHA bypass, no fake fingerprints, no login automation. If Yad2 shows a verification page the watcher BACKS OFF and stops hammering it; solve it yourself like normal and it resumes.
 // @match        https://www.yad2.co.il/realestate/*
 // @noframes
@@ -182,7 +182,59 @@
     return Object.keys(out);
   }
 
+  // v1.19: read the SSR data (__NEXT_DATA__) instead of scraping rendered cards.
+  // Yad2 virtualizes the list — only ~20 of ~40 cards render with text at a
+  // time, so DOM scraping missed the rest (incl. new PRIVATE listings buried
+  // under promoted broker ads). The Next.js payload holds the FULL page feed
+  // (feed.private + feed.agency, ~40 listings) as structured JSON, present the
+  // instant the page loads — no scrolling, no render race, exact fields.
+  function nd2text(L) {
+    var a = L.address || {}, ad = L.additionalDetails || {};
+    var city = (a.city && a.city.text) || "";
+    var hood = (a.neighborhood && a.neighborhood.text) || (a.area && a.area.text) || "";
+    var street = (a.street && a.street.text) || "";
+    var houseNum = a.house && a.house.number ? " " + a.house.number : "";
+    var floor = a.house && a.house.floor != null ? a.house.floor : null;
+    var p = ["להשכרה"];
+    if (city) p.push(city);
+    if (hood) p.push("שכונת " + hood);
+    if (street) p.push("רחוב " + street + houseNum);
+    if (ad.roomsCount != null) p.push(ad.roomsCount + " חדרים");
+    if (floor != null) p.push("קומה " + floor);
+    if (ad.squareMeter != null) p.push(ad.squareMeter + ' מ"ר');
+    if (L.price != null) p.push(L.price + " ₪");
+    if (L.adType === "private") p.push("מהבעלים ללא תיווך");
+    return p.filter(Boolean).join(", ");
+  }
+  function collectCardsFromData() {
+    var el = document.getElementById("__NEXT_DATA__");
+    if (!el) return null;
+    var feed;
+    try { feed = JSON.parse(el.textContent).props.pageProps.feed; } catch (e) { return null; }
+    if (!feed || (!feed.private && !feed.agency)) return null;
+    var lists = (feed.private || []).concat(feed.agency || []);
+    var out = [], seen = {};
+    for (var i = 0; i < lists.length; i++) {
+      var L = lists[i], id = L && L.token;
+      if (!id || seen[id]) continue;
+      seen[id] = 1;
+      var text = nd2text(L);
+      if (text.length < 15) continue;
+      out.push({
+        id: id,
+        url: "https://www.yad2.co.il/realestate/item/" + id,
+        text: text,
+        image: (L.metaData && L.metaData.coverImage) || null,
+      });
+    }
+    return out;
+  }
   function collectCards() {
+    var fromData = collectCardsFromData();
+    if (fromData && fromData.length) return fromData;
+    return collectCardsFromDom(); // fallback if the SSR payload shape ever changes
+  }
+  function collectCardsFromDom() {
     var anchors = document.querySelectorAll('a[href*="/item/"]');
     var found = {};
     for (var i = 0; i < anchors.length; i++) {
@@ -192,33 +244,25 @@
       if (!m) continue;
       var id = m[1];
       if (found[id]) continue;
-      // Climb to the SINGLE card: the largest ancestor that still references only
-      // THIS item id. Stop before an ancestor that also links a different /item/ —
-      // the old "first ancestor over 60 chars" rule grabbed the whole results grid,
-      // merging many apartments into one record with a mismatched URL.
       var node = a;
       for (var up = 0; up < 8 && node.parentElement; up++) {
         var parent = node.parentElement;
-        if (itemIdsIn(parent).length > 1) break; // parent holds another listing → stop
+        if (itemIdsIn(parent).length > 1) break;
         node = parent;
       }
       var text = (node.innerText || "").replace(/\s+\n/g, "\n").trim();
-      // v1.8: grab the card's apartment photo (first real-size <img>) —
-      // the app localizes it and shows it on rows and the listing page.
       var image = null;
       var imgs = node.querySelectorAll("img");
       for (var k = 0; k < imgs.length; k++) {
         var src = imgs[k].currentSrc || imgs[k].src || "";
         if (!/^https?:/.test(src)) continue;
-        if ((imgs[k].naturalWidth || imgs[k].width || 0) < 120) continue; // icons/avatars
+        if ((imgs[k].naturalWidth || imgs[k].width || 0) < 120) continue;
         image = src;
         break;
       }
       if (text.length >= 25) found[id] = { id: id, url: href, text: text.slice(0, 1200), image: image };
     }
-    return Object.keys(found).map(function (k) {
-      return found[k];
-    });
+    return Object.keys(found).map(function (k) { return found[k]; });
   }
 
   // --- send new cards to the app -------------------------------------------
@@ -259,29 +303,11 @@
   // buried under promoted ads) were missed on TIMING alone. Scroll through the
   // page harvesting at each step, and keep going until the harvested count stops
   // growing (fully rendered) before reading. No extra page loads — just scroll.
+  // v1.19: the full feed is in __NEXT_DATA__ the instant the page loads, so a
+  // single read (with a short retry for SPA hydration) captures all ~40 — no
+  // scrolling, no render race.
   function processPage() {
-    var acc = {}; // id -> card, accumulated across scroll positions (cards persist once rendered)
-    function harvest() {
-      var cards = collectCards();
-      for (var i = 0; i < cards.length; i++) { if (!acc[cards[i].id]) acc[cards[i].id] = cards[i]; }
-    }
-    // v1.18: DON'T stop early on a plateau — the count plateaus because the text
-    // renders a beat AFTER the scroll, not because we're done. Scroll a fixed
-    // number of steps to the bottom, WAITING generously between steps so the
-    // batch renders before we harvest. Yad2 keeps rendered cards in the DOM, so
-    // accumulating across steps yields the full ~55 (not just the first screen).
-    var step = 0, STEPS = 12;
-    function loop() {
-      harvest();
-      if (step >= STEPS) {
-        setTimeout(function () { harvest(); handleCards(Object.keys(acc).map(function (k) { return acc[k]; })); }, 1800);
-        return;
-      }
-      step++;
-      try { window.scrollBy(0, Math.round((window.innerHeight || 700) * 1.2)); } catch (e) {}
-      setTimeout(loop, 1600); // generous: let the batch load+render before harvesting
-    }
-    setTimeout(loop, 2500); // initial render wait
+    readCardsWithRetry(0, function (cards) { handleCards(cards); });
   }
 
   // v1.9: photo backfill — the app only received images for NEW cards, so
