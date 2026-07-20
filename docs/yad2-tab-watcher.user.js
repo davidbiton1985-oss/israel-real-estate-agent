@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RE-Agent Yad2 Tab Watcher
 // @namespace    israel-real-estate-agent
-// @version      1.17
+// @version      1.18
 // @description  Watches YOUR open Yad2 search tab: every 7–10 min (randomized, slower overnight) it re-checks the results and sends new listings to your local Israel Real Estate Agent (localhost:3000), which scores them and WhatsApps you strong matches. Runs only in your own browser session — no CAPTCHA bypass, no fake fingerprints, no login automation. If Yad2 shows a verification page the watcher BACKS OFF and stops hammering it; solve it yourself like normal and it resumes.
 // @match        https://www.yad2.co.il/realestate/*
 // @noframes
@@ -260,32 +260,28 @@
   // page harvesting at each step, and keep going until the harvested count stops
   // growing (fully rendered) before reading. No extra page loads — just scroll.
   function processPage() {
-    var acc = {}; // id -> card, accumulated across scroll positions (survives virtualization)
+    var acc = {}; // id -> card, accumulated across scroll positions (cards persist once rendered)
     function harvest() {
       var cards = collectCards();
       for (var i = 0; i < cards.length; i++) { if (!acc[cards[i].id]) acc[cards[i].id] = cards[i]; }
-      return Object.keys(acc).length;
     }
-    var step = 0, MAX_SCROLL = 16, lastCount = -1, stable = 0;
-    function finish() {
-      handleCards(Object.keys(acc).map(function (k) { return acc[k]; }));
-    }
+    // v1.18: DON'T stop early on a plateau — the count plateaus because the text
+    // renders a beat AFTER the scroll, not because we're done. Scroll a fixed
+    // number of steps to the bottom, WAITING generously between steps so the
+    // batch renders before we harvest. Yad2 keeps rendered cards in the DOM, so
+    // accumulating across steps yields the full ~55 (not just the first screen).
+    var step = 0, STEPS = 12;
     function loop() {
-      var count = harvest();
-      if (count === lastCount) stable++; else stable = 0;
-      lastCount = count;
-      // Done once the count has held steady for a few steps (nothing left to
-      // render) or we hit the cap. Then one final harvest from the top.
-      if (step >= MAX_SCROLL || (stable >= 3 && count > 0)) {
-        try { window.scrollTo(0, 0); } catch (e) {}
-        setTimeout(function () { harvest(); finish(); }, 900);
+      harvest();
+      if (step >= STEPS) {
+        setTimeout(function () { harvest(); handleCards(Object.keys(acc).map(function (k) { return acc[k]; })); }, 1800);
         return;
       }
       step++;
-      try { window.scrollBy(0, Math.round((window.innerHeight || 700) * 0.9)); } catch (e) {}
-      setTimeout(loop, 1300); // let the next progressive batch render
+      try { window.scrollBy(0, Math.round((window.innerHeight || 700) * 1.2)); } catch (e) {}
+      setTimeout(loop, 1600); // generous: let the batch load+render before harvesting
     }
-    setTimeout(loop, 2500); // generous initial render wait
+    setTimeout(loop, 2500); // initial render wait
   }
 
   // v1.9: photo backfill — the app only received images for NEW cards, so
