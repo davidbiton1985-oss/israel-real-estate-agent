@@ -24,7 +24,6 @@ function freshness(h: SourceHealth | null | undefined): DotState {
   if (mins < 360) return "stale";
   return "off";
 }
-const DOT_CLS: Record<DotState, string> = { live: "bg-accent", stale: "bg-warn", off: "bg-faint" };
 
 function greetWord(): string {
   const h = new Date().getHours();
@@ -169,28 +168,17 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
 
   return (
     <div>
-      {/* top row */}
-      <div className="flex items-center gap-3.5 pt-3">
-        <LandingMark size={52} />
-        <div>
-          <div className="display text-[36px] leading-none" dir="ltr">
-            Boton
-          </div>
-          <div className="mt-1.5 text-[14px] font-semibold text-muted">בוט אמריקאי מבית ביטון</div>
+      {/* masthead — its own band so the brand is set apart from the feed below */}
+      <div className="-mx-[10px] -mt-2 flex flex-col items-center rounded-b-[30px] bg-card px-6 pb-7 pt-8 text-center shadow-card">
+        <LandingMark size={62} />
+        <div className="display mt-3.5 text-[40px] leading-none" dir="ltr">
+          Boton
         </div>
-        <Link
-          href="/profile"
-          title="מצב החיישנים — לפירוט בפרופיל"
-          className="ms-auto flex items-center gap-1.5 rounded-full bg-card px-3.5 py-2.5 shadow-card"
-        >
-          {sensors.map((s, i) => (
-            <i key={i} className={`h-1.5 w-1.5 rounded-full ${DOT_CLS[s]} ${s === "live" && i === 0 ? "led-live" : ""}`} />
-          ))}
-        </Link>
+        <div className="mt-2 text-[14.5px] font-semibold text-muted">בוט אמריקאי מבית ביטון</div>
       </div>
 
       {/* greeting */}
-      <p className="mt-5 px-0.5 text-[15px] leading-relaxed text-muted">
+      <p className="mt-6 px-0.5 text-[15px] leading-relaxed text-muted">
         {greeting.split("—")[0]}—<b className="font-bold text-ink">{greeting.split("—")[1]}</b>
       </p>
       {problem && (
