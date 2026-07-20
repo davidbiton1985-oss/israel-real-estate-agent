@@ -218,7 +218,7 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
       {/* the gallery */}
       {heroMatches.length > 0 && (
         <>
-          <div className="whisper mt-7 px-1">דירות חדשות שמתאימות לך</div>
+          <div className="mt-7 inline-flex rounded-full bg-ink px-4 py-2 text-[13px] font-bold text-[#f6f5f2]">דירות חדשות שמתאימות לך</div>
           <div className="mt-3 space-y-[18px]">
             {heroMatches.map((m) => (
               <Piece key={m.id} listing={m.listing} score={m.score} when={relTime(m.listing.createdAt)} />
@@ -229,7 +229,7 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
 
       {reviewMatches.length > 0 && (
         <>
-          <div className="whisper mt-7 px-1">לבדיקה</div>
+          <div className="mt-7 inline-flex rounded-full bg-ink px-4 py-2 text-[13px] font-bold text-[#f6f5f2]">לבדיקה</div>
           <div className="mt-3 space-y-[18px]">
             {reviewMatches.map((m) => (
               <Piece key={m.id} listing={m.listing} score={m.score} when={relTime(m.listing.createdAt)} />
@@ -240,7 +240,7 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
 
       {pursuits.length > 0 && (
         <>
-          <div className="whisper mt-7 px-1">בטיפול</div>
+          <div className="mt-7 inline-flex rounded-full bg-ink px-4 py-2 text-[13px] font-bold text-[#f6f5f2]">בטיפול</div>
           <div className="mt-3 space-y-[18px]">
             {pursuits.map((l) => (
               <Piece
