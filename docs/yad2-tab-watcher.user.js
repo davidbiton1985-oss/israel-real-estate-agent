@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RE-Agent Yad2 Tab Watcher
 // @namespace    israel-real-estate-agent
-// @version      1.16
+// @version      1.17
 // @description  Watches YOUR open Yad2 search tab: every 7–10 min (randomized, slower overnight) it re-checks the results and sends new listings to your local Israel Real Estate Agent (localhost:3000), which scores them and WhatsApps you strong matches. Runs only in your own browser session — no CAPTCHA bypass, no fake fingerprints, no login automation. If Yad2 shows a verification page the watcher BACKS OFF and stops hammering it; solve it yourself like normal and it resumes.
 // @match        https://www.yad2.co.il/realestate/*
 // @noframes
@@ -79,9 +79,12 @@
   badge.style.cssText =
     "position:fixed;bottom:10px;right:10px;z-index:99999;background:#1e293b;color:#fff;" +
     "font:12px/1.4 -apple-system,Arial;padding:6px 10px;border-radius:8px;opacity:.85;direction:ltr;";
-  badge.textContent = "RE-Agent: starting…";
+  // Show the ACTUAL installed version in the badge (read from Tampermonkey), so
+  // we can tell at a glance whether a paste/update really took effect.
+  var VERSION = (typeof GM_info !== "undefined" && GM_info.script && GM_info.script.version) || "?";
+  badge.textContent = "RE-Agent v" + VERSION + ": starting…";
   function setBadge(msg) {
-    badge.textContent = "RE-Agent: " + msg;
+    badge.textContent = "RE-Agent v" + VERSION + ": " + msg;
   }
   function addBadge() {
     if (document.body) document.body.appendChild(badge);
