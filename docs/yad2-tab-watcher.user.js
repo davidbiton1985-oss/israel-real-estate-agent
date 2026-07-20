@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RE-Agent Yad2 Tab Watcher
 // @namespace    israel-real-estate-agent
-// @version      1.9
+// @version      1.10
 // @description  Watches YOUR open Yad2 search tab: every 7–10 min (randomized, slower overnight) it re-checks the results and sends new listings to your local Israel Real Estate Agent (localhost:3000), which scores them and WhatsApps you strong matches. Runs only in your own browser session — no CAPTCHA bypass, no fake fingerprints, no login automation. If Yad2 shows a verification page the watcher BACKS OFF and stops hammering it; solve it yourself like normal and it resumes.
 // @match        https://www.yad2.co.il/realestate/*
 // @noframes
@@ -238,9 +238,30 @@
     } catch (e) {}
   }
 
+  // v1.10: Yad2's generic error/overload page ("אופס... תקלה! זה לא אתם, זה
+  // אנחנו — המתינו כמה דקות ונסו שנית"). It is NOT a captcha and has full nav
+  // chrome, so pageLooksBlocked() misses it — the watcher was treating it as
+  // "healthy · 0 listings" and reloading into it every 7–10 min (and falsely
+  // heartbeating). Detect it and stand down, like a verification page.
+  function yad2Erroring() {
+    try {
+      var t = (document.body && document.body.innerText) || "";
+      return /אופס|זה לא אתם,?\s*זה אנחנו|המתינו כמה דקות ונסו|נסו שנית מאוחר יותר/i.test(t);
+    } catch (e) {
+      return false;
+    }
+  }
+
   function handleCards(cards) {
     sendImageBackfill(cards);
     if (cards.length === 0) {
+      if (yad2Erroring()) {
+        // Error page — back off hard, do NOT reload every few minutes and do
+        // NOT heartbeat (a refusing Yad2 is not a healthy sensor).
+        setBadge("⚠ יד2 מציג שגיאה — לא מרענן, מנסה שוב בעוד " + Math.round(PAUSE_RETRY_MS / 60000) + "m");
+        scheduleReload(PAUSE_RETRY_MS);
+        return;
+      }
       if (pageLooksBlocked()) {
         // Verification/blank page — back off, don't hammer, don't bypass.
         planNext("empty"); // sets its own badge; NO heartbeat (unreadable ≠ healthy)
