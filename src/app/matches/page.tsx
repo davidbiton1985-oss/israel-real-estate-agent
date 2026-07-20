@@ -163,7 +163,6 @@ export default async function MatchesPage({ searchParams }: { searchParams: Matc
           { href: "/matches", label: "רלוונטיות", on: seg === "" },
           { href: "/matches?status=all", label: "הכל", on: seg === "all" },
           { href: "/matches?status=possible_match", label: "לבדיקה", on: seg === "possible_match" },
-          { href: "/matches?status=all&dismissed=1", label: "שנדחו", on: seg === "dismissed" },
         ].map((s) => (
           <Link
             key={s.label}

@@ -170,13 +170,13 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
   return (
     <div>
       {/* top row */}
-      <div className="flex items-center gap-3 pt-3">
-        <LandingMark size={40} />
+      <div className="flex items-center gap-3.5 pt-3">
+        <LandingMark size={52} />
         <div>
-          <div className="display text-[27px] leading-none" dir="ltr">
+          <div className="display text-[36px] leading-none" dir="ltr">
             Boton
           </div>
-          <div className="mt-1 text-[12px] text-muted">בוט אמריקאי מבית ביטון</div>
+          <div className="mt-1.5 text-[14px] font-semibold text-muted">בוט אמריקאי מבית ביטון</div>
         </div>
         <Link
           href="/profile"
@@ -214,7 +214,7 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
       {/* the gallery */}
       {heroMatches.length > 0 && (
         <>
-          <div className="whisper mt-7 px-1">חדשות</div>
+          <div className="whisper mt-7 px-1">דירות חדשות שמתאימות לך</div>
           <div className="mt-3 space-y-[18px]">
             {heroMatches.map((m) => (
               <Piece key={m.id} listing={m.listing} score={m.score} when={relTime(m.listing.createdAt)} />
