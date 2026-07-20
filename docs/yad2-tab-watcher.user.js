@@ -432,6 +432,18 @@
   // back-off when the page looks blocked. There is deliberately NO unconditional
   // reload timer here anymore — that was what kept reloading the verification
   // page every 5 minutes and escalated the block.
+  // v1.19: Yad2's map view appends &bBox=… (+ &zoom=) which CROPS the feed to
+  // the map bounds, hiding listings outside it — this is what buried the private
+  // Kiryat Ono listings in one tab. Always read the FULL, uncropped feed: if the
+  // URL carries a bbox/zoom, reload the clean search first (before anything else).
+  (function () {
+    var u = location.href;
+    if (/[?&](bBox|zoom)=/i.test(u)) {
+      var clean = u.split("#")[0].replace(/[?&](bBox|zoom)=[^&]*/gi, "").replace(/([?&])&+/g, "$1").replace(/[?&]+$/, "");
+      if (clean !== u.split("#")[0]) { location.replace(clean); }
+    }
+  })();
+
   setTimeout(function () {
     // Single-instance guard: if another tab is the active watcher, stay fully
     // passive — no scan, NO reload (zero Yad2 requests) — and just poll the
