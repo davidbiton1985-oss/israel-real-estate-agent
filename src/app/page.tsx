@@ -193,8 +193,9 @@ export default async function Home({ searchParams }: { searchParams: { testAlert
       </div>
 
       {/* greeting */}
-      <p className="mt-6 px-0.5 text-[15px] leading-relaxed text-muted">
-        {greeting.split("—")[0]}—<b className="font-bold text-ink">{greeting.split("—")[1]}</b>
+      <p className="mt-6 px-0.5 text-[15px] leading-relaxed">
+        <span className="text-muted">{greeting.split("—")[0]}— </span>
+        <span className="text-ink">{greeting.split("—")[1]}</span>
       </p>
       {problem && (
         <Link href="/profile" className="mt-2 block px-0.5 text-[12.5px] font-semibold text-warn">
