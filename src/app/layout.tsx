@@ -4,6 +4,7 @@ import { Assistant, Secular_One } from "next/font/google";
 import "./globals.css";
 import NavLinks from "@/components/ui/NavLinks";
 import Dock from "@/components/ui/Dock";
+import PullToRefresh from "@/components/ui/PullToRefresh";
 import AutoRefresh from "@/components/ui/AutoRefresh";
 import SwNavigate from "@/components/ui/SwNavigate";
 import BotonMark from "@/components/ui/BotonMark";
@@ -66,6 +67,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           Boton · בוט אמריקאי מבית ביטון · סורק כל 5 דקות
         </footer>
         <Dock />
+        <PullToRefresh />
       </body>
     </html>
   );
